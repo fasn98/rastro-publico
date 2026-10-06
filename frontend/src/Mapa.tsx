@@ -7,7 +7,7 @@ type Feicao = { properties: { codarea: string }; geometry: Geometria };
 
 let malha: Promise<Feicao[]> | null = null;
 const carregarMalha = () =>
-  (malha ??= fetch("/geo/sp-municipios.json")
+  (malha ??= fetch(`${import.meta.env.BASE_URL}geo/sp-municipios.json`)
     .then((r) => r.json())
     .then((g) => g.features as Feicao[]));
 

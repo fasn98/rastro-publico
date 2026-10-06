@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { buscarMunicipios, type Municipio } from "./api";
+import { urlAuditoria } from "./dados";
 import {
   CARGOS,
   FONTES,
@@ -50,7 +51,7 @@ export function LinkFonte({ url, respostaId, recebidoEm }: {
         <>
           {" · "}
           <a
-            href={`/api/respostas/${respostaId}/bruto`}
+            href={urlAuditoria(`/api/respostas/${respostaId}/bruto`)}
             target="_blank"
             rel="noreferrer"
             aria-label={`Cópia arquivada da resposta ${respostaId}`}
