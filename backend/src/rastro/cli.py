@@ -42,6 +42,18 @@ def main(argv: list[str] | None = None) -> int:
     rv = sub.add_parser("reverter-site", help="volta o site para a publicação anterior")
     rv.add_argument("--repo", default="https://github.com/fasn98/rastro-publico.git")
     rv.add_argument("--para", help="tag de destino (padrão: a anterior à que está no ar)")
+    sub.add_parser(
+        "conferir-producao",
+        help="recusa a credencial de desenvolvimento (rastro:rastro) no banco de produção",
+    )
+    sub.add_parser(
+        "criar-usuario-auditoria",
+        help="cria o usuário só de leitura da API de auditoria, com senha forte gerada",
+    )
+    sub.add_parser(
+        "redigir-respostas",
+        help="aplica a redação LGPD a respostas já arquivadas (remove dados pessoais)",
+    )
     rc = sub.add_parser(
         "reconstruir",
         help="reconstrói linhas do RREO/RGF a partir do arquivo bruto (sem chamar a API)",
@@ -109,6 +121,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.comando == "verificar-respostas":
         return _verificar_respostas(args.amostra)
 
+    if args.comando in ("conferir-producao", "criar-usuario-auditoria"):
+        return _seguranca(args.comando)
+
     if args.comando == "testar-fontes":
         from rastro.testar_fontes import testar
 
@@ -132,6 +147,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.comando in ("publicar-site", "listar-publicacoes", "reverter-site"):
         return _publicacao(args)
+
+    if args.comando == "redigir-respostas":
+        from rastro.coletores.redacao import redigir_arquivadas
+        from rastro.politicos import lgpd
+
+        with get_sessionmaker()() as session:
+            n = redigir_arquivadas(session, lgpd.REGRAS)
+        print(f"{n} resposta(s) arquivada(s) regravada(s) sem dados pessoais")
+        return 0
 
     if args.comando == "ranking":
         from rastro import ranking
@@ -279,3 +303,30 @@ def _verificar_respostas(amostra: int | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def _seguranca(comando: str) -> int:
+    from rastro import seguranca
+    from rastro.config import get_settings
+    from rastro.db import get_engine
+
+    try:
+        seguranca.conferir_producao(get_settings().database_url)
+        if comando == "conferir-producao":
+            print("Banco de produção: credencial própria (não é a de desenvolvimento).")
+            return 0
+        url = seguranca.criar_usuario_auditoria(get_engine())
+    except seguranca.ErroSeguranca as exc:
+        print(f"ERRO: {exc}", file=sys.stderr)
+        if comando == "criar-usuario-auditoria":
+            print(
+                "Sem usuário só de leitura: a API de auditoria usará a string principal. "
+                "Registre como risco aceito (docs/deploy-replit.md, passo 7).",
+                file=sys.stderr,
+            )
+        return 1
+    print(f"Usuário {seguranca.USUARIO_AUDITORIA} pronto (só leitura, 4 tabelas).")
+    print("Copie a linha abaixo para o Secret DATABASE_URL do app rastro-auditoria.")
+    print("Ela não é guardada em lugar nenhum; se perder, rode o comando de novo (troca a senha).")
+    print(url.set(drivername="postgresql").render_as_string(hide_password=False))
+    return 0

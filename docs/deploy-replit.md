@@ -78,6 +78,14 @@ deployment. O Secret `RASTRO_PAPEL` diz a cada um o que fazer: `coleta` ou `audi
 1. Abra a ferramenta **Database** do rastro-coleta e crie o banco de **produção**. Se o
    Replit oferecer criá-lo só na publicação, aceite no passo 6.
 2. Em **Settings** do banco, ative os **backups agendados**. No Core, guarde 7 dias.
+3. **Senha do banco: forte e única.** O banco de produção do Replit vem com um usuário
+   (`neondb_owner`) e uma senha gerados pelo próprio Replit. Use essa string, nunca a
+   `rastro:rastro` de desenvolvimento: os dois apps **se recusam a subir** com ela
+   (`rastro conferir-producao`, chamado por `scripts/replit.sh` antes de tudo).
+   - Não copie essa senha para nenhum outro serviço, arquivo ou conversa.
+   - Se ela vazar (aparecer num log, num print, num commit), use **regenerar as
+     credenciais** do banco de produção na ferramenta Database e atualize o Secret
+     `DATABASE_URL` dos dois apps.
 
 ## 6. App de coleta: publicar como Scheduled
 
@@ -96,14 +104,27 @@ deployment. O Secret `RASTRO_PAPEL` diz a cada um o que fazer: `coleta` ou `audi
 
 ## 7. Ligar a API de auditoria ao banco
 
-1. No rastro-coleta, abra **Database** → banco de produção → **Settings** e copie a
-   **connection string**.
-2. Recomendado: no mesmo banco, aba SQL, rode `backend/scripts/papel_auditoria.sql`
-   (troque a senha antes). Isso cria um usuário **só de leitura** para a API, e você passa
-   a usar a string de conexão desse usuário. Se o Replit não permitir criar usuários, use a
-   string principal.
-3. No **rastro-auditoria** → Publishing → Production app secrets, crie
-   `DATABASE_URL` = a string de conexão. Depois, **Publish** de novo.
+A API de auditoria deve usar um usuário **só de leitura**, que enxerga apenas as 4
+tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_resposta`,
+`conta_demonstrativo`) e não consegue gravar nada.
+
+1. No **Shell** do rastro-coleta, com o `DATABASE_URL` **de produção** carregado (copie a
+   connection string em Database → banco de produção → Settings):
+
+   ```bash
+   cd backend && DATABASE_URL='<connection string de produção>' uv run rastro criar-usuario-auditoria
+   ```
+
+   O comando gera uma senha forte (256 bits, aleatória, só para este usuário), cria o
+   usuário `rastro_auditoria` com leitura apenas dessas 4 tabelas e com toda transação em
+   modo só leitura, e imprime **uma vez** a string de conexão dele. Rodar de novo troca a
+   senha.
+2. **Se funcionou:** no **rastro-auditoria** → Publishing → Production app secrets, crie
+   `DATABASE_URL` = a string impressa. Depois, **Publish** de novo. Apague a linha do
+   histórico do Shell (`history -c`).
+3. **Se o Replit não permitir** (o comando termina com `ERRO: o banco não permitiu criar
+   o usuário só de leitura`): use a connection string principal no rastro-auditoria e
+   anote o resultado na seção **Riscos aceitos**, abaixo, com a data e a mensagem de erro.
 
 ## 8. Primeira publicação e GitHub Pages
 
@@ -132,6 +153,12 @@ deployment. O Secret `RASTRO_PAPEL` diz a cada um o que fazer: `coleta` ou `audi
 São guardadas as **5 últimas publicações** (tags `site-*` no GitHub). Uma publicação nova
 apaga a mais antiga.
 
+## Riscos aceitos
+
+| Risco | Situação | Mitigação |
+|---|---|---|
+| API de auditoria com a credencial principal do banco (só se o passo 7.1 falhar) | *preencher após o passo 7: "usuário só de leitura criado em DD/MM/AAAA" ou "Replit recusou em DD/MM/AAAA: <mensagem>"* | o código da API de auditoria só faz `SELECT` (3 rotas `GET`, testadas); CORS só aceita o site; a senha fica só nos Secrets de produção; backups agendados de 7 dias (passo 5.2) |
+
 ## Pontos confirmados na documentação oficial do Replit
 
 - O banco de produção **dorme após 5 minutos sem consultas**. A computação só é cobrada
@@ -146,6 +173,14 @@ apaga a mais antiga.
   ([Scheduled Deployments](https://docs.replit.com/references/publishing/scheduled-deployments)).
 - O banco de produção **aceita conexão de outros apps** pela string de conexão
   ([Development and production databases](https://docs.replit.com/cloud-services/storage-and-databases/production-databases)).
+- A string de conexão do banco do Replit tem o formato
+  `postgresql://neondb_owner:<senha>@<host>.neon.tech/<banco>`, com credenciais geradas
+  pelo Replit, que podem ser **regeneradas** se vazarem. Na atualização do banco, papéis
+  (roles) personalizados e suas permissões são migrados, mas as senhas deles precisam ser
+  redefinidas
+  ([Connection details](https://docs.replit.com/features/data-and-storage/connection-details),
+  [Database Upgrade](https://docs.replit.com/references/data-and-storage/database-upgrade)).
+  Se isso acontecer, rode `rastro criar-usuario-auditoria` de novo.
 - Os **Secrets de produção são separados** dos do editor e ficam em Publishing
   ([Secrets](https://docs.replit.com/core-concepts/project-editor/app-setup/secrets)).
 - **Alertas e limites de uso** ficam em Settings → Account → Usage
@@ -155,6 +190,8 @@ apaga a mais antiga.
 
 - Os nomes dos módulos no `.replit` (`python-3.12`, `nodejs-20`). Se o Replit recusar
   algum, troque pela versão que ele oferecer.
-- Se o Replit permite criar o usuário só de leitura (passo 7.2).
+- Se o usuário dono do banco no Replit tem permissão para criar outros usuários (passo
+  7.1). A documentação cita papéis personalizados, mas não diz como criá-los; o comando
+  tenta e informa o resultado.
 - O uso do `uv` no Replit: o padrão dele é o poetry. O script de build instala o `uv` via
   pip se ele não existir.

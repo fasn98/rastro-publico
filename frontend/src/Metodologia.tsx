@@ -221,6 +221,25 @@ export default function Metodologia() {
         </li>
       </ul>
 
+      <h4>Fontes com dados pessoais (LGPD)</h4>
+      <p>
+        Algumas fontes devolvem dados pessoais que o portal não pode guardar: CPF, data de
+        nascimento, título de eleitor, e-mail (por exemplo, os arquivos de candidatos do TSE e as
+        listas de parlamentares da Câmara e do Senado, que trazem e-mails de gabinete). Nesses
+        casos o original <strong>não</strong> é guardado. Grava-se só a versão sem esses campos
+        (no TSE, também só as linhas de SP), junto com o SHA-256 do original, o SHA-256 da versão
+        gravada e a lista de campos removidos.
+      </p>
+      <p>
+        A conferência, nesses casos, se faz <strong>baixando de novo a URL pública da fonte</strong>{" "}
+        (cabeçalho <code>X-Rastro-URL-Origem</code>) e comparando o <code>sha256sum</code> do
+        arquivo com o cabeçalho <code>X-Rastro-SHA256-Original</code>. Se a fonte tiver
+        atualizado o arquivo depois da coleta, o hash será outro, e a data da coleta (
+        <code>X-Rastro-Recebido-Em</code>) indica qual versão foi usada. Os campos retirados
+        aparecem em <code>X-Rastro-Campos-Removidos</code> e em{" "}
+        <code>GET /api/respostas/{"{id}"}</code>.
+      </p>
+
       <h3>Fontes</h3>
       <ul>
         <li>

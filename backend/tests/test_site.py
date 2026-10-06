@@ -14,7 +14,22 @@ from rastro import publicacao, site
 from rastro.api.main import app
 from rastro.coletores import ibge
 from rastro.db import get_session
-from rastro.models import Municipio
+from rastro.models import Coleta, Municipio
+from rastro.politicos.modelos import PolEmenda, PolPolitico
+
+
+def _secoes(dados: Path, arquivo: dict) -> list[dict]:
+    return [
+        json.loads((dados / s["ref"]).read_text()) if "ref" in s else s
+        for s in arquivo["representantes"]["secoes"]
+    ]
+
+
+def _trava(monkeypatch, nome: str, valor: str) -> None:
+    from rastro.config import get_settings
+
+    monkeypatch.setenv(nome, valor)
+    get_settings.cache_clear()
 
 
 @pytest.fixture
@@ -47,15 +62,108 @@ def test_exporta_o_mesmo_que_a_api(banco, exportado):
         assert arquivo["serie"] == api.get("/api/entes/3550308/indicadores/serie").json()
         rep = api.get("/api/municipios/3550308/representantes").json()
         assert arquivo["representantes"]["municipio"] == rep["municipio"]
-        grupos = json.loads((dados / arquivo["representantes"]["grupos_ref"]).read_text())
-        assert grupos == rep["grupos"]
-        # mesmo conteúdo de grupos -> mesmo arquivo para os dois municípios de SP
+        assert _secoes(dados, arquivo) == rep["secoes"]
+        # seções de estado/federal iguais nos dois municípios -> um arquivo só, por referência
         outro = json.loads((dados / "municipios" / "3500105.json").read_text())
-        assert outro["representantes"]["grupos_ref"] == arquivo["representantes"]["grupos_ref"]
+        refs = [s["ref"] for s in arquivo["representantes"]["secoes"] if "ref" in s]
+        assert refs and refs == [s["ref"] for s in outro["representantes"]["secoes"] if "ref" in s]
     finally:
         app.dependency_overrides.clear()
     assert (dados / "metodologia.json").exists()
     assert site.verificar(dados) == []
+
+
+def _politico(**campos) -> PolPolitico:
+    base = {"partido": "X", "uf": "SP", "url_fonte": "https://exemplo.gov.br/registro"}
+    return PolPolitico(**{**base, **campos})
+
+
+@pytest.fixture
+def com_politicos(banco):
+    banco.add_all(
+        [
+            _politico(
+                id=1, fonte="camara", id_fonte="1", nome="Dep Federal",
+                cargo="deputado_federal", em_exercicio=True,
+            ),
+            _politico(
+                id=2, fonte="tse", id_fonte="2", nome="Vereadora 2024", cargo="vereador",
+                cod_ibge=3550308, eleicao_ano=2024,
+            ),
+            _politico(
+                id=3, fonte="tse", id_fonte="3", nome="Governador 2026", cargo="governador",
+                eleicao_ano=2026,
+            ),
+        ]
+    )  # fmt: skip
+    banco.flush()
+    banco.add(Coleta(fonte="pol-emendas", status="sucesso"))
+    banco.add(
+        PolEmenda(
+            codigo_emenda="E1", ano=2025, nome_autor="DEP FEDERAL", politico_id=1,
+            cod_ibge_destino=3550308, valor_pago=10, url_fonte="https://exemplo.gov.br/e1",
+        )
+    )  # fmt: skip
+    banco.commit()
+    return banco
+
+
+@pytest.mark.parametrize(
+    ("tse", "tse_2026", "emendas", "esperados"),
+    [
+        ("0", "0", "0", {1}),
+        ("1", "0", "0", {1, 2}),
+        ("1", "1", "1", {1, 2, 3}),
+    ],
+)
+def test_travas_desligadas_nao_vao_para_o_site(
+    com_politicos, tmp_path, monkeypatch, tse, tse_2026, emendas, esperados
+):
+    _trava(monkeypatch, "RASTRO_POL_PUBLICAR_TSE", tse)
+    _trava(monkeypatch, "RASTRO_POL_PUBLICAR_TSE_2026", tse_2026)
+    _trava(monkeypatch, "RASTRO_POL_PUBLICAR_EMENDAS", emendas)
+    dados = tmp_path / "dados"
+    manifesto = site.exportar(dados, "SP", com_politicos)
+    exportados = {int(p.stem) for p in (dados / "politicos").glob("*.json")}
+    assert exportados == esperados
+    assert manifesto["travas"] == {
+        "pol_publicar_tse": tse == "1",
+        "pol_publicar_tse_2026": tse_2026 == "1",
+        "pol_publicar_emendas": emendas == "1",
+    }
+    texto = "".join(p.read_text() for p in dados.rglob("*.json"))
+    assert ("Vereadora 2024" in texto) == (tse == "1")
+    assert ("Governador 2026" in texto) == (tse_2026 == "1")
+    municipio = json.loads((dados / "municipios" / "3550308.json").read_text())
+    assert bool(municipio["emendas"]["itens"]) == (emendas == "1")
+    emendas_pol = json.loads((dados / "politicos" / "1" / "emendas" / "todos.json").read_text())
+    assert emendas_pol["publicadas"] == (emendas == "1")
+    # todo político citado nas páginas dos municípios tem página própria
+    assert site.verificar(dados) == []
+
+
+def test_verificacao_recusa_dado_travado_no_arquivo(com_politicos, tmp_path, monkeypatch):
+    """Segunda barreira: mesmo que algo travado escape da API, a publicação é recusada."""
+    _trava(monkeypatch, "RASTRO_POL_PUBLICAR_TSE", "0")
+    _trava(monkeypatch, "RASTRO_POL_PUBLICAR_EMENDAS", "0")
+    dados = tmp_path / "dados"
+    site.exportar(dados, "SP", com_politicos)
+    (dados / "politicos" / "3.json").write_text(
+        json.dumps({"id": 3, "fonte": "tse", "eleicao_ano": 2026})
+    )
+    (dados / "politicos" / "1" / "emendas" / "todos.json").write_text(
+        json.dumps({"publicadas": True, "itens": [{"codigo_emenda": "E1"}], "totais": []})
+    )
+    problemas = site.verificar(dados)
+    assert any("3.json" in p and "pol_publicar_tse_2026" in p for p in problemas)
+    assert any("politicos/1/emendas/todos.json" in p for p in problemas)
+
+
+def test_verificacao_recusa_politico_citado_sem_pagina(com_politicos, tmp_path):
+    dados = tmp_path / "dados"
+    site.exportar(dados, "SP", com_politicos)
+    (dados / "politicos" / "1.json").unlink()
+    assert any("citados sem página" in p for p in site.verificar(dados))
 
 
 def test_verificacao_bloqueia_dados_faltando(exportado):

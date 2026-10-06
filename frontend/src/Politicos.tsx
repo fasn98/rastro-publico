@@ -8,10 +8,13 @@ import {
   listarProposicoes,
   listarVotacoes,
   obterEmendas,
+  obterCota,
   obterEmendasMunicipio,
   obterPolitico,
   obterRepresentantes,
   type Contagem,
+  type ContagemValor,
+  type Cota,
   type Emendas,
   type Fonte,
   type Pagina,
@@ -157,31 +160,79 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
           <h3>
             {rep.municipio.nome} / {rep.municipio.uf}
           </h3>
-          {rep.grupos.map((g) => (
-            <section key={g.cargo} className="grupo-cargo" aria-labelledby={`cargo-${g.cargo}`}>
-              <h4 id={`cargo-${g.cargo}`}>
-                {CARGOS[g.cargo] ?? g.cargo}
-                {g.politicos.length > 0 && <span className="sub"> ({g.politicos.length})</span>}
-              </h4>
-              {g.pendente ? (
-                <p className="pendente">{g.pendente}</p>
-              ) : (
-                <ul className="lista">
-                  {g.politicos.map((p) => (
-                    <li key={p.id}>
-                      <a className="cartao-link" href={`#/politico/${p.id}`}>
-                        {p.nome} <span>{p.partido ?? "sem partido informado"}</span>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              )}
+          {emendas?.publicadas && emendas.por_parlamentar.length > 0 && (
+            <section className="destaque-emendas" aria-labelledby="emendas-destino">
+              <h4 id="emendas-destino">Parlamentares que destinaram emendas a este município</h4>
+              <p className="sub">
+                Emendas com {rep.municipio.nome} como local do gasto, segundo o Portal da
+                Transparência. Ordem alfabética.
+              </p>
+              <div className="tabela-rolagem">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Parlamentar</th>
+                      <th scope="col">Emendas</th>
+                      <th scope="col">Empenhado</th>
+                      <th scope="col">Liquidado</th>
+                      <th scope="col">Pago</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {emendas.por_parlamentar.map((x) => (
+                      <tr key={`${x.politico_id}-${x.nome_autor}`}>
+                        <th scope="row">
+                          {x.politico_id ? <a href={`#/politico/${x.politico_id}`}>{x.nome_autor}</a> : x.nome_autor}
+                          {x.partido && <span className="sub"> {x.partido}</span>}
+                        </th>
+                        <td>{inteiro(x.quantidade)}</td>
+                        <td>{reais(x.valor_empenhado)}</td>
+                        <td>{reais(x.valor_liquidado)}</td>
+                        <td>{reais(x.valor_pago)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+          {rep.secoes.map((sec, i) => (
+            <section key={sec.titulo} className="secao-representantes" aria-labelledby={`secao-${i}`}>
+              <h3 id={`secao-${i}`}>{sec.titulo}</h3>
+              {sec.nota && <p className="nota">{sec.nota}</p>}
+              {sec.grupos.map((g) => (
+                <div key={g.cargo} className="grupo-cargo">
+                  <h4>
+                    {CARGOS[g.cargo] ?? g.cargo}
+                    {g.politicos.length > 0 && <span className="sub"> ({g.politicos.length})</span>}
+                  </h4>
+                  {g.pendente ? (
+                    <p className="pendente">
+                      {g.pendente}
+                      {g.pendente_url && (
+                        <>
+                          {" "}
+                          <a href={g.pendente_url} target="_blank" rel="noreferrer">
+                            Arquivo de origem
+                          </a>
+                        </>
+                      )}
+                    </p>
+                  ) : (
+                    <ul className="lista">
+                      {g.politicos.map((p) => (
+                        <li key={p.id}>
+                          <a className="cartao-link" href={`#/politico/${p.id}`}>
+                            {p.nome} <span>{p.partido ?? "sem partido informado"}</span>
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
             </section>
           ))}
-          <p className="nota">
-            Deputados federais e senadores representam todo o estado: aparecem os que estão em
-            exercício segundo a Câmara e o Senado.
-          </p>
 
           <h3>Emendas recebidas</h3>
           {emendas && <TabelaEmendas emendas={emendas} mostrarAutor />}
@@ -228,7 +279,7 @@ export function PaginaPolitico({ id }: { id: number }) {
   if (erro) return <p className="erro">{erro}</p>;
   if (!p) return <p className="sub">Carregando…</p>;
 
-  const anos = anosDe(p.proposicoes, p.votacoes, p.presencas);
+  const anos = anosDe(p.proposicoes, p.votacoes, p.presencas, p.cota);
   const federal = p.fonte === "camara" || p.fonte === "senado";
   const votos: Record<string, number> = {};
   for (const c of p.votacoes)
@@ -245,7 +296,7 @@ export function PaginaPolitico({ id }: { id: number }) {
         </dd>
         <dt>Partido</dt>
         <dd>{p.partido ?? "—"}</dd>
-        {p.situacao && (
+        {p.situacao && p.fonte !== "tse" && (
           <>
             <dt>Situação</dt>
             <dd>{p.situacao}</dd>
@@ -253,6 +304,26 @@ export function PaginaPolitico({ id }: { id: number }) {
         )}
         <dt>Em exercício</dt>
         <dd>{p.em_exercicio === null ? "—" : p.em_exercicio ? "Sim" : "Não"}</dd>
+        {p.fonte === "tse" && (
+          <>
+            <dt>Eleição</dt>
+            <dd>
+              {p.eleicao_ano}
+              {p.eleicao_ano && p.eleicao_ano >= 2026 && " (mandato a partir de 2027)"}
+            </dd>
+            <dt>Situação no arquivo do TSE</dt>
+            <dd>
+              {p.situacao}
+              {p.situacao_candidatura && ` · candidatura: ${p.situacao_candidatura}`}
+            </dd>
+            {p.data_divulgacao && (
+              <>
+                <dt>Arquivo gerado pelo TSE em</dt>
+                <dd>{data(p.data_divulgacao)}</dd>
+              </>
+            )}
+          </>
+        )}
         {p.legislatura && (
           <>
             <dt>Legislatura</dt>
@@ -315,6 +386,7 @@ export function PaginaPolitico({ id }: { id: number }) {
             {p.fonte === "camara" && (
               <Tile rotulo="Presenças registradas em eventos da Câmara" lista={p.presencas} ano={ano} />
             )}
+            {p.fonte === "camara" && <TileCota lista={p.cota} ano={ano} />}
           </div>
           {Object.keys(votos).length > 0 && (
             <div className="tabela-rolagem">
@@ -357,6 +429,7 @@ export function PaginaPolitico({ id }: { id: number }) {
               </ul>
             </details>
           )}
+          {p.fonte === "camara" && p.cota.length > 0 && <CotaDetalhe id={p.id} ano={ano} />}
           <h3>Emendas parlamentares</h3>
           <EmendasDoPolitico id={p.id} ano={ano} />
         </>
@@ -366,6 +439,80 @@ export function PaginaPolitico({ id }: { id: number }) {
         no portal em {dataHora(p.atualizado_em)}.
       </p>
     </article>
+  );
+}
+
+function TileCota({ lista, ano }: { lista: ContagemValor[]; ano: number | null }) {
+  const sel = lista.filter((c) => ano === null || c.ano === ano);
+  const total = sel.reduce((s, c) => s + Number(c.valor_liquido), 0);
+  return (
+    <div className="tile">
+      <span className="tile-rotulo">Cota parlamentar: valor líquido das despesas</span>
+      <span className="tile-valor">{reais(String(total))}</span>
+      <span className="sub">{inteiro(sel.reduce((s, c) => s + c.quantidade, 0))} lançamentos</span>
+      <Fontes fontes={sel.flatMap((c) => c.fontes)} />
+    </div>
+  );
+}
+
+function CotaDetalhe({ id, ano }: { id: number; ano: number | null }) {
+  const [aberto, setAberto] = useState(false);
+  const [c, setC] = useState<Cota | null>(null);
+  useEffect(() => setC(null), [id, ano]);
+  useEffect(() => {
+    if (aberto && !c) obterCota(id, ano).then(setC);
+  }, [aberto, c, id, ano]);
+  return (
+    <details onToggle={(e) => e.currentTarget.open && setAberto(true)}>
+      <summary>Cota parlamentar por categoria e lançamentos</summary>
+      {c && (
+        <>
+          <div className="tabela-rolagem">
+            <table aria-label="Cota parlamentar por categoria">
+              <thead>
+                <tr>
+                  <th scope="col">Categoria (como na fonte)</th>
+                  <th scope="col">Lançamentos</th>
+                  <th scope="col">Valor líquido</th>
+                </tr>
+              </thead>
+              <tbody>
+                {c.por_categoria.map((x) => (
+                  <tr key={x.categoria}>
+                    <th scope="row">{x.categoria}</th>
+                    <td>{inteiro(x.quantidade)}</td>
+                    <td>{reais(x.valor_liquido)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <ul>
+            {c.despesas.itens.map((x) => (
+              <li key={`${x.ano}-${x.linha}`}>
+                {String(x.mes).padStart(2, "0")}/{x.ano} · {x.categoria} ·{" "}
+                {x.pessoa_fisica ? "fornecedor pessoa física (nome não exibido)" : (x.fornecedor ?? "—")}
+                {x.cnpj && ` (CNPJ ${x.cnpj})`} · líquido {reais(x.valor_liquido)}
+                {x.url_documento && (
+                  <>
+                    {" "}
+                    <a href={x.url_documento} target="_blank" rel="noreferrer">
+                      documento
+                    </a>
+                  </>
+                )}{" "}
+                <LinkFonte url={x.url_fonte} respostaId={x.resposta_id} />
+              </li>
+            ))}
+          </ul>
+          {c.despesas.total > c.despesas.itens.length && (
+            <p className="nota">
+              Mostrando {c.despesas.itens.length} de {inteiro(c.despesas.total)}. Filtre por ano.
+            </p>
+          )}
+        </>
+      )}
+    </details>
   );
 }
 

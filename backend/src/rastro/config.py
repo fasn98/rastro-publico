@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     # separadas por vírgula
     cors_origens: str = "https://fasn98.github.io,http://localhost:5173"
     user_agent: str = "rastro-publico/0.1 (+https://github.com/fasn98/rastro-publico)"
+    # Travas de publicação do módulo de políticos (valem para a API e para o site exportado).
+    # O padrão é a decisão vigente; uma variável RASTRO_POL_PUBLICAR_* pode sobrepor.
+    pol_publicar_tse: bool = True  # eleitos 2024 e 2022 (aprovado em 06/10/2026)
+    pol_publicar_tse_2026: bool = False  # eleitos 2026: aguardando o fim do 2º turno
+    pol_publicar_emendas: bool = False  # aguardando validação do cruzamento de autores
 
     @property
     def origens_cors(self) -> list[str]:

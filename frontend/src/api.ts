@@ -22,6 +22,7 @@ export type MunicipioDetalhe = Municipio & { ente_siconfi: Ente | null };
 
 export type Pagina<T> = { total: number; itens: T[] };
 
+import type { Representantes } from "./apiPoliticos";
 import { lerJson, normalizar, urlDados } from "./dados";
 
 /** Arquivo estático de um município: detalhe, série, nota, representantes, emendas. */
@@ -29,7 +30,11 @@ export type ArquivoMunicipio = {
   detalhe: MunicipioDetalhe;
   serie: IndicadoresAno[];
   nota: DetalheRanking | null;
-  representantes: { municipio: unknown; grupos_ref: string };
+  representantes: {
+    municipio: Representantes["municipio"];
+    // seção inteira, ou referência ao arquivo de uma seção repetida entre municípios
+    secoes: (Representantes["secoes"][number] | { ref: string })[];
+  };
   emendas: unknown;
 };
 

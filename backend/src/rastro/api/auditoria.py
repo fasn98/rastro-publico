@@ -85,8 +85,13 @@ class RespostaOut(BaseModel):
     content_type: str | None
     recebido_em: datetime
     duracao_ms: int | None
-    sha256: str
+    sha256: str  # do conteúdo gravado
     tamanho: int
+    # preenchidos quando o conteúdo foi gravado sem dados pessoais (LGPD)
+    sha256_original: str | None
+    tamanho_original: int | None
+    campos_removidos: list[str] | None
+    redacao: str | None
 
 
 class RespostaVerificada(RespostaOut):
@@ -132,7 +137,12 @@ def obter_resposta(resposta_id: int, session: SessionDep, response: Response):
 
 @router.get("/respostas/{resposta_id}/bruto")
 def baixar_resposta(resposta_id: int, session: SessionDep, request: Request):
-    """Os bytes exatamente como a fonte devolveu (confira com sha256sum)."""
+    """Os bytes gravados (confira com sha256sum).
+
+    São os bytes exatamente como a fonte devolveu, exceto quando a resposta foi gravada
+    com redação (LGPD): aí vêm sem os campos pessoais, e o cabeçalho
+    `X-Rastro-SHA256-Original` traz o hash do original, para conferir baixando de novo a URL.
+    """
     r = session.get(RespostaBruta, resposta_id)
     if not r:
         raise HTTPException(404, "Resposta não encontrada")
@@ -144,6 +154,9 @@ def baixar_resposta(resposta_id: int, session: SessionDep, request: Request):
         "X-Rastro-URL-Origem": r.url,
         "X-Rastro-Recebido-Em": r.recebido_em.isoformat(),
     }
+    if r.sha256_original:
+        cabecalhos["X-Rastro-SHA256-Original"] = r.sha256_original
+        cabecalhos["X-Rastro-Campos-Removidos"] = ",".join(r.campos_removidos or [])
     if _nao_modificado(request, etag):
         return Response(status_code=304, headers=cabecalhos)
     try:
@@ -182,7 +195,14 @@ def criar_app() -> FastAPI:
         allow_origins=get_settings().origens_cors,
         allow_methods=["GET"],
         allow_headers=["If-None-Match"],
-        expose_headers=["X-Rastro-SHA256", "X-Rastro-URL-Origem", "X-Rastro-Recebido-Em", "ETag"],
+        expose_headers=[
+            "X-Rastro-SHA256",
+            "X-Rastro-URL-Origem",
+            "X-Rastro-Recebido-Em",
+            "X-Rastro-SHA256-Original",
+            "X-Rastro-Campos-Removidos",
+            "ETag",
+        ],
     )
 
     @app.get("/api/saude")

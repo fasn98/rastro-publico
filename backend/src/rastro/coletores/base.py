@@ -14,7 +14,13 @@ from tenacity import (
     wait_exponential,
 )
 
-from rastro.coletores.arquivo import ArquivoBruto, coleta_atual, resposta_id
+from rastro.coletores.arquivo import (
+    ArquivoBruto,
+    Redator,
+    coleta_atual,
+    com_redacao,
+    resposta_id,
+)
 from rastro.config import get_settings
 from rastro.db import get_engine
 from rastro.models import Coleta
@@ -74,9 +80,18 @@ def get_json(client: httpx.Client, url: str, params: dict | None = None, *, deci
 
 
 def get_json_com_origem(
-    client: httpx.Client, url: str, params: dict | None = None, *, decimal=False
+    client: httpx.Client,
+    url: str,
+    params: dict | None = None,
+    *,
+    decimal=False,
+    redator: Redator | None = None,
 ) -> tuple[object, int | None]:
-    """Como `get_json`, devolvendo também o id da resposta bruta arquivada (ou None)."""
+    """Como `get_json`, devolvendo também o id da resposta bruta arquivada (ou None).
+
+    Com `redator`, a resposta é arquivada já sem os dados pessoais (ver `arquivo`); o
+    coletor recebe o conteúdo completo e é responsável por não gravá-los nas tabelas.
+    """
 
     @retry(
         retry=retry_if_exception(_erro_transitorio),
@@ -85,7 +100,7 @@ def get_json_com_origem(
         reraise=True,
     )
     def _get():
-        resp = client.get(url, params=params)
+        resp = client.get(url, params=params, extensions=com_redacao(redator))
         resp.raise_for_status()
         dados = json.loads(resp.content, parse_float=Decimal) if decimal else resp.json()
         return dados, resposta_id(resp)

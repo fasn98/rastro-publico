@@ -63,6 +63,10 @@ class PolPolitico(Base):
     mandato_inicio: Mapped[date | None] = mapped_column(Date)
     mandato_fim: Mapped[date | None] = mapped_column(Date)
     eleicao_ano: Mapped[int | None]
+    # TSE: situação da candidatura como está no arquivo (DS_SITUACAO_CANDIDATURA, ex.: "APTO",
+    # "#NE") e data de geração do arquivo (DT_GERACAO), isto é, quando o TSE divulgou o dado
+    situacao_candidatura: Mapped[str | None] = mapped_column(String(80))
+    data_divulgacao: Mapped[date | None] = mapped_column(Date)
     url_fonte: Mapped[str] = mapped_column(Text)  # registro na API oficial
     url_pagina: Mapped[str | None] = mapped_column(Text)  # página oficial para pessoas
     resposta_id: Mapped[int | None] = _resposta()
@@ -153,12 +157,22 @@ class PolComissao(Base):
 
 
 class PolEmenda(Base):
-    """Emenda parlamentar (Portal da Transparência, /api-de-dados/emendas)."""
+    """Emenda parlamentar (Portal da Transparência).
+
+    Duas origens (`fonte_dados`): "arquivo" = download em lote EmendasParlamentares.csv
+    (uma linha por emenda x local/ação, com o código IBGE oficial do município; `linha` é
+    a posição no arquivo) e "api" = /api-de-dados/emendas. Cada carga substitui as linhas
+    da sua origem; por isso não há chave única por código de emenda.
+    """
 
     __tablename__ = "pol_emenda"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    codigo_emenda: Mapped[str] = mapped_column(String(40), unique=True)
+    fonte_dados: Mapped[str] = mapped_column(String(10), default="api")
+    linha: Mapped[int | None]
+    codigo_emenda: Mapped[str] = mapped_column(String(40), index=True)
+    codigo_autor: Mapped[str | None] = mapped_column(String(20))
+    acao: Mapped[str | None] = mapped_column(Text)
     ano: Mapped[int] = mapped_column(Integer, index=True)
     tipo_emenda: Mapped[str | None] = mapped_column(String(120))
     # "transferência especial" (as chamadas emendas Pix), conforme `tipo_emenda`
@@ -184,3 +198,67 @@ class PolEmenda(Base):
     atualizado_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class PolPendencia(Base):
+    """Cargo sem ocupante identificável na fonte (ex.: município sem prefeito eleito no
+    arquivo do TSE porque a eleição foi anulada e a suplementar ainda não ocorreu)."""
+
+    __tablename__ = "pol_pendencia"
+    __table_args__ = (
+        UniqueConstraint(
+            "fonte",
+            "eleicao_ano",
+            "cargo",
+            "uf",
+            "cod_ibge",
+            name="uq_pol_pendencia",
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fonte: Mapped[str] = mapped_column(String(20))
+    eleicao_ano: Mapped[int]
+    cargo: Mapped[str] = mapped_column(String(30))
+    uf: Mapped[str] = mapped_column(String(2))
+    cod_ibge: Mapped[int | None] = mapped_column(Integer, index=True)
+    motivo: Mapped[str] = mapped_column(Text)
+    url_fonte: Mapped[str] = mapped_column(Text)
+    resposta_id: Mapped[int | None] = _resposta()
+
+
+class PolDespesaCota(Base):
+    """Despesa da Cota para o Exercício da Atividade Parlamentar (CEAP), Câmara.
+
+    Uma linha do arquivo anual `Ano-AAAA.csv.zip`. O arquivo não tem chave única por
+    linha (há linhas idênticas, ex.: débitos de telefonia); cada carga substitui o ano
+    inteiro, e `linha` é a posição no arquivo original (1 = primeira linha de dados).
+    CPF de fornecedor pessoa física e o nome dele NÃO são guardados (LGPD).
+    """
+
+    __tablename__ = "pol_despesa_cota"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    politico_id: Mapped[int] = mapped_column(
+        ForeignKey("pol_politico.id", ondelete="CASCADE"), index=True
+    )
+    ano: Mapped[int] = mapped_column(Integer, index=True)
+    mes: Mapped[int]
+    linha: Mapped[int]
+    categoria: Mapped[str] = mapped_column(String(200))
+    especificacao: Mapped[str | None] = mapped_column(String(200))
+    fornecedor: Mapped[str | None] = mapped_column(String(300))  # nulo se pessoa física
+    cnpj: Mapped[str | None] = mapped_column(String(14))  # só CNPJ (14 dígitos)
+    pessoa_fisica: Mapped[bool] = mapped_column(Boolean, default=False)
+    numero_documento: Mapped[str | None] = mapped_column(String(100))
+    tipo_documento: Mapped[str | None] = mapped_column(String(4))
+    data_emissao: Mapped[date | None] = mapped_column(Date)
+    valor_documento: Mapped[Decimal | None] = mapped_column(Numeric)
+    valor_glosa: Mapped[Decimal | None] = mapped_column(Numeric)
+    valor_liquido: Mapped[Decimal | None] = mapped_column(Numeric)
+    valor_restituicao: Mapped[Decimal | None] = mapped_column(Numeric)
+    ide_documento: Mapped[str | None] = mapped_column(String(20))
+    url_documento: Mapped[str | None] = mapped_column(Text)
+    url_fonte: Mapped[str] = mapped_column(Text)
+    resposta_id: Mapped[int | None] = _resposta()

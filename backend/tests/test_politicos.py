@@ -24,6 +24,7 @@ from rastro.models import Municipio
 from rastro.politicos import camara, coletar, senado, transparencia
 from rastro.politicos.modelos import (
     PolComissao,
+    PolEmenda,
     PolPolitico,
     PolPresenca,
     PolProposicao,
@@ -246,26 +247,40 @@ def test_senado_materias_votacoes_e_comissoes(session):
 # ---------------------------------------------------------------- Emendas
 
 
-def test_emendas_sem_chave_ficam_desligadas(monkeypatch, capsys):
-    monkeypatch.delenv(transparencia.VARIAVEL_CHAVE, raising=False)
-    assert coletar.main(["--anos", "2025", "--fontes", "emendas"]) == 1
-    assert "DESLIGADO" in capsys.readouterr().err
-
-
 @respx.mock
-def test_emendas_resposta_401_real_vira_coleta_parcial(session):
-    # resposta real da API quando a chave não é aceita (gravada em 06/10/2026)
+def test_emendas_401_real_falha_com_aviso_e_nao_grava_nada(session, monkeypatch):
+    # resposta real da API sem chave (gravada em 06/10/2026): sem variável e sem proxy
+    monkeypatch.delenv(transparencia.VARIAVEL_CHAVE, raising=False)
     _mock_senado()
-    respx.get(f"{transparencia.API}/emendas").respond(
+    rota = respx.get(f"{transparencia.API}/emendas").respond(
         401,
         content=_json("transparencia_emendas_sem_chave.json"),
         headers={"content-type": "application/json;charset=ISO-8859-1"},
     )
     with httpx.Client() as client:
         senado.coletar_senadores(session, client, "SP")
+        assert "proxy" in transparencia.preparar_cliente(client)
         coleta = executar(session, "pol-emendas", coletar.coletor_emendas("SP", [2025]), client)
-    assert coleta.status == "parcial"
-    assert "401" in coleta.erro
+    assert coleta.status == "falha"
+    assert "401" in coleta.erro and "proxy" in coleta.erro
+    assert rota.call_count == 1  # só a consulta de teste; nenhum autor consultado
+    assert "chave-api-dados" not in rota.calls[0].request.headers
+    assert _conta(session, PolEmenda) == 0
+
+
+@pytest.mark.parametrize("com_variavel", [True, False])
+def test_emendas_modos_de_chave(monkeypatch, com_variavel):
+    """Com a variável, o cabeçalho é enviado; sem ela, nada é enviado (o proxy injeta)."""
+    if com_variavel:
+        monkeypatch.setenv(transparencia.VARIAVEL_CHAVE, "valor-de-teste")
+    else:
+        monkeypatch.delenv(transparencia.VARIAVEL_CHAVE, raising=False)
+    with httpx.Client() as client:
+        modo = transparencia.preparar_cliente(client)
+        enviado = client.headers.get("chave-api-dados")
+    assert (enviado == "valor-de-teste") is com_variavel
+    assert (enviado is None) is not com_variavel
+    assert ("proxy" in modo) is not com_variavel
 
 
 # ---------------------------------------------------------------- API
@@ -319,14 +334,20 @@ def test_api_representantes_do_municipio(api, session):
     client, _ = api
     r = client.get("/api/municipios/3550308/representantes").json()
     assert r["municipio"] == {"cod_ibge": 3550308, "nome": "São Paulo", "uf": "SP"}
-    grupos = {g["cargo"]: g for g in r["grupos"]}
+    titulos = [sec["titulo"] for sec in r["secoes"]]
+    assert titulos == [
+        "Eleitos em São Paulo",
+        "Governador e deputados estaduais eleitos por SP — representam todo o estado",
+        "Senadores e deputados federais eleitos por SP — representam todo o estado",
+    ]
+    grupos = {g["cargo"]: g for sec in r["secoes"] for g in sec["grupos"]}
     assert list(grupos) == [
         "prefeito",
         "vereador",
         "governador",
+        "deputado_estadual",
         "senador",
         "deputado_federal",
-        "deputado_estadual",
     ]
     assert len(grupos["senador"]["politicos"]) == 3
     assert len(grupos["deputado_federal"]["politicos"]) == 70  # só os em exercício
@@ -372,7 +393,7 @@ def test_api_listas_por_ano_e_emendas_sem_coleta(api):
     props = client.get(f"/api/politicos/{pid}/proposicoes", params={"ano": 2025}).json()
     assert props["total"] == 8 and all(p["resposta_id"] for p in props["itens"])
     e = client.get(f"/api/politicos/{pid}/emendas").json()
-    assert e["coletadas"] is False and e["itens"] == [] and "desligado" in e["aviso"]
+    assert e["coletadas"] is False and e["itens"] == [] and "não coletadas" in e["aviso"]
     assert client.get("/api/politicos/999999").status_code == 404
     assert client.get("/api/municipios/3550308/emendas").json()["coletadas"] is False
 
