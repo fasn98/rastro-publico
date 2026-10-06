@@ -13,6 +13,10 @@ def main(argv: list[str] | None = None) -> int:
         from rastro.coletores import siconfi_lote
 
         return siconfi_lote.main(argv[1:])
+    if argv[:1] == ["politicos"]:
+        from rastro.politicos import coletar
+
+        return coletar.main(argv[1:])
 
     parser = argparse.ArgumentParser(prog="rastro")
     sub = parser.add_subparsers(dest="comando", required=True)
@@ -43,6 +47,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     r = sub.add_parser("ranking", help="calcula e grava o Ranking Fiscal de uma UF")
     r.add_argument("--uf", required=True)
+    sub.add_parser(
+        "politicos",
+        help="coleta deputados federais, senadores e emendas (ver `rastro politicos --help`)",
+        add_help=False,
+    )
     sub.add_parser(
         "siconfi-lote",
         help="coleta RREO/RGF em lote, retomável (ver `rastro siconfi-lote --help`)",

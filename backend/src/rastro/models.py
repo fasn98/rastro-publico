@@ -298,3 +298,7 @@ class DemonstrativoResposta(Base):
     resposta_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("resposta_bruta.id"), primary_key=True, index=True
     )
+
+
+# Tabelas do módulo de políticos (pol_*), registradas no mesmo metadata
+from rastro.politicos import modelos as _politicos  # noqa: E402, F401

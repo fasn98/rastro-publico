@@ -211,3 +211,19 @@ h2 { margin: 16px 0 4px; }
 .tabela-escolhas { width: 100%; font-size: 0.9em; }
 .tabela-escolhas th, .tabela-escolhas td { text-align: left; white-space: normal; vertical-align: top; }
 input[type="checkbox"] { flex: none; min-width: 0; margin: 0 4px 0 0; }
+
+/* módulo de políticos */
+.politicos h3 { margin-top: 20px; }
+.politicos h4 { margin: 16px 0 4px; }
+.cartao-link {
+  display: block; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 6px;
+  background: var(--cartao); color: var(--texto); text-decoration: none;
+}
+.cartao-link:hover, .cartao-link:focus-visible { border-color: var(--destaque); }
+.cartao-link span { color: var(--suave); font-size: 0.85em; }
+.pendente { padding: 8px 10px; border: 1px dashed var(--borda); border-radius: 6px; color: var(--suave); }
+.fonte, .fontes { font-size: 0.8em; color: var(--suave); }
+.fontes { display: flex; flex-direction: column; gap: 2px; }
+.contestar { margin: 12px 0; }
+.politicos li { margin: 6px 0; }
+.politicos label select { margin-left: 4px; }

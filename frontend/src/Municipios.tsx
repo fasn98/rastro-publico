@@ -121,6 +121,9 @@ export default function Municipios({ cod }: { cod: number | null }) {
               </>
             )}
           </dl>
+          <p>
+            <a href={`#/representantes/${detalhe.cod_ibge}`}>Representantes e emendas recebidas</a>
+          </p>
           {detalhe.ente_siconfi && <Indicadores cod={detalhe.cod_ibge} />}
         </aside>
       )}
