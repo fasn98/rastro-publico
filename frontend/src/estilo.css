@@ -149,3 +149,65 @@ th, td { padding: 4px 8px; border-bottom: 1px solid var(--borda); text-align: ri
 th[scope="row"], thead th:first-child { text-align: left; white-space: normal; }
 /* contorno da cor do fundo: o texto continua legível ao cruzar linhas */
 .evo-valor, .evo-ref text { paint-order: stroke; stroke: var(--cartao); stroke-width: 3px; stroke-linejoin: round; }
+
+/* navegação e páginas */
+.topo { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.topo nav { display: flex; gap: 4px; flex-wrap: wrap; }
+.topo nav a { padding: 6px 10px; border-radius: 6px; color: var(--texto); text-decoration: none; border: 1px solid transparent; }
+.topo nav a[aria-current="page"] { border-color: var(--borda); background: var(--cartao); font-weight: 600; }
+a { color: var(--destaque); }
+.botao {
+  display: inline-block; font: inherit; padding: 8px 12px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--borda); background: var(--cartao); color: var(--texto); text-decoration: none;
+}
+.botao:hover { border-color: var(--destaque); }
+h2 { margin: 16px 0 4px; }
+
+/* mapa: rampa sequencial azul (mais escuro = nota maior no tema claro) */
+:root {
+  --seq-1: #cde2fb; --seq-2: #86b6ef; --seq-3: #3987e5; --seq-4: #1c5cab; --seq-5: #0d366b;
+  --sem-nota: #e1e0d9; --contorno: #fcfcfb;
+}
+@media (prefers-color-scheme: dark) {
+  /* no escuro a rampa inverte: mais claro = nota maior */
+  :root {
+    --seq-1: #104281; --seq-2: #1c5cab; --seq-3: #2a78d6; --seq-4: #5598e7; --seq-5: #9ec5f4;
+    --sem-nota: #3a3a37; --contorno: #1a1a19;
+  }
+}
+.mapa { position: relative; margin: 12px 0; }
+.mapa svg { width: 100%; height: auto; display: block; }
+.mun { stroke: var(--contorno); stroke-width: 0.6; cursor: pointer; }
+.mun.seq-1 { fill: var(--seq-1); } .mun.seq-2 { fill: var(--seq-2); } .mun.seq-3 { fill: var(--seq-3); }
+.mun.seq-4 { fill: var(--seq-4); } .mun.seq-5 { fill: var(--seq-5); } .mun.sem-nota { fill: var(--sem-nota); }
+.mun.apagado { opacity: 0.25; }
+.mun.foco { stroke: var(--texto); stroke-width: 1.5; }
+.mapa-dica {
+  position: absolute; transform: translate(12px, -50%); pointer-events: none; z-index: 2;
+  background: var(--texto); color: var(--fundo); padding: 4px 8px; border-radius: 4px;
+  font-size: 0.8em; display: flex; flex-direction: column; white-space: nowrap;
+}
+.mapa-legenda { display: flex; gap: 12px; flex-wrap: wrap; font-size: 0.8em; color: var(--suave); margin-top: 6px; }
+.mapa-legenda span { display: inline-flex; align-items: center; gap: 4px; }
+.mapa-legenda i { width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
+.mapa-legenda i.seq-1 { background: var(--seq-1); } .mapa-legenda i.seq-2 { background: var(--seq-2); }
+.mapa-legenda i.seq-3 { background: var(--seq-3); } .mapa-legenda i.seq-4 { background: var(--seq-4); }
+.mapa-legenda i.seq-5 { background: var(--seq-5); } .mapa-legenda i.sem-nota { background: var(--sem-nota); }
+
+.ranking-cabecalho { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tabela-ranking { width: 100%; font-size: 0.9em; }
+.tabela-ranking .esq, .tabela-ranking th.esq { text-align: left; }
+.tabela-ranking td.nota-final { font-weight: 700; }
+.nota-rodape { font-size: 0.8em; color: var(--suave); }
+
+.nota-ranking .nota-linha { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.nota-grande { font-size: 2.4em; font-weight: 700; line-height: 1; }
+.notas-componentes { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85em; margin: 8px 0; }
+.notas-componentes li { display: flex; gap: 6px; }
+
+.metodologia article.regra { border-top: 1px solid var(--borda); padding-top: 8px; }
+.metodologia h3 { margin-top: 24px; }
+.metodologia article.regra h3 { margin-top: 8px; font-size: 1em; }
+.tabela-escolhas { width: 100%; font-size: 0.9em; }
+.tabela-escolhas th, .tabela-escolhas td { text-align: left; white-space: normal; vertical-align: top; }
+input[type="checkbox"] { flex: none; min-width: 0; margin: 0 4px 0 0; }

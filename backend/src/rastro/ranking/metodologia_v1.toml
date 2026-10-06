@@ -1,0 +1,72 @@
+# Ranking Fiscal — metodologia v1
+#
+# Regras de normalização (0 a 1) e pesos. Qualquer mudança aqui muda a nota: suba a
+# `versao`. A versão e o hash deste arquivo são gravados junto com cada nota.
+
+versao = "1.0.0"
+titulo = "Ranking Fiscal v1 — municípios"
+
+# média dos últimos N exercícios, terminando em `ultimo_exercicio`
+ultimo_exercicio = 2025
+janela_exercicios = 3
+
+# abaixo deste número de indicadores fiscais com dado, o município fica sem nota
+# (a transparência sozinha não pode gerar nota)
+minimo_indicadores_fiscais = 3
+
+# faixas populacionais (limite superior inclusivo); população do cadastro de entes do SICONFI
+faixas = [
+  { nome = "até 10 mil", ate = 10_000 },
+  { nome = "10 a 50 mil", ate = 50_000 },
+  { nome = "50 a 100 mil", ate = 100_000 },
+  { nome = "100 a 500 mil", ate = 500_000 },
+  { nome = "acima de 500 mil" },
+]
+
+# Normalização linear: nota = (valor - pior) / (melhor - pior), limitada a [0, 1].
+# Se `pior` > `melhor`, valores menores são melhores.
+
+[indicadores.autonomia]
+nome = "Autonomia"
+peso = 1
+unidade = "razão"
+# razão <= 1: a receita ligada à economia local não cobre nem a estrutura administrativa
+pior = 1.0
+# teto: a razão não tem limite superior; acima deste valor a nota é 1.
+# Provisório: escolhido pela amostra de 10 municípios (2022-2025, razões de 0,8 a 22);
+# revisar com a distribuição da coleta completa.
+melhor = 10.0
+
+[indicadores.pessoal]
+nome = "Gastos com pessoal"
+peso = 1
+unidade = "% da RCL"
+# relativo ao limite máximo DECLARADO no RGF do Executivo (54% em municípios):
+# nota 0 ao atingir o limite máximo; nota 1 até 70% dele (37,8% em municípios)
+relativo_ao_limite_maximo = true
+pior = 1.0
+melhor = 0.70
+
+[indicadores.liquidez]
+nome = "Liquidez"
+peso = 1
+unidade = "% da RCL"
+# caixa líquido (não vinculado) após restos a pagar: zero ou negativo = nota 0
+pior = 0.0
+melhor = 20.0
+
+[indicadores.investimento]
+nome = "Investimento"
+peso = 1
+unidade = "% da receita"
+pior = 0.0
+melhor = 10.0
+
+[indicadores.transparencia]
+nome = "Transparência (provisório)"
+peso = 1
+unidade = "índice 0–1"
+pior = 0.0
+melhor = 1.0
+# único indicador em que ausência penaliza: ente/ano coletado sem relatório = 0
+penaliza_ausencia = true

@@ -19,6 +19,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("coletar", help="executa coletores")
     p.add_argument("fontes", nargs="*", help="fontes a coletar (padrão: todas)")
     sub.add_parser("fontes", help="lista as fontes disponíveis")
+    r = sub.add_parser("ranking", help="calcula e grava o Ranking Fiscal de uma UF")
+    r.add_argument("--uf", required=True)
     sub.add_parser(
         "siconfi-lote",
         help="coleta RREO/RGF em lote, retomável (ver `rastro siconfi-lote --help`)",
@@ -42,6 +44,32 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.comando == "fontes":
         print("\n".join(COLETORES))
+        return 0
+
+    if args.comando == "ranking":
+        from rastro import ranking
+
+        met = ranking.carregar_metodologia()
+        with get_sessionmaker()() as session:
+            itens = ranking.calcular(session, args.uf, met)
+        com_nota = sum(1 for i in itens if i["nota"] is not None)
+        print(
+            f"Ranking {args.uf.upper()} v{met.versao} ({met.hash}), exercícios "
+            f"{met.exercicios}: {com_nota}/{len(itens)} municípios com nota"
+        )
+        # distribuição da transparência (indicador provisório: rever se quase todos = 100%)
+        notas_t = [
+            i["componentes"]["transparencia"]["nota"]
+            for i in itens
+            if i["componentes"]["transparencia"]["nota"] is not None
+        ]
+        if notas_t:
+            print(f"Transparência ({len(notas_t)} municípios com extrato coletado):")
+            faixas_t = [(1.0, 1.0, "100%"), (0.75, 0.9999, "75–99%"), (0.5, 0.7499, "50–74%"),
+                        (0.0, 0.4999, "0–49%")]  # fmt: skip
+            for de, ate, rotulo in faixas_t:
+                n = sum(1 for v in notas_t if de <= v <= ate)
+                print(f"  {rotulo:>7}: {n:4d} ({n / len(notas_t):.0%})")
         return 0
 
     if args.comando == "siconfi-demonstrativos":

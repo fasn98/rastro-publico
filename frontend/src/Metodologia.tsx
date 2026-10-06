@@ -1,0 +1,211 @@
+import { useEffect, useState } from "react";
+import { INDICADORES_RANKING, obterMetodologia, type Metodologia as Met, type RegraIndicador } from "./api";
+
+const n = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+
+const FORMULA: Record<string, { formula: string; fonte: string }> = {
+  autonomia: {
+    formula:
+      "(receita tributária própria + cotas-parte de ICMS, IPVA e ITR) ÷ (despesa empenhada nas funções Administração + Legislativa)",
+    fonte:
+      "RREO Anexo 1, ReceitaTributaria, coluna “Até o Bimestre (c)”; RREO Anexo 3, RREO3CotaParteDoICMS/IPVA/ITR, “TOTAL (ÚLTIMOS 12 MESES)”; RREO Anexo 2, RREO2TotalDespesas nas linhas “Administração” e “Legislativa” (exceto intraorçamentárias), “DESPESAS EMPENHADAS ATÉ O BIMESTRE (b)”. 6º bimestre.",
+  },
+  pessoal: {
+    formula: "Despesa total com pessoal do Executivo ÷ RCL ajustada, em %, como declarada",
+    fonte:
+      "RGF Anexo 1 do Poder Executivo, DespesaComPessoalTotal, coluna “% sobre a RCL Ajustada”; limite máximo da linha LimiteMaximoDespesaComPessoalTotal. Último período do ano.",
+  },
+  liquidez: {
+    formula:
+      "Disponibilidade de caixa líquida após a inscrição de restos a pagar não processados, recursos NÃO vinculados ÷ RCL, em %",
+    fonte:
+      "RGF Anexo 5 do Executivo, linha “TOTAL DOS RECURSOS NÃO VINCULADOS (I)”, coluna DisponibilidadeDeCaixaLiquidaAposRP (i); RCL do RGF Anexo 2. 3º quadrimestre ou 2º semestre.",
+  },
+  investimento: {
+    formula: "Investimentos liquidados (exceto intraorçamentários) ÷ receita total realizada, em %",
+    fonte:
+      "RREO Anexo 1, Investimentos, “DESPESAS LIQUIDADAS ATÉ O BIMESTRE (h)”; TotalReceitas, “Até o Bimestre (c)”. 6º bimestre.",
+  },
+  transparencia: {
+    formula:
+      "Média de 4 blocos de peso igual: RREO (bimestres disponíveis ÷ 6), RGF do Executivo e RGF do Legislativo (períodos ÷ 3 quadrimestres ou 2 semestres) e DCA (entregue = 1)",
+    fonte:
+      "Extrato de entregas do SICONFI + presença das linhas do relatório na API de dados abertos.",
+  },
+};
+
+function Regra({ chave, r }: { chave: string; r: RegraIndicador }) {
+  const sentido = r.pior > r.melhor ? "menor é melhor" : "maior é melhor";
+  const faixa = chave === "transparencia"
+    ? "o índice já vai de 0 a 1 (0% a 100% dos relatórios esperados) e é usado diretamente"
+    : r.relativo_ao_limite_maximo
+    ? `nota 0 com ${n(r.pior * 100)}% do limite máximo declarado; nota 10 até ${n(r.melhor * 100)}% dele (em municípios, limite de 54%: ${n(r.pior * 54)}% e ${n(r.melhor * 54)}% da RCL)`
+    : `nota 0 com ${n(r.pior)}${r.unidade.startsWith("%") ? "%" : ""} ou ${r.pior > r.melhor ? "mais" : "menos"}; nota 10 com ${n(r.melhor)}${r.unidade.startsWith("%") ? "%" : ""} ou ${r.pior > r.melhor ? "menos" : "mais"}`;
+  return (
+    <article className="regra">
+      <h3>
+        {r.nome} <span className="sub">peso {r.peso}</span>
+      </h3>
+      <p>
+        <strong>Fórmula:</strong> {FORMULA[chave].formula}
+      </p>
+      <p className="sub">
+        <strong>De onde vem:</strong> {FORMULA[chave].fonte}
+      </p>
+      <p>
+        <strong>Normalização:</strong> linear, {r.relativo_ao_limite_maximo ? "menor é melhor" : sentido}: {faixa}.
+        {r.penaliza_ausencia && " Ausência de relatório conta como 0."}
+      </p>
+    </article>
+  );
+}
+
+export default function Metodologia() {
+  const [met, setMet] = useState<Met | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  useEffect(() => {
+    obterMetodologia().then(setMet).catch((e: Error) => setErro(e.message));
+  }, []);
+  if (erro) return <p className="erro">{erro}</p>;
+  if (!met) return <p className="sub">Carregando…</p>;
+
+  return (
+    <article className="metodologia">
+      <h2>Metodologia do Ranking Fiscal</h2>
+      <p className="sub">
+        Versão {met.versao} · arquivo de regras <code>metodologia_v1.toml</code> (hash {met.hash}) ·
+        exercícios {met.exercicios.join(", ")}
+      </p>
+
+      <h3>Princípios</h3>
+      <ul>
+        <li>
+          Usamos o que o ente <strong>declara</strong> ao Tesouro Nacional (SICONFI). Percentuais e
+          limites vêm prontos do relatório; só calculamos o que o relatório não traz.
+        </li>
+        <li>
+          Só entram dados anuais: RREO do 6º bimestre e RGF do último período do ano.
+        </li>
+        <li>
+          A nota mede os números declarados; <strong>não é auditoria</strong> nem substitui a análise
+          do Tribunal de Contas.
+        </li>
+      </ul>
+
+      <h3>Indicadores, fórmulas e normalização</h3>
+      <p>
+        São 4 indicadores fiscais (autonomia, gastos com pessoal, liquidez e investimento) e a
+        transparência. Cada um é convertido para uma nota de 0 a 1 em cada ano (exibida de 0 a 10)
+        por normalização linear entre um valor “pior” (nota 0) e um “melhor” (nota 1), com limites
+        em 0 e 1.
+      </p>
+      {INDICADORES_RANKING.map((k) => (
+        <Regra key={k} chave={k} r={met.indicadores[k]} />
+      ))}
+
+      <h3>Como a nota final é formada</h3>
+      <ol>
+        <li>
+          Para cada indicador, média das notas anuais dos últimos {met.janela_exercicios} exercícios
+          ({met.exercicios.join(", ")}) que têm dado.
+        </li>
+        <li>
+          Nota final = média ponderada dos indicadores com dado (pesos iguais nesta versão). Indicador
+          sem nenhum ano com dado é <strong>não reportado</strong>: sai da média, os pesos dos demais
+          são redistribuídos e a nota informa quantos faltaram.
+        </li>
+        <li>
+          A transparência é a única que penaliza ausência: ano coletado sem relatório vale 0.
+        </li>
+        <li>
+          Com menos de {met.minimo_indicadores_fiscais} dos 4 indicadores fiscais, o município fica{" "}
+          <strong>sem nota</strong> (cinza no mapa), para que a transparência sozinha não gere uma
+          nota.
+        </li>
+        <li>
+          Posições por competição (empates dividem a posição), no ranking geral e por faixa
+          populacional: {met.faixas.map((f) => f.nome).join("; ")}. População do cadastro de entes
+          do SICONFI.
+        </li>
+      </ol>
+
+      <h3>Escolhas feitas e alternativas descartadas</h3>
+      <table className="tabela-escolhas">
+        <thead>
+          <tr>
+            <th>Indicador</th>
+            <th>Adotado</th>
+            <th>Descartado</th>
+            <th>Por quê</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Autonomia</td>
+            <td>Receita tributária + cotas-parte de ICMS, IPVA e ITR</td>
+            <td>Só a receita tributária própria</td>
+            <td>
+              As cotas-parte refletem a atividade econômica do próprio município. Usamos sempre os
+              totais declarados, não a soma de partes. Como a razão não tem teto, acima de{" "}
+              {n(met.indicadores.autonomia.melhor)} a nota é máxima. Esse teto é provisório, escolhido
+              pela amostra de 10 municípios (razões de 0,8 a 22), e será revisto com a coleta completa.
+            </td>
+          </tr>
+          <tr>
+            <td>Liquidez</td>
+            <td>Caixa líquido dos recursos não vinculados (I), só do Executivo</td>
+            <td>Não vinculados + vinculados (I + II)</td>
+            <td>
+              Recurso vinculado não pode pagar qualquer obrigação. (I + II) aparece na página do
+              município como contexto, fora da nota.
+            </td>
+          </tr>
+          <tr>
+            <td>Investimento</td>
+            <td>Investimentos liquidados</td>
+            <td>Investimentos empenhados</td>
+            <td>
+              Liquidado = obra ou bem efetivamente entregue. Empenhado e restos a pagar não
+              processados aparecem como contexto.
+            </td>
+          </tr>
+          <tr>
+            <td>Transparência</td>
+            <td>4 blocos: RREO, RGF Executivo, RGF Legislativo, DCA</td>
+            <td>Incluir MSC mensal; medir pontualidade</td>
+            <td>
+              Provisório. A data do extrato muda quando o ente retifica, então a pontualidade não é
+              medida com segurança, e retificações não penalizam. Peso e composição serão revistos
+              com a distribuição da coleta completa.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Fora da nota, mas no painel do município</h3>
+      <p>
+        Dívida consolidada líquida, resultado orçamentário e execução da receita e da despesa seguem
+        visíveis na página de cada município, mas não entram nesta versão do ranking.
+      </p>
+
+      <h3>Limitações conhecidas</h3>
+      <ul>
+        <li>Os dados são declarados pelos entes e podem ser retificados depois: a nota muda quando os relatórios mudam.</li>
+        <li>A API omite linhas com valor zero; nesses casos usamos o total declarado ou tratamos a parcela ausente como zero.</li>
+        <li>A liquidez considera só o Executivo; o caixa da Câmara não entra.</li>
+        <li>Os limites das normalizações (“pior” e “melhor”) são escolhas desta versão, registradas no arquivo de regras.</li>
+        <li>A transparência é provisória: na amostra inicial, todos os municípios tiveram 100%.</li>
+        <li>Municípios ainda não coletados aparecem sem nota.</li>
+      </ul>
+
+      <h3>Fontes</h3>
+      <ul>
+        <li>
+          SICONFI / Tesouro Nacional: RREO, RGF, extrato de entregas e cadastro de entes (API de
+          dados abertos, apidatalake.tesouro.gov.br).
+        </li>
+        <li>IBGE: malha municipal (API de Malhas v3) e cadastro de municípios (API de Localidades).</li>
+      </ul>
+    </article>
+  );
+}

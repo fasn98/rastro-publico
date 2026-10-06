@@ -12,7 +12,7 @@ Documentação: https://apidatalake.tesouro.gov.br/docs/siconfi/
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy import delete, select
@@ -20,7 +20,13 @@ from sqlalchemy.orm import Session
 
 from rastro.coletores.base import ColetaParcial
 from rastro.coletores.siconfi import paginas
-from rastro.models import ContaDemonstrativo, DemonstrativoSiconfi, EnteSiconfi, EntregaSiconfi
+from rastro.models import (
+    ContaDemonstrativo,
+    DemonstrativoSiconfi,
+    EnteSiconfi,
+    EntregaSiconfi,
+    ExtratoColetado,
+)
 
 log = logging.getLogger(__name__)
 
@@ -90,6 +96,11 @@ def gravar_extrato(session: Session, cod_ibge: int, exercicio: int, itens: list[
             data_status=_data(i.get("data_status")),
         )
         for i in itens
+    )
+    session.merge(
+        ExtratoColetado(
+            cod_ibge=cod_ibge, exercicio=exercicio, itens=len(itens), lido_em=datetime.now(UTC)
+        )
     )
     session.commit()
 

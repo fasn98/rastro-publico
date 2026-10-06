@@ -12,6 +12,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from rastro.db import Base
@@ -156,6 +157,20 @@ class EntregaSiconfi(Base):
     data_status: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class ExtratoColetado(Base):
+    """Marca que o extrato de um ente/ano foi lido (mesmo que vazio).
+
+    Distingue "o ente não entregou nada" de "ainda não coletamos este ano".
+    """
+
+    __tablename__ = "extrato_coletado"
+
+    cod_ibge: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    exercicio: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    itens: Mapped[int]
+    lido_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class LoteColeta(Base):
     """Coleta longa e retomável (ex.: todos os municípios de uma UF em vários anos)."""
 
@@ -183,3 +198,26 @@ class ItemLote(Base):
     atualizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     lote: Mapped[LoteColeta] = relationship(back_populates="itens")
+
+
+class NotaRanking(Base):
+    """Nota de um município no Ranking Fiscal, com a versão da metodologia que a gerou."""
+
+    __tablename__ = "nota_ranking"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    versao: Mapped[str] = mapped_column(String(20), index=True)
+    # sha256 (12 primeiros caracteres) do arquivo de metodologia usado
+    hash_metodologia: Mapped[str] = mapped_column(String(12))
+    calculado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    exercicios: Mapped[str] = mapped_column(String(40))
+    cod_ibge: Mapped[int] = mapped_column(Integer, index=True)
+    uf: Mapped[str] = mapped_column(String(2), index=True)
+    populacao: Mapped[int | None]
+    faixa: Mapped[str | None] = mapped_column(String(40))
+    nota: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
+    indicadores_faltantes: Mapped[int]
+    posicao_geral: Mapped[int | None]
+    posicao_faixa: Mapped[int | None]
+    # nota, peso e valores/notas por ano de cada indicador
+    componentes: Mapped[dict] = mapped_column(JSONB)

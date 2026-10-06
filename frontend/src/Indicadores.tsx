@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { obterIndicadores, type Indicadores as Dados, type Situacao } from "./api";
+import {
+  obterIndicadores,
+  obterNota,
+  type DetalheRanking,
+  type Indicadores as Dados,
+  type Situacao,
+} from "./api";
+import { nota10 } from "./Ranking";
 import Evolucao from "./Evolucao";
 
 const num = (v: string | null) => (v === null ? null : Number(v));
@@ -97,6 +104,54 @@ function LegendaLimites({ limites }: { limites: Limite[] }) {
   );
 }
 
+const NOMES: Record<string, string> = {
+  autonomia: "Autonomia",
+  pessoal: "Pessoal",
+  liquidez: "Liquidez",
+  investimento: "Investimento",
+  transparencia: "Transparência*",
+};
+
+function NotaRanking({ cod }: { cod: number }) {
+  const [nota, setNota] = useState<DetalheRanking | null | undefined>(undefined);
+  useEffect(() => {
+    obterNota(cod)
+      .then(setNota)
+      .catch(() => setNota(null));
+  }, [cod]);
+  if (!nota) return null;
+  return (
+    <div className="bloco nota-ranking">
+      <h4>
+        Ranking Fiscal <span className="sub">v{nota.versao} · média {nota.exercicios.replace(/,/g, ", ")}</span>
+      </h4>
+      {nota.nota === null ? (
+        <p className="sub">Sem nota: faltam dados de {nota.indicadores_faltantes} indicador(es).</p>
+      ) : (
+        <div className="nota-linha">
+          <span className="nota-grande">{nota10(nota.nota)}</span>
+          <span className="sub">
+            {nota.posicao_geral}º de {nota.total_com_nota} em SP · {nota.posicao_faixa}º de {nota.total_faixa} na
+            faixa “{nota.faixa}”
+            {nota.indicadores_faltantes > 0 && ` · ${nota.indicadores_faltantes} indicador(es) não reportado(s)`}
+          </span>
+        </div>
+      )}
+      <ul className="notas-componentes">
+        {Object.entries(nota.componentes).map(([k, c]) => (
+          <li key={k}>
+            <span>{NOMES[k] ?? k}</span>
+            <strong>{c.nota === null ? "não reportado" : nota10(c.nota)}</strong>
+          </li>
+        ))}
+      </ul>
+      <p className="sub">
+        <a href="#/ranking">Ver ranking</a> · <a href="#/metodologia">metodologia</a> · *provisório
+      </p>
+    </div>
+  );
+}
+
 export default function Indicadores({ cod }: { cod: number }) {
   const [dados, setDados] = useState<Dados | null | undefined>(undefined);
   const [exercicio, setExercicio] = useState<number | undefined>(undefined);
@@ -130,7 +185,7 @@ export default function Indicadores({ cod }: { cod: number }) {
       </section>
     );
 
-  const { pessoal, divida, execucao } = dados;
+  const { pessoal, divida, execucao, autonomia, liquidez, investimento, transparencia } = dados;
   const ref = pessoal[0] ?? divida;
 
   return (
@@ -155,6 +210,8 @@ export default function Indicadores({ cod }: { cod: number }) {
         {execucao && ` · RREO até o ${execucao.periodo}º ${PERIODO[execucao.periodicidade]}`} ·
         Fonte: SICONFI/Tesouro Nacional, valores declarados pelo ente
       </p>
+
+      <NotaRanking cod={cod} />
 
       {pessoal.length > 0 && (
         <div className="bloco">
@@ -271,6 +328,58 @@ export default function Indicadores({ cod }: { cod: number }) {
           ) : null}
         </div>
       )}
+
+      <div className="bloco">
+        <h4>Autonomia, liquidez e investimento</h4>
+        <div className="tiles">
+          <div className="tile">
+            <span className="tile-rotulo">Autonomia</span>
+            <span className="tile-valor">
+              {autonomia?.razao ? `${Number(autonomia.razao).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}×` : "—"}
+            </span>
+            <span className="sub">
+              receita local {reais(autonomia?.receita_local ?? null)} ÷ estrutura administrativa{" "}
+              {reais(autonomia?.custo_estrutura ?? null)}
+            </span>
+          </div>
+          <div className="tile">
+            <span className="tile-rotulo">Liquidez (recursos não vinculados)</span>
+            <span className="tile-valor">{pct(num(liquidez?.percentual ?? null))}</span>
+            <span className="sub">
+              da RCL · caixa {reais(liquidez?.caixa_liquido_nao_vinculado ?? null)}
+              {liquidez?.percentual_com_vinculados && (
+                <> · com vinculados: {pct(num(liquidez.percentual_com_vinculados))} (contexto, fora da nota)</>
+              )}
+            </span>
+          </div>
+          <div className="tile">
+            <span className="tile-rotulo">Investimento liquidado</span>
+            <span className="tile-valor">{pct(num(investimento?.percentual ?? null))}</span>
+            <span className="sub">
+              da receita · {reais(investimento?.liquidado ?? null)} liquidados; empenhados{" "}
+              {reais(investimento?.empenhado ?? null)}, restos a pagar não processados{" "}
+              {reais(investimento?.restos_a_pagar_nao_processados ?? null)}
+            </span>
+          </div>
+          <div className="tile">
+            <span className="tile-rotulo">Transparência (provisório)</span>
+            <span className="tile-valor">
+              {transparencia ? pct(Number(transparencia.indice) * 100) : "—"}
+            </span>
+            <span className="sub">
+              {transparencia
+                ? `RREO ${transparencia.blocos.rreo.disponiveis}/${transparencia.blocos.rreo.esperados} · RGF Exec. ${transparencia.blocos.rgf_executivo.disponiveis}/${transparencia.blocos.rgf_executivo.esperados} · RGF Leg. ${transparencia.blocos.rgf_legislativo.disponiveis}/${transparencia.blocos.rgf_legislativo.esperados} · DCA ${transparencia.blocos.dca.disponiveis}/1`
+                : "extrato de entregas não coletado"}
+            </span>
+          </div>
+        </div>
+        {liquidez && Number(liquidez.percentual) < 0 && (
+          <p className="nota">
+            Caixa líquido negativo nos recursos não vinculados: as obrigações a pagar com recursos
+            livres superam o caixa livre no fim do ano.
+          </p>
+        )}
+      </div>
 
       <Evolucao cod={cod} />
     </section>

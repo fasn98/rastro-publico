@@ -1,14 +1,18 @@
+import csv
+import io
 from datetime import datetime
 from decimal import Decimal
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from rastro import indicadores as ind
+from rastro import ranking as rk
 from rastro.db import get_session
 from rastro.models import (
     Coleta,
@@ -16,6 +20,7 @@ from rastro.models import (
     DemonstrativoSiconfi,
     EnteSiconfi,
     Municipio,
+    NotaRanking,
 )
 
 app = FastAPI(title="Rastro Público", version="0.1.0")
@@ -175,6 +180,7 @@ class Referencia(BaseModel):
     demonstrativo: str
     periodicidade: str
     periodo: int
+    periodo_final: bool
 
 
 class Pessoal(Referencia):
@@ -210,12 +216,57 @@ class Execucao(Referencia):
     superavit_financeiro_utilizado: Decimal | None
 
 
+class Autonomia(Referencia):
+    receita_tributaria: Decimal | None
+    cota_icms: Decimal | None
+    cota_ipva: Decimal | None
+    cota_itr: Decimal | None
+    despesa_administracao: Decimal | None
+    despesa_legislativa: Decimal | None
+    receita_local: Decimal | None
+    custo_estrutura: Decimal | None
+    razao: Decimal | None
+
+
+class Liquidez(Referencia):
+    caixa_liquido_nao_vinculado: Decimal | None
+    caixa_liquido_vinculado: Decimal | None
+    rcl: Decimal | None
+    percentual: Decimal | None
+    percentual_com_vinculados: Decimal | None
+
+
+class Investimento(Referencia):
+    liquidado: Decimal | None
+    empenhado: Decimal | None
+    restos_a_pagar_nao_processados: Decimal | None
+    receita_realizada: Decimal | None
+    percentual: Decimal | None
+
+
+class BlocoTransparencia(BaseModel):
+    disponiveis: int
+    esperados: int
+
+
+class Transparencia(BaseModel):
+    exercicio: int
+    periodicidade_rgf: str
+    blocos: dict[str, BlocoTransparencia]
+    indice: Decimal
+    provisorio: bool
+
+
 class IndicadoresAno(BaseModel):
     cod_ibge: int
     exercicio: int
     pessoal: list[Pessoal]
     divida: Divida | None
     execucao: Execucao | None
+    autonomia: Autonomia | None
+    liquidez: Liquidez | None
+    investimento: Investimento | None
+    transparencia: Transparencia | None
 
 
 class Indicadores(IndicadoresAno):
@@ -237,3 +288,169 @@ def obter_indicadores(cod_ibge: int, session: SessionDep, exercicio: int | None 
 def obter_serie(cod_ibge: int, session: SessionDep):
     """Indicadores de todos os exercícios coletados, do mais antigo ao mais recente."""
     return ind.serie(session, cod_ibge)
+
+
+# --- Ranking Fiscal -----------------------------------------------------------------------
+
+
+class ItemRanking(BaseModel):
+    cod_ibge: int
+    nome: str
+    populacao: int | None
+    faixa: str | None
+    nota: Decimal | None
+    indicadores_faltantes: int
+    posicao_geral: int | None
+    posicao_faixa: int | None
+    notas: dict[str, float | None]
+
+
+class Ranking(BaseModel):
+    versao: str
+    hash_metodologia: str
+    calculado_em: datetime
+    exercicios: str
+    itens: list[ItemRanking]
+
+
+class DetalheRanking(BaseModel):
+    cod_ibge: int
+    versao: str
+    hash_metodologia: str
+    calculado_em: datetime
+    exercicios: str
+    faixa: str | None
+    nota: Decimal | None
+    indicadores_faltantes: int
+    posicao_geral: int | None
+    posicao_faixa: int | None
+    total_com_nota: int
+    total_faixa: int
+    componentes: dict
+
+
+def _versao_atual(session: Session, uf: str, versao: str | None) -> str:
+    if versao:
+        return versao
+    atual = session.scalar(
+        select(NotaRanking.versao)
+        .where(NotaRanking.uf == uf)
+        .order_by(NotaRanking.calculado_em.desc())
+        .limit(1)
+    )
+    if not atual:
+        raise HTTPException(404, f"Ranking de {uf} ainda não calculado (rode `rastro ranking`)")
+    return atual
+
+
+def _consultar_ranking(session, uf, faixa, busca, versao):
+    uf = uf.upper()
+    versao = _versao_atual(session, uf, versao)
+    q = (
+        select(NotaRanking, EnteSiconfi.nome)
+        .join(EnteSiconfi, EnteSiconfi.cod_ibge == NotaRanking.cod_ibge)
+        .where(NotaRanking.uf == uf, NotaRanking.versao == versao)
+    )
+    if faixa:
+        q = q.where(NotaRanking.faixa == faixa)
+    if busca:
+        q = q.where(func.unaccent(EnteSiconfi.nome).ilike(func.unaccent(f"%{busca}%")))
+    q = q.order_by(NotaRanking.posicao_geral.asc().nulls_last(), EnteSiconfi.nome)
+    return session.execute(q).all()
+
+
+def _item(n: NotaRanking, nome: str) -> dict:
+    return {
+        "cod_ibge": n.cod_ibge,
+        "nome": nome,
+        "populacao": n.populacao,
+        "faixa": n.faixa,
+        "nota": n.nota,
+        "indicadores_faltantes": n.indicadores_faltantes,
+        "posicao_geral": n.posicao_geral,
+        "posicao_faixa": n.posicao_faixa,
+        "notas": {k: v["nota"] for k, v in n.componentes.items()},
+    }
+
+
+@app.get("/api/ranking", response_model=Ranking)
+def obter_ranking(
+    session: SessionDep,
+    uf: str = "SP",
+    faixa: str | None = None,
+    busca: str | None = None,
+    versao: str | None = None,
+):
+    linhas = _consultar_ranking(session, uf, faixa, busca, versao)
+    if not linhas:
+        raise HTTPException(404, "Nenhum município encontrado")
+    primeira = linhas[0][0]
+    return {
+        "versao": primeira.versao,
+        "hash_metodologia": primeira.hash_metodologia,
+        "calculado_em": primeira.calculado_em,
+        "exercicios": primeira.exercicios,
+        "itens": [_item(n, nome) for n, nome in linhas],
+    }
+
+
+COLUNAS_CSV = ["autonomia", "pessoal", "liquidez", "investimento", "transparencia"]
+
+
+@app.get("/api/ranking.csv")
+def exportar_ranking(
+    session: SessionDep,
+    uf: str = "SP",
+    faixa: str | None = None,
+    busca: str | None = None,
+    versao: str | None = None,
+):
+    linhas = _consultar_ranking(session, uf, faixa, busca, versao)
+    saida = io.StringIO()
+    w = csv.writer(saida, delimiter=";")
+    w.writerow(
+        ["posicao_geral", "posicao_faixa", "cod_ibge", "municipio", "populacao", "faixa", "nota",
+         "indicadores_faltantes", *[f"nota_{c}" for c in COLUNAS_CSV],
+         "versao_metodologia", "hash_metodologia", "exercicios"]
+    )  # fmt: skip
+    for n, nome in linhas:
+        notas = {k: v["nota"] for k, v in n.componentes.items()}
+        w.writerow(
+            [n.posicao_geral, n.posicao_faixa, n.cod_ibge, nome, n.populacao, n.faixa, n.nota,
+             n.indicadores_faltantes, *[notas.get(c) for c in COLUNAS_CSV],
+             n.versao, n.hash_metodologia, n.exercicios]
+        )  # fmt: skip
+    # BOM: o Excel abre o CSV em UTF-8 sem estragar os acentos
+    return Response(
+        "\ufeff" + saida.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="ranking-fiscal-{uf.lower()}.csv"'},
+    )
+
+
+@app.get("/api/ranking/{cod_ibge}", response_model=DetalheRanking)
+def obter_nota(cod_ibge: int, session: SessionDep, versao: str | None = None):
+    ente = session.get(EnteSiconfi, cod_ibge)
+    if not ente or not ente.uf:
+        raise HTTPException(404, "Ente não encontrado")
+    versao = _versao_atual(session, ente.uf, versao)
+    n = session.scalars(
+        select(NotaRanking).where(NotaRanking.cod_ibge == cod_ibge, NotaRanking.versao == versao)
+    ).first()
+    if not n:
+        raise HTTPException(404, "Município sem nota nesta versão")
+    base = select(func.count()).where(
+        NotaRanking.uf == n.uf, NotaRanking.versao == versao, NotaRanking.nota.is_not(None)
+    )
+    return {
+        **{c: getattr(n, c) for c in DetalheRanking.model_fields if hasattr(n, c)},
+        "total_com_nota": session.scalar(base),
+        "total_faixa": session.scalar(base.where(NotaRanking.faixa == n.faixa)),
+    }
+
+
+@app.get("/api/metodologia")
+def obter_metodologia():
+    """Regras do arquivo de metodologia em vigor (pesos, normalização, faixas)."""
+    met = rk.carregar_metodologia()
+    return {"hash": met.hash, "exercicios": met.exercicios, **met.regras}

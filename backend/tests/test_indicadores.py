@@ -115,6 +115,7 @@ def test_execucao_e_resultado_orcamentario(session, adamantina):
 def test_ente_sem_dados(session):
     assert ind.indicadores(session, 1234567, 2025) == {
         "cod_ibge": 1234567, "exercicio": 2025, "pessoal": [], "divida": None, "execucao": None,
+        "autonomia": None, "liquidez": None, "investimento": None, "transparencia": None,
     }  # fmt: skip
 
 

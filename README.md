@@ -87,7 +87,8 @@ uv run python -m rastro.coletores.siconfi_lote --uf SP --anos 2022-2025
   (`RASTRO_REQ_POR_SEGUNDO`), inclusive novas tentativas e páginas.
 - O extrato de entregas de cada ente/ano é gravado em `entrega_siconfi`.
 - Para agendar (ex.: Replit Scheduled Deployment): `backend/scripts/coleta_sp.sh`,
-  que aplica as migrações, atualiza municípios/entes e roda o lote de SP 2022–2025.
+  que aplica as migrações, atualiza municípios/entes, roda o lote de SP 2022–2025 e
+  recalcula o ranking.
 
 **Tempo estimado para os 645 municípios de SP, 2022–2025 (2.580 itens):** medido na
 amostra de 10 municípios (40 itens): 12,6 requisições por item em média e ~15 s por
@@ -100,11 +101,17 @@ requisição por item (o extrato), **~45 min**.
 `GET /api/entes/{cod_ibge}/indicadores?exercicio=2025` (e o painel no detalhe do
 município) usa o último período entregue no exercício:
 
-| Indicador | Origem | Limites mostrados |
+| Indicador | Origem | Limites / contexto |
 |---|---|---|
 | Despesa total com pessoal / RCL ajustada, por instituição | RGF Anexo 1 | alerta, prudencial e máximo (art. 20, 22 e 59 da LRF), como declarados no relatório |
 | Dívida consolidada líquida / RCL ajustada | RGF Anexo 2 (Executivo) | alerta e máximo calculados a partir dos valores de limite declarados no relatório |
 | Receita realizada x prevista; despesa empenhada, liquidada e paga; resultado orçamentário | RREO Anexo 1 | — |
+| Autonomia: (receita tributária + cotas-parte ICMS, IPVA, ITR) ÷ (funções Administração + Legislativa, empenhado) | RREO Anexos 1, 2 e 3 | — |
+| Liquidez: caixa líquido após restos a pagar, recursos **não vinculados** ÷ RCL (Executivo) | RGF Anexo 5 (+ RCL do Anexo 2) | contexto: com vinculados (I + II) |
+| Investimento: investimentos **liquidados** (exceto intra) ÷ receita total realizada | RREO Anexo 1 | contexto: empenhado e restos a pagar não processados |
+| Transparência (provisório): RREO, RGF Executivo, RGF Legislativo e DCA disponíveis ÷ esperados | extrato de entregas + API | — |
+
+O painel mostra também a **evolução por ano** (`GET /api/entes/{cod}/indicadores/serie`).
 
 Percentuais e limites vêm prontos do relatório sempre que ele os traz; o resultado
 orçamentário (receita realizada − despesa empenhada) confere com o déficit/superávit
@@ -118,6 +125,32 @@ Volume medido (exercício 2025): município de São Paulo ≈ 21 mil linhas, Ada
 ≈ 8,5 mil, Estado de SP ≈ 27 mil; cerca de 200 bytes por linha no banco. Cada ente leva
 cerca de 10 a 25 requisições por exercício, com pausa configurável entre elas
 (`RASTRO_SICONFI_INTERVALO`, padrão 0,2 s).
+
+## Ranking Fiscal v1 (municípios de SP)
+
+```bash
+uv run rastro ranking --uf SP   # calcula, grava e mostra a distribuição da transparência
+```
+
+- **Indicadores:** autonomia, gastos com pessoal, liquidez e investimento (os 4 fiscais) +
+  transparência (provisório). Dívida e resultado orçamentário ficam só no painel.
+- **Regras em arquivo:** `backend/src/rastro/ranking/metodologia_v1.toml` (normalização
+  0–1 linear entre "pior" e "melhor", pesos iguais, janela de 3 exercícios, faixas
+  populacionais, mínimo de indicadores). A **versão** e o **hash** do arquivo são gravados
+  com cada nota (`nota_ranking`); mudar uma regra exige subir a versão.
+- **Ausência:** indicador sem dado em todos os anos = não reportado (sai da média e é
+  contado); só a transparência penaliza ausência. Com menos de 3 indicadores fiscais, o
+  município fica sem nota.
+- **Páginas:** `#/ranking` (mapa, filtro por faixa e busca, CSV) e `#/metodologia`
+  (fórmulas, pesos, fontes, escolhas, alternativas descartadas e limitações).
+- **API:** `GET /api/ranking?uf=SP&faixa=...&busca=...`, `GET /api/ranking.csv`,
+  `GET /api/ranking/{cod_ibge}`, `GET /api/metodologia`.
+- Mapa: malha municipal do IBGE em `frontend/public/geo/sp-municipios.json`
+  (`frontend/scripts/baixar-malha.sh` para baixar de novo).
+
+**Antes de publicar:** os limites de autonomia (teto 10), liquidez (20%) e investimento
+(10%) foram escolhidos com uma amostra de 10 municípios e precisam ser revistos com a
+coleta completa. O mesmo vale para a transparência, que deu 100% em toda a amostra.
 
 ## Como rodar
 

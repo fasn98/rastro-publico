@@ -8,3 +8,4 @@ cd "$(dirname "$0")/.."
 uv run alembic upgrade head
 uv run rastro coletar ibge-municipios siconfi-entes
 uv run python -m rastro.coletores.siconfi_lote --uf SP --anos 2022-2025
+uv run rastro ranking --uf SP
