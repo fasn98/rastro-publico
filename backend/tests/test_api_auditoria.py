@@ -73,6 +73,7 @@ def test_so_os_endpoints_de_auditoria(api):
         "/api/respostas/{resposta_id}",
         "/api/respostas/{resposta_id}/bruto",
         "/api/demonstrativos/{demonstrativo_id}/respostas",
+        "/api/bruto/{sha}",
         "/api/saude",
     }
 
@@ -90,3 +91,54 @@ def test_database_url_do_replit(monkeypatch):
     get_settings.cache_clear()
     assert get_settings().database_url == "postgresql+psycopg://a:b@c/d"  # explícito vence
     get_settings.cache_clear()
+
+
+# --- resposta bruta pelo SHA-256 do conteúdo ------------------------------------------------
+
+
+def test_bruto_por_hash_igual_ao_por_id_imutavel_e_com_etag(api):
+    cliente, rid, bruto = api
+    sha = hashlib.sha256(bruto).hexdigest()
+    r = cliente.get(f"/api/bruto/{sha}", headers={"Origin": "https://fasn98.github.io"})
+    assert r.status_code == 200
+    assert r.content == bruto == cliente.get(f"/api/respostas/{rid}/bruto").content
+    assert hashlib.sha256(r.content).hexdigest() == r.headers["x-rastro-sha256"] == sha
+    assert r.headers["etag"] == f'"{sha}"'
+    assert r.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert r.headers["x-rastro-url-origem"] == ibge.URL_MUNICIPIOS
+    assert r.headers["content-type"].startswith("application/json")
+    assert "x-rastro-sha256-original" not in r.headers  # sem redação: gravado = original
+    assert r.headers["access-control-allow-origin"] == "https://fasn98.github.io"
+    r2 = cliente.get(f"/api/bruto/{sha}", headers={"If-None-Match": f'"{sha}"'})
+    assert r2.status_code == 304 and r2.content == b""
+
+
+def test_bruto_por_hash_inexistente_ou_invalido(api):
+    cliente, _, _ = api
+    assert cliente.get(f"/api/bruto/{'0' * 64}").status_code == 404
+    for invalido in ("abc", "G" * 64, "0" * 63, "A" * 64):
+        assert cliente.get(f"/api/bruto/{invalido}").status_code == 422
+
+
+def test_bruto_por_hash_redigido_lgpd(session, engine, api):
+    from rastro.coletores.base import get_json_com_origem
+    from rastro.politicos import lgpd, senado
+
+    cliente, _, _ = api
+    original = (FIXTURES / "politicos" / "senado_senadores_atual.json").read_bytes()
+    url = f"{senado.API}/senador/lista/atual.json"
+    with respx.mock:
+        respx.get(url).respond(content=original, headers={"content-type": "application/json"})
+        with novo_cliente(req_por_segundo=0, arquivo=ArquivoBruto(engine)) as c:
+            _, rid = get_json_com_origem(c, url, redator=lgpd.SENADO_LISTA)
+    gravado = session.get(RespostaBruta, rid)
+    r = cliente.get(f"/api/bruto/{gravado.sha256}")
+    assert r.status_code == 200
+    # devolve a versão gravada (sem o campo pessoal), nunca o original
+    assert b"EmailParlamentar" not in r.content
+    assert hashlib.sha256(r.content).hexdigest() == r.headers["x-rastro-sha256"]
+    assert r.headers["x-rastro-sha256"] == gravado.sha256
+    assert r.headers["x-rastro-sha256-original"] == hashlib.sha256(original).hexdigest()
+    assert r.headers["x-rastro-campos-removidos"] == "EmailParlamentar"
+    # o original não está no arquivo, então não há endereço por hash para ele
+    assert cliente.get(f"/api/bruto/{hashlib.sha256(original).hexdigest()}").status_code == 404
