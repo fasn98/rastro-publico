@@ -231,3 +231,19 @@ input[type="checkbox"] { flex: none; min-width: 0; margin: 0 4px 0 0; }
 .secao-representantes { border-top: 1px solid var(--borda); margin-top: 20px; }
 .destaque-emendas { margin: 12px 0; padding: 12px; border: 2px solid var(--destaque); border-radius: 8px; background: var(--cartao); }
 .destaque-emendas h4 { margin-top: 0; }
+.faixa-previa { margin: -8px 0 12px; padding: 8px 12px; border: 2px solid var(--destaque); border-radius: 6px; background: var(--cartao); font-weight: 600; }
+.aviso-previa-ranking { margin: 24px 0; padding: 16px; border: 1px solid var(--borda); border-radius: 8px; background: var(--cartao); }
+.busca { position: relative; margin: 16px 0; }
+.busca-rotulo { display: block; font-weight: 600; margin-bottom: 6px; }
+.busca input { width: 100%; box-sizing: border-box; font-size: 1.1em; padding: 12px 14px; min-height: 48px; }
+.sugestoes { position: absolute; z-index: 10; left: 0; right: 0; margin: 4px 0 0; padding: 4px 0; list-style: none; background: var(--cartao); border: 1px solid var(--borda); border-radius: 8px; box-shadow: 0 6px 18px rgb(0 0 0 / 0.15); max-height: 60vh; overflow-y: auto; }
+.sugestoes li { padding: 12px 14px; cursor: pointer; min-height: 24px; }
+.sugestoes li.ativa { background: var(--fundo); outline: 2px solid var(--destaque); outline-offset: -2px; }
+.sugestoes .uf, .lista-completa .lista span { color: var(--suave); font-size: 0.85em; margin-left: 4px; }
+.sugestoes .sem-sugestao { color: var(--suave); cursor: default; }
+.lista-completa { margin: 24px 0; }
+.lista-completa summary { cursor: pointer; padding: 8px 0; }
+.lista-completa .lista a { display: block; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 6px; background: var(--cartao); color: var(--texto); text-decoration: none; }
+.lista-completa .lista a:hover, .lista-completa .lista a:focus-visible { border-color: var(--destaque); }
+.populacao { font-size: 1.15em; }
+dt.secundario, dd.secundario { font-size: 0.9em; }

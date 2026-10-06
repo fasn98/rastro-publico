@@ -32,6 +32,9 @@ def main(argv: list[str] | None = None) -> int:
     ex = sub.add_parser("exportar-site", help="gera os arquivos estáticos do site (JSON)")
     ex.add_argument("--uf", default="SP")
     ex.add_argument("--saida", required=True, help="pasta de saída (ex.: ../frontend/dist/dados)")
+    ex.add_argument(
+        "--sem-ranking", action="store_true", help="prévia: não exporta o ranking nem as notas"
+    )
     pb = sub.add_parser(
         "publicar-site", help="verifica e publica o site no GitHub Pages (branch gh-pages)"
     )
@@ -138,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
 
         from rastro import site
 
-        m = site.exportar(Path(args.saida), args.uf)
+        m = site.exportar(Path(args.saida), args.uf, sem_ranking=args.sem_ranking)
         print(
             f"Site exportado: {m['arquivos']} arquivos, {m['bytes'] / 1e6:.1f} MB, "
             f"{m['contagens']['municipios']} municípios, {m['contagens']['politicos']} políticos"

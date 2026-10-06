@@ -104,8 +104,14 @@ class _Escritor:
         self.bytes += len(conteudo)
 
 
-def exportar(saida: Path, uf: str = "SP", session: Session | None = None) -> dict:
-    """Gera os arquivos do site em `saida` e devolve o manifesto."""
+def exportar(
+    saida: Path, uf: str = "SP", session: Session | None = None, sem_ranking: bool = False
+) -> dict:
+    """Gera os arquivos do site em `saida` e devolve o manifesto.
+
+    `sem_ranking` (prévia com dados fiscais parciais): o ranking e as notas não são
+    exportados, nem ficam acessíveis por URL.
+    """
     uf = uf.upper()
     api = _cliente(session)
     out = _Escritor(saida)
@@ -155,7 +161,14 @@ def exportar(saida: Path, uf: str = "SP", session: Session | None = None) -> dic
     for m in municipios:
         cod = m.cod_ibge
         detalhe = get(f"/api/municipios/{cod}")
-        lista.append({k: v for k, v in detalhe.items() if k != "ente_siconfi"})
+        # lista da busca: dados básicos e a população do IBGE (desempata as sugestões)
+        pop = detalhe.get("populacao_ibge")
+        lista.append(
+            {
+                **{k: v for k, v in detalhe.items() if k not in ("ente_siconfi", "populacao_ibge")},
+                "populacao": pop["populacao"] if pop else None,
+            }
+        )
         rep = reps[cod]
         citados |= {p["id"] for sec in rep["secoes"] for g in sec["grupos"] for p in g["politicos"]}
         out.json(
@@ -163,7 +176,7 @@ def exportar(saida: Path, uf: str = "SP", session: Session | None = None) -> dic
             {
                 "detalhe": detalhe,
                 "serie": get(f"/api/entes/{cod}/indicadores/serie"),
-                "nota": get(f"/api/ranking/{cod}", opcional=True),
+                "nota": None if sem_ranking else get(f"/api/ranking/{cod}", opcional=True),
                 "representantes": {
                     "municipio": rep["municipio"],
                     "secoes": [secao(sec) for sec in rep["secoes"]],
@@ -183,7 +196,7 @@ def exportar(saida: Path, uf: str = "SP", session: Session | None = None) -> dic
         if not pagina["itens"] or deslocamento >= pagina["total"]:
             break
 
-    ranking = get(f"/api/ranking?uf={uf}", opcional=True)
+    ranking = None if sem_ranking else get(f"/api/ranking?uf={uf}", opcional=True)
     if ranking:
         out.json("ranking.json", ranking)
         out.bruto("ranking.csv", api.get(f"/api/ranking.csv?uf={uf}").content)
