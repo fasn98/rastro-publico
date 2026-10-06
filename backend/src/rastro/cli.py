@@ -19,6 +19,10 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("coletar", help="executa coletores")
     p.add_argument("fontes", nargs="*", help="fontes a coletar (padrão: todas)")
     sub.add_parser("fontes", help="lista as fontes disponíveis")
+    sub.add_parser(
+        "verificar-respostas",
+        help="recalcula o SHA-256 de todas as respostas brutas arquivadas",
+    )
     r = sub.add_parser("ranking", help="calcula e grava o Ranking Fiscal de uma UF")
     r.add_argument("--uf", required=True)
     sub.add_parser(
@@ -45,6 +49,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.comando == "fontes":
         print("\n".join(COLETORES))
         return 0
+
+    if args.comando == "verificar-respostas":
+        return _verificar_respostas()
 
     if args.comando == "ranking":
         from rastro import ranking
@@ -112,6 +119,26 @@ def _demonstrativos(parser: argparse.ArgumentParser, args) -> int:
     if coleta.erro:
         print(coleta.erro, file=sys.stderr)
     return 0 if coleta.status == "sucesso" else 1
+
+
+def _verificar_respostas() -> int:
+    from sqlalchemy import func, select
+
+    from rastro.coletores.arquivo import ler_payload
+    from rastro.models import PayloadBruto, RespostaBruta
+
+    with get_sessionmaker()() as session:
+        total = ruins = 0
+        for p in session.scalars(select(PayloadBruto).execution_options(yield_per=200)):
+            total += 1
+            try:
+                ler_payload(p)
+            except ValueError as exc:
+                ruins += 1
+                print(exc, file=sys.stderr)
+        respostas = session.scalar(select(func.count()).select_from(RespostaBruta))
+    print(f"{respostas} respostas, {total} payloads distintos verificados, {ruins} com problema")
+    return 1 if ruins else 0
 
 
 if __name__ == "__main__":

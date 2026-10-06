@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from rastro import indicadores as ind
 from rastro import ranking as rk
+from rastro.coletores.arquivo import ler_payload, sha256
 from rastro.db import get_session
 from rastro.models import (
     Coleta,
@@ -21,6 +22,8 @@ from rastro.models import (
     EnteSiconfi,
     Municipio,
     NotaRanking,
+    PayloadBruto,
+    RespostaBruta,
 )
 
 app = FastAPI(title="Rastro Público", version="0.1.0")
@@ -98,6 +101,8 @@ class ContaOut(BaseModel):
     cod_conta: str
     conta: str
     valor: Decimal | None
+    # resposta bruta de onde o valor saiu: GET /api/respostas/{resposta_id}/bruto
+    resposta_id: int | None
 
 
 @app.get("/api/saude")
@@ -454,3 +459,76 @@ def obter_metodologia():
     """Regras do arquivo de metodologia em vigor (pesos, normalização, faixas)."""
     met = rk.carregar_metodologia()
     return {"hash": met.hash, "exercicios": met.exercicios, **met.regras}
+
+
+# --- Auditoria: respostas brutas das fontes ----------------------------------------------
+
+
+class RespostaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    coleta_id: int | None
+    metodo: str
+    url: str
+    status_http: int
+    content_type: str | None
+    recebido_em: datetime
+    duracao_ms: int | None
+    sha256: str
+    tamanho: int
+
+
+class RespostaVerificada(RespostaOut):
+    integra: bool  # SHA-256 recalculado agora sobre os bytes guardados confere?
+    url_bruto: str
+
+
+@app.get("/api/respostas/{resposta_id}", response_model=RespostaVerificada)
+def obter_resposta(resposta_id: int, session: SessionDep):
+    """Metadados de uma chamada à fonte, com verificação de integridade do payload."""
+    r = session.get(RespostaBruta, resposta_id)
+    if not r:
+        raise HTTPException(404, "Resposta não encontrada")
+    p = session.get(PayloadBruto, r.sha256)
+    try:
+        ler_payload(p)
+        integra = True
+    except ValueError:
+        integra = False
+    return {
+        **RespostaOut.model_validate(r).model_dump(),
+        "integra": integra,
+        "url_bruto": f"/api/respostas/{r.id}/bruto",
+    }
+
+
+@app.get("/api/respostas/{resposta_id}/bruto")
+def baixar_resposta(resposta_id: int, session: SessionDep):
+    """Os bytes exatamente como a fonte devolveu (confira com sha256sum)."""
+    r = session.get(RespostaBruta, resposta_id)
+    if not r:
+        raise HTTPException(404, "Resposta não encontrada")
+    try:
+        conteudo = ler_payload(session.get(PayloadBruto, r.sha256))
+    except ValueError as exc:
+        raise HTTPException(500, str(exc)) from exc
+    return Response(
+        conteudo,
+        media_type=r.content_type or "application/octet-stream",
+        headers={
+            "X-Rastro-SHA256": sha256(conteudo),
+            "X-Rastro-URL-Origem": r.url,
+            "X-Rastro-Recebido-Em": r.recebido_em.isoformat(),
+        },
+    )
+
+
+@app.get("/api/demonstrativos/{demonstrativo_id}/respostas", response_model=list[RespostaOut])
+def respostas_do_demonstrativo(demonstrativo_id: int, session: SessionDep):
+    """Respostas brutas de onde vieram as linhas de um demonstrativo (uma por página)."""
+    ids = select(ContaDemonstrativo.resposta_id).where(
+        ContaDemonstrativo.demonstrativo_id == demonstrativo_id
+    )
+    return session.scalars(
+        select(RespostaBruta).where(RespostaBruta.id.in_(ids)).order_by(RespostaBruta.id)
+    ).all()

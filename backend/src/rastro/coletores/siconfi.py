@@ -7,7 +7,8 @@ import httpx
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from rastro.coletores.base import get_json
+from rastro.coletores.base import get_json_com_origem
+from rastro.config import get_settings
 from rastro.models import EnteSiconfi
 
 URL_ENTES = "https://apidatalake.tesouro.gov.br/ords/cdwhprd/siconfi/tt/entes"
@@ -23,15 +24,18 @@ UF_POR_CODIGO = {
 
 
 def paginas(
-    client: httpx.Client, url: str, params: dict | None = None, limite: int = 5000, **kwargs
+    client: httpx.Client, url: str, params: dict | None = None, limite: int | None = None, **kwargs
 ):
     """Percorre a paginação do ORDS (Oracle REST Data Services) usando offset/hasMore."""
+    limite = limite or get_settings().siconfi_itens_por_pagina
     offset = 0
     while True:
-        dados = get_json(
+        dados, origem = get_json_com_origem(
             client, url, params={**(params or {}), "offset": offset, "limit": limite}, **kwargs
         )
         itens = dados.get("items", [])
+        for item in itens:
+            item["_resposta_id"] = origem  # para gravar junto do valor (auditoria)
         yield from itens
         if not dados.get("hasMore") or not itens:
             break
@@ -61,7 +65,9 @@ def normalizar(e: dict) -> dict:
 
 
 def coletar(session: Session, client: httpx.Client) -> int:
-    linhas = [normalizar(e) for e in paginas(client, URL_ENTES)]
+    linhas = [
+        {**normalizar(e), "resposta_id": e["_resposta_id"]} for e in paginas(client, URL_ENTES)
+    ]
     if not linhas:
         return 0
     stmt = insert(EnteSiconfi).values(linhas)

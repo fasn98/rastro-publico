@@ -14,7 +14,9 @@ from tenacity import (
     wait_exponential,
 )
 
+from rastro.coletores.arquivo import ArquivoBruto, coleta_atual, resposta_id
 from rastro.config import get_settings
+from rastro.db import get_engine
 from rastro.models import Coleta
 
 log = logging.getLogger(__name__)
@@ -39,14 +41,19 @@ class LimiteDeTaxa:
         self._ultima = time.monotonic()
 
 
-def novo_cliente(req_por_segundo: float | None = None) -> httpx.Client:
+def novo_cliente(
+    req_por_segundo: float | None = None, arquivo: ArquivoBruto | None = None
+) -> httpx.Client:
+    """Cliente HTTP de todos os coletores: limite de taxa + arquivo de respostas brutas."""
     s = get_settings()
     limite = LimiteDeTaxa(s.req_por_segundo if req_por_segundo is None else req_por_segundo)
+    if arquivo is None and s.arquivar_respostas:
+        arquivo = ArquivoBruto(get_engine())
     return httpx.Client(
         timeout=s.http_timeout,
         headers={"User-Agent": s.user_agent, "Accept": "application/json"},
         follow_redirects=True,
-        event_hooks={"request": [limite]},
+        event_hooks={"request": [limite], "response": [arquivo] if arquivo else []},
     )
 
 
@@ -63,6 +70,13 @@ def get_json(client: httpx.Client, url: str, params: dict | None = None, *, deci
 
     Com `decimal=True`, números com casas decimais viram `Decimal` (valores monetários).
     """
+    return get_json_com_origem(client, url, params, decimal=decimal)[0]
+
+
+def get_json_com_origem(
+    client: httpx.Client, url: str, params: dict | None = None, *, decimal=False
+) -> tuple[object, int | None]:
+    """Como `get_json`, devolvendo também o id da resposta bruta arquivada (ou None)."""
 
     @retry(
         retry=retry_if_exception(_erro_transitorio),
@@ -73,9 +87,8 @@ def get_json(client: httpx.Client, url: str, params: dict | None = None, *, deci
     def _get():
         resp = client.get(url, params=params)
         resp.raise_for_status()
-        if decimal:
-            return json.loads(resp.content, parse_float=Decimal)
-        return resp.json()
+        dados = json.loads(resp.content, parse_float=Decimal) if decimal else resp.json()
+        return dados, resposta_id(resp)
 
     return _get()
 
@@ -97,6 +110,7 @@ def executar(session: Session, fonte: str, coletor: Coletor, client: httpx.Clien
     coleta = Coleta(fonte=fonte, status="executando")
     session.add(coleta)
     session.commit()
+    token = coleta_atual.set(coleta.id)
     try:
         coleta.registros = coletor(session, client)
         coleta.status = "sucesso"
@@ -111,6 +125,8 @@ def executar(session: Session, fonte: str, coletor: Coletor, client: httpx.Clien
         coleta.status = "falha"
         coleta.erro = f"{type(exc).__name__}: {exc}"
         log.exception("Falha na coleta %s", fonte)
+    finally:
+        coleta_atual.reset(token)
     coleta.finalizada_em = datetime.now(UTC)
     session.add(coleta)
     session.commit()

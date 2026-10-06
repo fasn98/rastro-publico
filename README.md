@@ -21,6 +21,29 @@ coletores (Python)  ──►  PostgreSQL  ──►  API (FastAPI)  ──►  
 Cada execução de coletor fica registrada na tabela `coleta` (fonte, status, quantidade
 de registros, erro), consultável em `GET /api/coletas`.
 
+### Auditoria: todo número rastreável até a resposta original
+
+Princípio do portal: todo número precisa ser auditável até a resposta original da fonte.
+Isso é feito no core (`backend/src/rastro/coletores/arquivo.py`) e vale para qualquer
+coletor que use `novo_cliente()`:
+
+- Toda resposta HTTP é arquivada **antes** de qualquer processamento, em transação
+  própria (sobrevive a falhas e rollbacks da coleta), inclusive respostas de erro e novas
+  tentativas.
+- `resposta_bruta`: URL completa com parâmetros, método, status HTTP, content-type, data,
+  duração, tamanho, SHA-256 e a coleta (`coleta_id`) em que ocorreu.
+- `payload_bruto`: os bytes originais, comprimidos com gzip, indexados pelo SHA-256 dos
+  bytes **originais**; conteúdo idêntico é guardado uma única vez.
+- `municipio`, `ente_siconfi`, `entrega_siconfi` e `conta_demonstrativo` têm
+  `resposta_id`: cada valor aponta para a resposta (a página exata) de onde saiu.
+- API: `GET /api/respostas/{id}/bruto` (bytes originais, cabeçalho `X-Rastro-SHA256`),
+  `GET /api/respostas/{id}` (metadados + verificação de integridade),
+  `GET /api/demonstrativos/{id}/respostas`.
+- `uv run rastro verificar-respostas` recalcula o SHA-256 de todo o arquivo.
+- `RASTRO_ARQUIVAR_RESPOSTAS=false` desliga o arquivo (não recomendado).
+
+Dados coletados antes desta funcionalidade não têm origem; recolete com `--forcar`.
+
 ### Fontes implementadas
 
 | Fonte | Comando | Tabela |

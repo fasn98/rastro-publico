@@ -7,7 +7,7 @@ import httpx
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from rastro.coletores.base import get_json
+from rastro.coletores.base import get_json_com_origem
 from rastro.models import Municipio
 
 URL_MUNICIPIOS = "https://servicodados.ibge.gov.br/api/v1/localidades/municipios"
@@ -37,7 +37,8 @@ def normalizar(m: dict) -> dict:
 
 
 def coletar(session: Session, client: httpx.Client) -> int:
-    linhas = [normalizar(m) for m in get_json(client, URL_MUNICIPIOS)]
+    dados, origem = get_json_com_origem(client, URL_MUNICIPIOS)
+    linhas = [{**normalizar(m), "resposta_id": origem} for m in dados]
     if not linhas:
         return 0
     stmt = insert(Municipio).values(linhas)

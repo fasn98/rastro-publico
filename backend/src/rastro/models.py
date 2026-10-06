@@ -6,6 +6,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -34,6 +35,10 @@ class Municipio(Base):
     mesorregiao: Mapped[str | None] = mapped_column(String(120))
     regiao_imediata: Mapped[str | None] = mapped_column(String(120))
     regiao_intermediaria: Mapped[str | None] = mapped_column(String(120))
+    # resposta bruta (resposta_bruta.id) de onde este registro foi extraído
+    resposta_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("resposta_bruta.id"), index=True
+    )
     atualizado_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -54,6 +59,10 @@ class EnteSiconfi(Base):
     populacao: Mapped[int | None]
     cnpj: Mapped[str | None] = mapped_column(String(14))
     exercicio: Mapped[int]
+    # resposta bruta (resposta_bruta.id) de onde este registro foi extraído
+    resposta_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("resposta_bruta.id"), index=True
+    )
     atualizado_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -133,6 +142,10 @@ class ContaDemonstrativo(Base):
     cod_conta: Mapped[str] = mapped_column(Text)
     conta: Mapped[str] = mapped_column(Text)
     valor: Mapped[Decimal | None] = mapped_column(Numeric)
+    # resposta bruta (resposta_bruta.id) de onde este registro foi extraído
+    resposta_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("resposta_bruta.id"), index=True
+    )
 
     demonstrativo: Mapped[DemonstrativoSiconfi] = relationship(back_populates="contas")
 
@@ -155,6 +168,10 @@ class EntregaSiconfi(Base):
     tipo_relatorio: Mapped[str | None] = mapped_column(String(4))
     forma_envio: Mapped[str | None] = mapped_column(String(20))
     data_status: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # resposta bruta (resposta_bruta.id) de onde este registro foi extraído
+    resposta_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("resposta_bruta.id"), index=True
+    )
 
 
 class ExtratoColetado(Base):
@@ -221,3 +238,32 @@ class NotaRanking(Base):
     posicao_faixa: Mapped[int | None]
     # nota, peso e valores/notas por ano de cada indicador
     componentes: Mapped[dict] = mapped_column(JSONB)
+
+
+class PayloadBruto(Base):
+    """Bytes de uma resposta, exatamente como recebidos, indexados pelo SHA-256 deles."""
+
+    __tablename__ = "payload_bruto"
+
+    sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tamanho: Mapped[int]  # bytes originais (antes da compressão)
+    compressao: Mapped[str] = mapped_column(String(10))  # gzip
+    conteudo: Mapped[bytes] = mapped_column(LargeBinary)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RespostaBruta(Base):
+    """Uma chamada HTTP a uma fonte: o que foi pedido, quando, e o que voltou."""
+
+    __tablename__ = "resposta_bruta"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    coleta_id: Mapped[int | None] = mapped_column(ForeignKey("coleta.id"), index=True)
+    metodo: Mapped[str] = mapped_column(String(10))
+    url: Mapped[str] = mapped_column(Text)  # completa, com parâmetros
+    status_http: Mapped[int]
+    content_type: Mapped[str | None] = mapped_column(String(120))
+    recebido_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    duracao_ms: Mapped[int | None]
+    sha256: Mapped[str] = mapped_column(ForeignKey("payload_bruto.sha256"), index=True)
+    tamanho: Mapped[int]
