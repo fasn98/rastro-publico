@@ -227,16 +227,38 @@ Replit "rastro-coleta" (Scheduled, semanal)            GitHub Pages (grátis)
   ranking, mapa, CSV, metodologia, "Quem representa você", políticos, proposições, votos,
   presenças e emendas. São arquivos JSON gerados por `rastro exportar-site`, que chama as
   próprias rotas da API, então o conteúdo é o mesmo que a API devolveria.
+- **Formato dos arquivos (versão 3, ver a docstring de `backend/src/rastro/site.py`):**
+  - listas de cada político em páginas de 500 por ano (`{ano}-{n}.json`); nenhuma lista é
+    cortada, e a verificação antes de publicar confere que as páginas somam a quantidade
+    do detalhe;
+  - votações e presenças: data, órgão, matéria e fonte ficam num catálogo por ano
+    (`catalogos/`); o arquivo do político guarda só o id e o voto;
+  - campos repetidos (fonte, categoria) vão para o cabeçalho de cada arquivo;
+  - cota parlamentar item a item só no ano corrente e no anterior; nos demais anos, totais
+    por categoria e link para a página oficial da Câmara;
+  - eleitos do TSE num arquivo por município (`eleitos/m-{cod}.json`) ou por UF e eleição
+    (`eleitos/uf-{UF}-{ano}.json`), página `#/eleito/{chave}/{id}`;
+  - fontes pelo SHA-256 do conteúdo arquivado (não pelo id interno da resposta), com a
+    data do primeiro recebimento; o link "cópia arquivada" aponta para
+    `/api/bruto/{sha256}` na API de auditoria.
+- **Exportação incremental:** JSON determinístico; `indice.json` guarda o SHA-256 de cada
+  arquivo e a impressão digital de cada grupo (cada deputado/senador e cada arquivo de
+  eleitos), calculada no banco. Exportando de novo na mesma pasta, os grupos sem mudança
+  são reaproveitados e só os arquivos alterados são regravados (`--completa` refaz tudo).
+  Como o conteúdo não muda sem mudança na fonte, o `git push` da publicação só envia os
+  arquivos alterados.
 - **Só a auditoria usa API:** `rastro.api.auditoria:app` tem só
   `/api/respostas/{id}`, `/api/respostas/{id}/bruto` e
-  `/api/demonstrativos/{id}/respostas`.
+  `/api/demonstrativos/{id}/respostas` (e `/api/bruto/{sha256}`, usado pelas páginas de
+  políticos, em implementação).
   - CORS restrito a `RASTRO_CORS_ORIGENS` (o GitHub Pages do projeto e localhost).
   - Cache de 1 ano e `ETag` igual ao SHA-256, porque o conteúdo é endereçado pelo hash.
   - Cache em memória dos payloads já verificados. A verificação de integridade sempre
     relê do banco.
 - **Publicação (`rastro publicar-site`):**
-  - verifica antes de enviar: JSON válidos, nenhum município faltando, e as contagens de
-    municípios e políticos não podem cair em relação ao que está no ar;
+  - verifica antes de enviar: JSON válidos, cada arquivo igual ao SHA-256 do índice,
+    nenhum município faltando, nenhuma lista cortada, e as contagens de municípios e
+    políticos não podem cair em relação ao que está no ar;
   - se a verificação falhar, nada é enviado (tudo ou nada);
   - publica um commit sem histórico no `gh-pages` e cria uma tag `site-AAAAMMDD-HHMMSS`;
   - guarda as 5 últimas publicações.

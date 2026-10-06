@@ -78,7 +78,8 @@ uv run rastro redigir-respostas    # uma vez, em bancos coletados antes da reda�
 - Cada fonte vira uma execução na tabela `coleta`: `pol-camara`, `pol-senado`,
   `pol-emendas` e `pol-tse`.
 - Toda resposta recebida fica no arquivo de respostas brutas, e cada linha das tabelas
-  `pol_*` guarda o `resposta_id` de onde saiu.
+  `pol_*` guarda o `resposta_id` de onde saiu. No site estático, a fonte de cada item é
+  o SHA-256 desse conteúdo (`/api/bruto/{sha256}` na API de auditoria).
 - Uma falha em um deputado ou ano não interrompe os demais: a coleta fica `parcial`,
   com os erros registrados.
 - O limite é de 1 requisição por segundo.

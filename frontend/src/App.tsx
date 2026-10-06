@@ -8,6 +8,7 @@ import RankingPagina from "./Ranking";
 type Rota = {
   pagina: "municipios" | "ranking" | "metodologia" | "representantes" | "politico";
   cod: number | null;
+  eleito?: string; // eleito do TSE: arquivo do município (m-{cod}) ou da UF (uf-{UF}-{ano})
 };
 
 function lerRota(): Rota {
@@ -18,6 +19,8 @@ function lerRota(): Rota {
   if (r) return { pagina: "representantes", cod: r[1] ? Number(r[1]) : null };
   const p = h.match(/^#\/politico\/(\d+)/);
   if (p) return { pagina: "politico", cod: Number(p[1]) };
+  const e = h.match(/^#\/eleito\/(m-\d+|uf-[A-Z]{2}-\d{4})\/(\d+)/);
+  if (e) return { pagina: "politico", cod: Number(e[2]), eleito: e[1] };
   if (h.startsWith("#/ranking")) return { pagina: "ranking", cod: null };
   if (h.startsWith("#/metodologia")) return { pagina: "metodologia", cod: null };
   return { pagina: "municipios", cod: null };
@@ -66,7 +69,7 @@ export default function App() {
       {rota.pagina === "ranking" && <RankingPagina />}
       {rota.pagina === "metodologia" && <Metodologia />}
       {rota.pagina === "representantes" && <QuemRepresenta cod={rota.cod} />}
-      {rota.pagina === "politico" && rota.cod !== null && <PaginaPolitico id={rota.cod} />}
+      {rota.pagina === "politico" && rota.cod !== null && <PaginaPolitico id={rota.cod} eleito={rota.eleito} />}
       {manifesto && (
         <footer className="rodape">
           Dados coletados até{" "}

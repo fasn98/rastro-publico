@@ -32,6 +32,11 @@ def main(argv: list[str] | None = None) -> int:
     ex = sub.add_parser("exportar-site", help="gera os arquivos estáticos do site (JSON)")
     ex.add_argument("--uf", default="SP")
     ex.add_argument("--saida", required=True, help="pasta de saída (ex.: ../frontend/dist/dados)")
+    ex.add_argument(
+        "--completa",
+        action="store_true",
+        help="refaz tudo, sem reaproveitar a exportação anterior que estiver na pasta",
+    )
     pb = sub.add_parser(
         "publicar-site", help="verifica e publica o site no GitHub Pages (branch gh-pages)"
     )
@@ -138,10 +143,14 @@ def main(argv: list[str] | None = None) -> int:
 
         from rastro import site
 
-        m = site.exportar(Path(args.saida), args.uf)
+        m = site.exportar(Path(args.saida), args.uf, completa=args.completa)
+        e = m["exportacao"]
         print(
-            f"Site exportado: {m['arquivos']} arquivos, {m['bytes'] / 1e6:.1f} MB, "
-            f"{m['contagens']['municipios']} municípios, {m['contagens']['politicos']} políticos"
+            f"Site exportado: {e['arquivos']} arquivos, {e['bytes'] / 1e6:.1f} MB, "
+            f"{m['contagens']['municipios']} municípios, {m['contagens']['politicos']} políticos; "
+            f"{e['escritos']} arquivos gravados ({e['bytes_escritos'] / 1e6:.1f} MB), "
+            f"{e['removidos']} removidos, {e['grupos_reaproveitados']}/{e['grupos']} grupos "
+            f"reaproveitados, {e['segundos']} s"
         )
         return 0
 
