@@ -69,6 +69,32 @@ Como funciona:
 Consulta pela API: `GET /api/entes/{cod_ibge}/demonstrativos?exercicio=2025` e
 `GET /api/demonstrativos/{id}/contas?anexo=RGF-Anexo 01`.
 
+### Coleta em lote (séries históricas)
+
+Para coletar muitos entes e anos de uma vez, de forma **retomável**:
+
+```bash
+uv run python -m rastro.coletores.siconfi_lote --uf SP --anos 2022-2025
+# ou: uv run rastro siconfi-lote --uf SP --anos 2022-2025
+# amostra: --ente 3550308 3500105 3507209
+```
+
+- O lote e cada item (ente × exercício) ficam no banco (`lote_coleta`, `item_lote`).
+  Se o processo cair ou for encerrado (Ctrl+C ou SIGTERM do agendador), rodar o
+  **mesmo comando** continua de onde parou; itens com falha são tentados de novo até
+  `--max-tentativas` (padrão 3). `--novo` ignora o lote aberto e começa outro.
+- Todas as requisições passam por um limite global de **1 por segundo**
+  (`RASTRO_REQ_POR_SEGUNDO`), inclusive novas tentativas e páginas.
+- O extrato de entregas de cada ente/ano é gravado em `entrega_siconfi`.
+- Para agendar (ex.: Replit Scheduled Deployment): `backend/scripts/coleta_sp.sh`,
+  que aplica as migrações, atualiza municípios/entes e roda o lote de SP 2022–2025.
+
+**Tempo estimado para os 645 municípios de SP, 2022–2025 (2.580 itens):** medido na
+amostra de 10 municípios (40 itens): 12,6 requisições por item em média e ~15 s por
+item (respostas grandes passam de 1 s). Primeira coleta: **~9 a 11 horas** (~32,5 mil
+requisições). Execuções seguintes só baixam relatórios novos ou retificados: ~1
+requisição por item (o extrato), **~45 min**.
+
 ### Indicadores fiscais
 
 `GET /api/entes/{cod_ibge}/indicadores?exercicio=2025` (e o painel no detalhe do
