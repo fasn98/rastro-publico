@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { obterManifesto, PREVIA, type Manifesto } from "./dados";
 import Metodologia from "./Metodologia";
 import Municipios from "./Municipios";
@@ -39,13 +39,17 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const mudou = () => {
-      setRota(lerRota());
-      window.scrollTo(0, 0);
-    };
+    // o navegador não deve restaurar a rolagem antiga ao abrir um link ou voltar
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    const mudou = () => setRota(lerRota());
     window.addEventListener("hashchange", mudou);
     return () => window.removeEventListener("hashchange", mudou);
   }, []);
+
+  // toda troca de rota abre no topo, depois que a nova página foi desenhada
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, [rota.pagina, rota.cod]);
 
   return (
     <main>

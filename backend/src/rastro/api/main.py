@@ -23,6 +23,8 @@ from rastro.models import (
     EnteSiconfi,
     Municipio,
     NotaRanking,
+    PopulacaoIbge,
+    RespostaBruta,
 )
 
 app = FastAPI(title="Rastro Público", version="0.1.0")
@@ -60,7 +62,19 @@ class EnteOut(BaseModel):
     exercicio: int
 
 
+class PopulacaoIbgeOut(BaseModel):
+    """População oficial: estimativa do IBGE (SIDRA, tabela 6579)."""
+
+    ano: int
+    populacao: int
+    fonte: str
+    url_fonte: str | None
+    resposta_id: int | None
+
+
 class MunicipioDetalhe(MunicipioOut):
+    populacao_ibge: PopulacaoIbgeOut | None
+    # cadastro do ente no SICONFI; a população dele é a declarada ao Tesouro (informativa)
     ente_siconfi: EnteOut | None
 
 
@@ -135,7 +149,26 @@ def obter_municipio(cod_ibge: int, session: SessionDep):
     if not m:
         raise HTTPException(404, "Município não encontrado")
     ente = session.get(EnteSiconfi, cod_ibge)
-    return {**MunicipioOut.model_validate(m).model_dump(), "ente_siconfi": ente}
+    pop = session.scalars(
+        select(PopulacaoIbge)
+        .where(PopulacaoIbge.cod_ibge == cod_ibge)
+        .order_by(PopulacaoIbge.ano.desc())
+    ).first()
+    populacao_ibge = None
+    if pop:
+        resposta = session.get(RespostaBruta, pop.resposta_id) if pop.resposta_id else None
+        populacao_ibge = PopulacaoIbgeOut(
+            ano=pop.ano,
+            populacao=pop.populacao,
+            fonte="IBGE, Estimativas de População (SIDRA, tabela 6579)",
+            url_fonte=resposta.url if resposta else None,
+            resposta_id=pop.resposta_id,
+        )
+    return {
+        **MunicipioOut.model_validate(m).model_dump(),
+        "populacao_ibge": populacao_ibge,
+        "ente_siconfi": ente,
+    }
 
 
 @app.get("/api/coletas", response_model=list[ColetaOut])

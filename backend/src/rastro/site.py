@@ -161,7 +161,14 @@ def exportar(
     for m in municipios:
         cod = m.cod_ibge
         detalhe = get(f"/api/municipios/{cod}")
-        lista.append({k: v for k, v in detalhe.items() if k != "ente_siconfi"})
+        # lista da busca: dados básicos e a população do IBGE (desempata as sugestões)
+        pop = detalhe.get("populacao_ibge")
+        lista.append(
+            {
+                **{k: v for k, v in detalhe.items() if k not in ("ente_siconfi", "populacao_ibge")},
+                "populacao": pop["populacao"] if pop else None,
+            }
+        )
         rep = reps[cod]
         citados |= {p["id"] for sec in rep["secoes"] for g in sec["grupos"] for p in g["politicos"]}
         out.json(
