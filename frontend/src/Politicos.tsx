@@ -7,10 +7,13 @@ import {
   listarProposicoes,
   listarVotacoes,
   obterEmendas,
+  obterCota,
   obterEmendasMunicipio,
   obterPolitico,
   obterRepresentantes,
   type Contagem,
+  type ContagemValor,
+  type Cota,
   type Emendas,
   type Fonte,
   type Pagina,
@@ -265,7 +268,7 @@ export function PaginaPolitico({ id }: { id: number }) {
   if (erro) return <p className="erro">{erro}</p>;
   if (!p) return <p className="sub">Carregando…</p>;
 
-  const anos = anosDe(p.proposicoes, p.votacoes, p.presencas);
+  const anos = anosDe(p.proposicoes, p.votacoes, p.presencas, p.cota);
   const federal = p.fonte === "camara" || p.fonte === "senado";
   const votos: Record<string, number> = {};
   for (const c of p.votacoes)
@@ -352,6 +355,7 @@ export function PaginaPolitico({ id }: { id: number }) {
             {p.fonte === "camara" && (
               <Tile rotulo="Presenças registradas em eventos da Câmara" lista={p.presencas} ano={ano} />
             )}
+            {p.fonte === "camara" && <TileCota lista={p.cota} ano={ano} />}
           </div>
           {Object.keys(votos).length > 0 && (
             <div className="tabela-rolagem">
@@ -394,6 +398,7 @@ export function PaginaPolitico({ id }: { id: number }) {
               </ul>
             </details>
           )}
+          {p.fonte === "camara" && p.cota.length > 0 && <CotaDetalhe id={p.id} ano={ano} />}
           <h3>Emendas parlamentares</h3>
           <EmendasDoPolitico id={p.id} ano={ano} />
         </>
@@ -403,6 +408,80 @@ export function PaginaPolitico({ id }: { id: number }) {
         no portal em {dataHora(p.atualizado_em)}.
       </p>
     </article>
+  );
+}
+
+function TileCota({ lista, ano }: { lista: ContagemValor[]; ano: number | null }) {
+  const sel = lista.filter((c) => ano === null || c.ano === ano);
+  const total = sel.reduce((s, c) => s + Number(c.valor_liquido), 0);
+  return (
+    <div className="tile">
+      <span className="tile-rotulo">Cota parlamentar: valor líquido das despesas</span>
+      <span className="tile-valor">{reais(String(total))}</span>
+      <span className="sub">{inteiro(sel.reduce((s, c) => s + c.quantidade, 0))} lançamentos</span>
+      <Fontes fontes={sel.flatMap((c) => c.fontes)} />
+    </div>
+  );
+}
+
+function CotaDetalhe({ id, ano }: { id: number; ano: number | null }) {
+  const [aberto, setAberto] = useState(false);
+  const [c, setC] = useState<Cota | null>(null);
+  useEffect(() => setC(null), [id, ano]);
+  useEffect(() => {
+    if (aberto && !c) obterCota(id, ano).then(setC);
+  }, [aberto, c, id, ano]);
+  return (
+    <details onToggle={(e) => e.currentTarget.open && setAberto(true)}>
+      <summary>Cota parlamentar por categoria e lançamentos</summary>
+      {c && (
+        <>
+          <div className="tabela-rolagem">
+            <table aria-label="Cota parlamentar por categoria">
+              <thead>
+                <tr>
+                  <th scope="col">Categoria (como na fonte)</th>
+                  <th scope="col">Lançamentos</th>
+                  <th scope="col">Valor líquido</th>
+                </tr>
+              </thead>
+              <tbody>
+                {c.por_categoria.map((x) => (
+                  <tr key={x.categoria}>
+                    <th scope="row">{x.categoria}</th>
+                    <td>{inteiro(x.quantidade)}</td>
+                    <td>{reais(x.valor_liquido)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <ul>
+            {c.despesas.itens.map((x) => (
+              <li key={`${x.ano}-${x.linha}`}>
+                {String(x.mes).padStart(2, "0")}/{x.ano} · {x.categoria} ·{" "}
+                {x.pessoa_fisica ? "fornecedor pessoa física (nome não exibido)" : (x.fornecedor ?? "—")}
+                {x.cnpj && ` (CNPJ ${x.cnpj})`} · líquido {reais(x.valor_liquido)}
+                {x.url_documento && (
+                  <>
+                    {" "}
+                    <a href={x.url_documento} target="_blank" rel="noreferrer">
+                      documento
+                    </a>
+                  </>
+                )}{" "}
+                <LinkFonte url={x.url_fonte} respostaId={x.resposta_id} />
+              </li>
+            ))}
+          </ul>
+          {c.despesas.total > c.despesas.itens.length && (
+            <p className="nota">
+              Mostrando {c.despesas.itens.length} de {inteiro(c.despesas.total)}. Filtre por ano.
+            </p>
+          )}
+        </>
+      )}
+    </details>
   );
 }
 

@@ -41,11 +41,17 @@ def redator_json(campos: Iterable[str]) -> Redator:
     return redigir
 
 
+# Ajuste por linha: altera a linha no lugar e devolve os nomes dos campos alterados.
+Transformacao = Callable[[dict], list[str]]
+
+
 def _redigir_csv(
     texto: str,
     remover: frozenset[str],
     filtro: Callable[[dict], bool] | None,
     delimitador: str,
+    transformar: Transformacao | None = None,
+    alterados: dict[str, int] | None = None,
 ) -> tuple[str, list[str], int, int]:
     leitor = csv.DictReader(io.StringIO(texto), delimiter=delimitador)
     colunas = leitor.fieldnames or []
@@ -64,6 +70,9 @@ def _redigir_csv(
     for linha in leitor:
         total += 1
         if filtro is None or filtro(linha):
+            if transformar is not None:
+                for campo in transformar(linha):
+                    alterados[campo] = alterados.get(campo, 0) + 1
             escritor.writerow(linha)
             mantidas += 1
     return saida.getvalue(), [c for c in colunas if c in remover], total, mantidas
@@ -77,8 +86,12 @@ def redator_csv(
     delimitador: str = ";",
     encoding: str = "utf-8-sig",
     membro_zip: str | None = None,
+    transformar: Transformacao | None = None,
 ) -> Redator:
     """Remove colunas (e, opcionalmente, linhas) de um CSV, ou de um CSV dentro de um ZIP.
+
+    `transformar` apaga valores pessoais linha a linha (ex.: CPF de fornecedor pessoa
+    física); os campos alterados entram na lista de removidos com a quantidade de linhas.
 
     Com `membro_zip` (padrão glob, ex.: "*_SP.csv"), o original é um ZIP: grava-se só o
     CSV do membro correspondente (exatamente um), já redigido, em UTF-8.
@@ -96,8 +109,9 @@ def redator_csv(
                 bruto = z.read(nomes[0])
         else:
             bruto = original
+        alterados: dict[str, int] = {}
         texto, removidas, total, mantidas = _redigir_csv(
-            bruto.decode(encoding), remover, filtro, delimitador
+            bruto.decode(encoding), remover, filtro, delimitador, transformar, alterados
         )
         faltando = remover - set(removidas)
         if faltando:
@@ -107,6 +121,11 @@ def redator_csv(
             f"{origem}CSV regravado em UTF-8 sem {len(removidas)} coluna(s); "
             f"{mantidas} de {total} linhas" + (f" ({descricao_filtro})" if descricao_filtro else "")
         )
+        removidas += [f"{c} ({n} linhas)" for c, n in sorted(alterados.items())]
+        if alterados:
+            descricao += "; valores apagados: " + ", ".join(
+                f"{c} em {n} linhas" for c, n in sorted(alterados.items())
+            )
         return Redacao(texto.encode("utf-8"), removidas, descricao)
 
     return redigir

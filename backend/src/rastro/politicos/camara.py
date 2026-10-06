@@ -9,12 +9,17 @@ Fontes (documentação: https://dadosabertos.camara.leg.br/swagger/api.html):
 - Arquivo anual `eventosPresencaDeputados-AAAA.csv`: presenças registradas em eventos.
 """
 
+import csv
+import io
 import logging
+import zipfile
+from decimal import Decimal
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 
+from rastro.coletores.arquivo import com_redacao, resposta_id
 from rastro.politicos import lgpd
 from rastro.politicos.comum import (
     baixar_csv,
@@ -26,6 +31,7 @@ from rastro.politicos.comum import (
 )
 from rastro.politicos.modelos import (
     DEPUTADO_FEDERAL,
+    PolDespesaCota,
     PolPolitico,
     PolPresenca,
     PolProposicao,
@@ -183,3 +189,64 @@ def mapa_gravado(session: Session, uf: str) -> dict[int, int]:
         )
     )
     return {int(id_fonte): pid for id_fonte, pid in rows}
+
+
+URL_COTA = "https://www.camara.leg.br/cotas/Ano-{ano}.csv.zip"
+
+
+def coletar_cota(
+    session: Session, client: httpx.Client, ano: int, uf: str, mapa: dict[int, int]
+) -> int:
+    """Despesas da cota parlamentar do ano dos deputados em `mapa` (substitui o ano)."""
+    url = URL_COTA.format(ano=ano)
+    resp = client.get(url, extensions=com_redacao(lgpd.cota(ano, uf)), headers={"Accept": "*/*"})
+    resp.raise_for_status()
+    rid = resposta_id(resp)
+    with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
+        texto = z.read(f"Ano-{ano}.csv").decode("utf-8-sig")
+    linhas = []
+    for n, r in enumerate(csv.DictReader(io.StringIO(texto), delimiter=";"), start=1):
+        if r["sgUF"] != uf or not r["ideCadastro"]:
+            continue
+        politico_id = mapa.get(int(r["ideCadastro"]))
+        if politico_id is None:
+            continue
+        doc = lgpd.digitos(r["txtCNPJCPF"])
+        pf = len(doc) == 11
+        linhas.append(
+            {
+                "politico_id": politico_id,
+                "ano": int(r["numAno"]),
+                "mes": int(r["numMes"]),
+                "linha": n,
+                "categoria": r["txtDescricao"],
+                "especificacao": r["txtDescricaoEspecificacao"] or None,
+                "fornecedor": None if pf else (lgpd.sem_cpf(r["txtFornecedor"]) or None),
+                "cnpj": doc if len(doc) == 14 else None,
+                "pessoa_fisica": pf,
+                "numero_documento": r["txtNumero"] or None,
+                "tipo_documento": r["indTipoDocumento"] or None,
+                "data_emissao": data(r["datEmissao"]),
+                "valor_documento": _dec(r["vlrDocumento"]),
+                "valor_glosa": _dec(r["vlrGlosa"]),
+                "valor_liquido": _dec(r["vlrLiquido"]),
+                "valor_restituicao": _dec(r["vlrRestituicao"]),
+                "ide_documento": r["ideDocumento"] or None,
+                "url_documento": r["urlDocumento"] or None,
+                "url_fonte": url,
+                "resposta_id": rid,
+            }
+        )
+    session.execute(
+        delete(PolDespesaCota).where(
+            PolDespesaCota.ano == ano, PolDespesaCota.politico_id.in_(set(mapa.values()))
+        )
+    )
+    for i in range(0, len(linhas), 2000):
+        session.execute(insert(PolDespesaCota), linhas[i : i + 2000])
+    session.commit()
+    return len(linhas)
+
+
+def _dec(texto: str | None) -> Decimal | None:
+    return Decimal(texto) if texto not in (None, "") else None

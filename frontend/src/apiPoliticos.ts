@@ -37,11 +37,14 @@ export type Comissao = {
   resposta_id: number | null;
 };
 
+export type ContagemValor = Contagem & { valor_liquido: string };
+
 export type PoliticoDetalhe = Politico & {
   fonte_registro: Fonte | null;
   proposicoes: Contagem[];
   votacoes: ContagemVotos[];
   presencas: Contagem[];
+  cota: ContagemValor[];
   comissoes: Comissao[];
   descricao_votos: Record<string, string>;
 };
@@ -134,6 +137,31 @@ export type Representantes = {
 
 export type Pagina<T> = { total: number; itens: T[] };
 
+export type Despesa = {
+  ano: number;
+  mes: number;
+  linha: number;
+  categoria: string;
+  especificacao: string | null;
+  fornecedor: string | null;
+  cnpj: string | null;
+  pessoa_fisica: boolean;
+  numero_documento: string | null;
+  data_emissao: string | null;
+  valor_documento: string | null;
+  valor_glosa: string | null;
+  valor_liquido: string | null;
+  valor_restituicao: string | null;
+  url_documento: string | null;
+  url_fonte: string;
+  resposta_id: number | null;
+};
+
+export type Cota = {
+  por_categoria: { categoria: string; quantidade: number; valor_liquido: string }[];
+  despesas: Pagina<Despesa>;
+};
+
 async function get<T>(caminho: string, params: Record<string, string> = {}): Promise<T> {
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== ""));
   const resp = await fetch(`/api${caminho}${qs.size ? `?${qs}` : ""}`);
@@ -152,6 +180,8 @@ export const listarVotacoes = (id: number, a: number | null) =>
   get<Pagina<Votacao>>(`/politicos/${id}/votacoes`, { ano: ano(a), limite: "500" });
 export const listarPresencas = (id: number, a: number | null) =>
   get<Pagina<Presenca>>(`/politicos/${id}/presencas`, { ano: ano(a), limite: "500" });
+export const obterCota = (id: number, a: number | null) =>
+  get<Cota>(`/politicos/${id}/cota`, { ano: ano(a), limite: "500" });
 export const obterEmendas = (id: number, a: number | null) =>
   get<Emendas>(`/politicos/${id}/emendas`, { ano: ano(a) });
 export const obterEmendasMunicipio = (cod: number) => get<Emendas>(`/municipios/${cod}/emendas`);

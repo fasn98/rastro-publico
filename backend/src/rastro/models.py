@@ -286,7 +286,7 @@ class RespostaBruta(Base):
     # guardado; sha256_original permite conferir baixando de novo a URL pública da fonte.
     sha256_original: Mapped[str | None] = mapped_column(String(64), index=True)
     tamanho_original: Mapped[int | None] = mapped_column(BigInteger)
-    campos_removidos: Mapped[list | None] = mapped_column(JSONB)
+    campos_removidos: Mapped[list | None] = mapped_column(JSONB(none_as_null=True))
     redacao: Mapped[str | None] = mapped_column(Text)  # o que foi feito, em texto
 
 

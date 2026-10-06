@@ -23,7 +23,9 @@ from rastro.politicos.modelos import (
     SENADOR,
     VEREADOR,
     PolComissao,
+    PolDespesaCota,
     PolEmenda,
+    PolPendencia,
     PolPolitico,
     PolPresenca,
     PolProposicao,
@@ -101,11 +103,16 @@ class ComissaoOut(BaseModel):
     resposta_id: int | None
 
 
+class ContagemValor(Contagem):
+    valor_liquido: Decimal
+
+
 class PoliticoDetalhe(PoliticoOut):
     fonte_registro: Fonte | None
     proposicoes: list[Contagem]
     votacoes: list[ContagemVotos]
     presencas: list[Contagem]
+    cota: list[ContagemValor]  # despesas da cota parlamentar (Câmara), por ano
     comissoes: list[ComissaoOut]
     # descrição de cada código de voto, quando a fonte a fornece (ex.: Senado "AP")
     descricao_votos: dict[str, str]
@@ -327,6 +334,19 @@ def detalhe_politico(politico_id: int, session: SessionDep):
         presencas=_contagens(
             session, PolPresenca, extract("year", PolPresenca.data_hora_inicio), p.id
         ),
+        cota=[
+            ContagemValor(**c.model_dump(), valor_liquido=v)
+            for c, v in zip(
+                _contagens(session, PolDespesaCota, PolDespesaCota.ano, p.id),
+                session.scalars(
+                    select(func.coalesce(func.sum(PolDespesaCota.valor_liquido), 0))
+                    .where(PolDespesaCota.politico_id == p.id)
+                    .group_by(PolDespesaCota.ano)
+                    .order_by(PolDespesaCota.ano)
+                ).all(),
+                strict=True,
+            )
+        ],
         comissoes=session.scalars(
             select(PolComissao)
             .where(PolComissao.politico_id == p.id)
@@ -394,6 +414,70 @@ def presencas(
     return _pagina(session, q, ordem, limite, deslocamento)
 
 
+class DespesaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    ano: int
+    mes: int
+    linha: int
+    categoria: str
+    especificacao: str | None
+    fornecedor: str | None
+    cnpj: str | None
+    pessoa_fisica: bool
+    numero_documento: str | None
+    data_emissao: date | None
+    valor_documento: Decimal | None
+    valor_glosa: Decimal | None
+    valor_liquido: Decimal | None
+    valor_restituicao: Decimal | None
+    url_documento: str | None
+    url_fonte: str
+    resposta_id: int | None
+
+
+class CotaCategoria(BaseModel):
+    categoria: str
+    quantidade: int
+    valor_liquido: Decimal
+
+
+class Cota(BaseModel):
+    por_categoria: list[CotaCategoria]  # ordem alfabética
+    despesas: Pagina[DespesaOut]
+
+
+@router.get("/politicos/{politico_id}/cota", response_model=Cota)
+def cota(
+    politico_id: int,
+    session: SessionDep,
+    ano: int | None = None,
+    limite: Limite = 100,
+    deslocamento: Deslocamento = 0,
+):
+    _politico(session, politico_id)
+    filtros = [PolDespesaCota.politico_id == politico_id]
+    if ano:
+        filtros.append(PolDespesaCota.ano == ano)
+    categorias = session.execute(
+        select(
+            PolDespesaCota.categoria,
+            func.count(),
+            func.coalesce(func.sum(PolDespesaCota.valor_liquido), 0),
+        )
+        .where(*filtros)
+        .group_by(PolDespesaCota.categoria)
+        .order_by(PolDespesaCota.categoria)
+    ).all()
+    q = select(PolDespesaCota).where(*filtros)
+    ordem = (PolDespesaCota.ano.desc(), PolDespesaCota.mes.desc(), PolDespesaCota.linha)
+    return Cota(
+        por_categoria=[
+            CotaCategoria(categoria=c, quantidade=n, valor_liquido=v) for c, n, v in categorias
+        ],
+        despesas=_pagina(session, q, ordem, limite, deslocamento),
+    )
+
+
 def _emendas(session: Session, filtro, ano: int | None, por_parlamentar=False) -> Emendas:
     coletadas = bool(
         session.scalar(
@@ -415,7 +499,13 @@ def _emendas(session: Session, filtro, ano: int | None, por_parlamentar=False) -
     if not publicadas:
         return Emendas(coletadas=coletadas, publicadas=False, aviso=aviso, totais=[], itens=[])
 
-    q = select(PolEmenda).where(filtro)
+    # se houver carga do arquivo em lote, ela vale; senão, a da API (nunca as duas somadas)
+    tem_arquivo = session.scalar(
+        select(func.count()).select_from(PolEmenda).where(PolEmenda.fonte_dados == "arquivo")
+    )
+    q = select(PolEmenda).where(
+        filtro, PolEmenda.fonte_dados == ("arquivo" if tem_arquivo else "api")
+    )
     if ano:
         q = q.where(PolEmenda.ano == ano)
     itens = session.scalars(q.order_by(PolEmenda.ano.desc(), PolEmenda.codigo_emenda)).all()
@@ -519,7 +609,19 @@ def representantes(cod_ibge: int, session: SessionDep):
             politicos = session.scalars(q.order_by(*_ordem_nome())).all()
             pendente = None
             if not politicos and cargo not in (SENADOR, DEPUTADO_FEDERAL):
-                pendente = PENDENTE_TSE
+                motivo = None
+                if publicacao.tse():
+                    local = (
+                        PolPendencia.cod_ibge == cod_ibge
+                        if cargo in CARGOS_MUNICIPAIS
+                        else PolPendencia.cod_ibge.is_(None)
+                    )
+                    motivo = session.scalar(
+                        select(PolPendencia.motivo).where(
+                            PolPendencia.cargo == cargo, PolPendencia.uf == m.uf, local
+                        )
+                    )
+                pendente = motivo or PENDENTE_TSE
             grupos.append(GrupoRepresentantes(cargo=cargo, politicos=politicos, pendente=pendente))
         titulo, nota = titulos[chave]
         secoes.append(SecaoRepresentantes(titulo=titulo, nota=nota, grupos=grupos))
