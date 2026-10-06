@@ -12,12 +12,22 @@ falhar ou for desfeita depois):
 
 O id da resposta fica em `response.extensions["resposta_id"]`; os coletores o gravam junto
 de cada valor que extraem (ex.: `conta_demonstrativo.resposta_id`).
+
+Redação (LGPD): quando a fonte devolve dados pessoais (CPF, data de nascimento, título de
+eleitor, e-mail...), o coletor passa um `Redator` na requisição (`com_redacao(redator)`
+como `extensions` do httpx). O original NÃO é guardado: grava-se só a versão redigida,
+com o SHA-256 do original (`sha256_original`), o da versão gravada (`sha256`) e a lista
+de campos removidos. A conferência, nesses casos, é baixar de novo a URL pública da
+fonte e comparar com `sha256_original`. Se o redator falhar, nada é gravado e a
+requisição falha (nunca se grava o original por engano).
 """
 
 import gzip
 import hashlib
 import logging
+from collections.abc import Callable
 from contextvars import ContextVar
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import httpx
@@ -36,6 +46,24 @@ def sha256(conteudo: bytes) -> str:
     return hashlib.sha256(conteudo).hexdigest()
 
 
+@dataclass
+class Redacao:
+    """Resultado de um redator: o que gravar e o que foi removido."""
+
+    conteudo: bytes
+    campos_removidos: list[str] = field(default_factory=list)
+    descricao: str = ""
+
+
+Redator = Callable[[bytes], Redacao]
+_EXT_REDATOR = "rastro_redator"
+
+
+def com_redacao(redator: Redator | None) -> dict | None:
+    """`extensions` do httpx para que a resposta seja arquivada já redigida."""
+    return {_EXT_REDATOR: redator} if redator else None
+
+
 class ArquivoBruto:
     """Gancho de resposta do httpx que arquiva cada resposta recebida."""
 
@@ -43,7 +71,13 @@ class ArquivoBruto:
         self.engine = engine
 
     def __call__(self, response: httpx.Response) -> None:
-        conteudo = response.read()
+        original = response.read()
+        redator: Redator | None = response.request.extensions.get(_EXT_REDATOR)
+        redacao = None
+        # respostas de erro (4xx/5xx) não trazem os dados da fonte; são gravadas como vieram
+        if redator is not None and response.is_success:
+            redacao = redator(original)  # se falhar, nada é gravado
+        conteudo = redacao.conteudo if redacao else original
         digest = sha256(conteudo)
         try:
             duracao = int(response.elapsed.total_seconds() * 1000)
@@ -72,6 +106,10 @@ class ArquivoBruto:
                     duracao_ms=duracao,
                     sha256=digest,
                     tamanho=len(conteudo),
+                    sha256_original=sha256(original) if redacao else None,
+                    tamanho_original=len(original) if redacao else None,
+                    campos_removidos=redacao.campos_removidos if redacao else None,
+                    redacao=redacao.descricao if redacao else None,
                 )
                 .returning(RespostaBruta.id)
             ).scalar_one()

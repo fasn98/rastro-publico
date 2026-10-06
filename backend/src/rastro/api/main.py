@@ -476,8 +476,13 @@ class RespostaOut(BaseModel):
     content_type: str | None
     recebido_em: datetime
     duracao_ms: int | None
-    sha256: str
+    sha256: str  # do conteúdo gravado
     tamanho: int
+    # preenchidos quando o conteúdo foi gravado sem dados pessoais (LGPD)
+    sha256_original: str | None
+    tamanho_original: int | None
+    campos_removidos: list[str] | None
+    redacao: str | None
 
 
 class RespostaVerificada(RespostaOut):
@@ -506,7 +511,12 @@ def obter_resposta(resposta_id: int, session: SessionDep):
 
 @app.get("/api/respostas/{resposta_id}/bruto")
 def baixar_resposta(resposta_id: int, session: SessionDep):
-    """Os bytes exatamente como a fonte devolveu (confira com sha256sum)."""
+    """Os bytes gravados (confira com sha256sum).
+
+    São os bytes exatamente como a fonte devolveu, exceto quando a resposta foi gravada
+    com redação (LGPD): aí vêm sem os campos pessoais, e o cabeçalho
+    `X-Rastro-SHA256-Original` traz o hash do original, para conferir baixando de novo a URL.
+    """
     r = session.get(RespostaBruta, resposta_id)
     if not r:
         raise HTTPException(404, "Resposta não encontrada")
@@ -521,6 +531,14 @@ def baixar_resposta(resposta_id: int, session: SessionDep):
             "X-Rastro-SHA256": sha256(conteudo),
             "X-Rastro-URL-Origem": r.url,
             "X-Rastro-Recebido-Em": r.recebido_em.isoformat(),
+            **(
+                {
+                    "X-Rastro-SHA256-Original": r.sha256_original,
+                    "X-Rastro-Campos-Removidos": ",".join(r.campos_removidos or []),
+                }
+                if r.sha256_original
+                else {}
+            ),
         },
     )
 

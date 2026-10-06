@@ -88,7 +88,7 @@ conteúdo só ocupa espaço novo se mudou.
 | IBGE — municípios (API de Localidades) | `rastro coletar ibge-municipios` | `municipio` |
 | Tesouro — entes do SICONFI | `rastro coletar siconfi-entes` | `ente_siconfi` |
 | Tesouro — RREO e RGF do SICONFI | `rastro siconfi-demonstrativos ...` (abaixo) | `demonstrativo_siconfi`, `conta_demonstrativo` |
-| Câmara, Senado e Portal da Transparência — políticos de SP | `rastro politicos --uf SP --anos 2023-2026` | `pol_*` ([README do módulo](backend/src/rastro/politicos/README.md)) |
+| Câmara (inclusive cota parlamentar), Senado, TSE e Portal da Transparência — políticos de SP | `rastro politicos --uf SP --anos 2023-2026` e `--fontes tse` | `pol_*` ([README do módulo](backend/src/rastro/politicos/README.md)) |
 
 Peculiaridades dos dados tratadas no código (verificadas nas respostas reais):
 
