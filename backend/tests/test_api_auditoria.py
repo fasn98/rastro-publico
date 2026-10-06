@@ -106,6 +106,8 @@ def test_bruto_por_hash_igual_ao_por_id_imutavel_e_com_etag(api):
     assert r.headers["etag"] == f'"{sha}"'
     assert r.headers["cache-control"] == "public, max-age=31536000, immutable"
     assert r.headers["x-rastro-url-origem"] == ibge.URL_MUNICIPIOS
+    assert r.headers["x-rastro-primeiro-recebimento"]
+    assert "X-Rastro-Primeiro-Recebimento" in r.headers["access-control-expose-headers"]
     assert r.headers["content-type"].startswith("application/json")
     assert "x-rastro-sha256-original" not in r.headers  # sem redação: gravado = original
     assert r.headers["access-control-allow-origin"] == "https://fasn98.github.io"

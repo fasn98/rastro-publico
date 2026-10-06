@@ -193,7 +193,13 @@ def bruto_por_hash(
         select(RespostaBruta).where(RespostaBruta.sha256 == sha).order_by(RespostaBruta.id)
     ).all()
     etag = f'"{sha}"'
-    cabecalhos = {"ETag": etag, "Cache-Control": IMUTAVEL, "X-Rastro-SHA256": sha}
+    cabecalhos = {
+        "ETag": etag,
+        "Cache-Control": IMUTAVEL,
+        "X-Rastro-SHA256": sha,
+        # quando este conteúdo foi gravado pela primeira vez
+        "X-Rastro-Primeiro-Recebimento": p.criado_em.isoformat(),
+    }
     if respostas:
         primeira = respostas[0]
         cabecalhos["X-Rastro-URL-Origem"] = primeira.url
@@ -246,6 +252,7 @@ def criar_app() -> FastAPI:
             "X-Rastro-Recebido-Em",
             "X-Rastro-SHA256-Original",
             "X-Rastro-Campos-Removidos",
+            "X-Rastro-Primeiro-Recebimento",
             "ETag",
         ],
     )
