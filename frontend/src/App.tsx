@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { obterManifesto, type Manifesto } from "./dados";
+import { useEffect, useLayoutEffect, useState } from "react";
+import { obterManifesto, PREVIA, type Manifesto } from "./dados";
 import Metodologia from "./Metodologia";
 import Municipios from "./Municipios";
 import { PaginaPolitico, QuemRepresenta } from "./Politicos";
@@ -42,16 +42,25 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const mudou = () => {
-      setRota(lerRota());
-      window.scrollTo(0, 0);
-    };
+    // o navegador não deve restaurar a rolagem antiga ao abrir um link ou voltar
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    const mudou = () => setRota(lerRota());
     window.addEventListener("hashchange", mudou);
     return () => window.removeEventListener("hashchange", mudou);
   }, []);
 
+  // toda troca de rota abre no topo, depois que a nova página foi desenhada
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, [rota.pagina, rota.cod]);
+
   return (
     <main>
+      {PREVIA && (
+        <div className="faixa-previa" role="note">
+          Prévia — dados parciais em validação. Coleta completa em andamento.
+        </div>
+      )}
       <header className="topo">
         <div>
           <h1>Rastro Público</h1>
@@ -66,7 +75,12 @@ export default function App() {
         </nav>
       </header>
       {rota.pagina === "municipios" && <Municipios cod={rota.cod} />}
-      {rota.pagina === "ranking" && <RankingPagina />}
+      {rota.pagina === "ranking" &&
+        (PREVIA ? (
+          <p className="aviso-previa-ranking">Ranking disponível após a coleta completa dos 645 municípios</p>
+        ) : (
+          <RankingPagina />
+        ))}
       {rota.pagina === "metodologia" && <Metodologia />}
       {rota.pagina === "representantes" && <QuemRepresenta cod={rota.cod} />}
       {rota.pagina === "politico" && rota.cod !== null && <PaginaPolitico id={rota.cod} eleito={rota.eleito} />}

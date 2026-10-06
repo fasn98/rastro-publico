@@ -90,3 +90,53 @@ def test_executar_registra_falha(session):
     assert coleta.status == "falha"
     assert "503" in coleta.erro
     assert session.scalars(select(Coleta)).one().finalizada_em is not None
+
+
+@respx.mock
+def test_populacao_ibge_grava_e_aparece_no_municipio(session):
+    from fastapi.testclient import TestClient
+
+    from rastro.api.main import app
+    from rastro.coletores.arquivo import ArquivoBruto
+    from rastro.coletores.base import novo_cliente
+    from rastro.db import get_session
+    from rastro.models import PopulacaoIbge
+
+    respx.get(ibge.URL_MUNICIPIOS).respond(json=carregar("ibge_municipios.json"))
+    # resposta real da API de agregados do IBGE (tabela 6579), gravada
+    respx.get(url__startswith=ibge.URL_POPULACAO.split("?")[0]).respond(
+        json=carregar("ibge_populacao_6579.json")
+    )
+    with novo_cliente(req_por_segundo=0, arquivo=ArquivoBruto(session.get_bind())) as client:
+        ibge.coletar(session, client)
+        assert ibge.coletar_populacao(session, client) == 3
+        assert ibge.coletar_populacao(session, client) == 3  # upsert, sem duplicar
+    assert session.get(PopulacaoIbge, (3500105, 2026)).populacao == 35701
+    app.dependency_overrides[get_session] = lambda: session
+    try:
+        d = TestClient(app).get("/api/municipios/3500105").json()
+    finally:
+        app.dependency_overrides.clear()
+    pop = d["populacao_ibge"]
+    assert (pop["ano"], pop["populacao"]) == (2026, 35701)
+    assert "6579" in pop["fonte"] and pop["url_fonte"].startswith(
+        "https://servicodados.ibge.gov.br"
+    )
+    assert pop["resposta_id"] is not None
+
+
+def test_populacao_ibge_ignora_valor_inexistente():
+    dados = [
+        {
+            "resultados": [
+                {
+                    "series": [
+                        {"localidade": {"id": "1"}, "serie": {"2026": "10"}},
+                        {"localidade": {"id": "2"}, "serie": {"2026": "-"}},
+                        {"localidade": {"id": "3"}, "serie": {"2026": "..."}},
+                    ]
+                }
+            ]
+        }
+    ]
+    assert ibge.normalizar_populacao(dados) == [{"cod_ibge": 1, "ano": 2026, "populacao": 10}]

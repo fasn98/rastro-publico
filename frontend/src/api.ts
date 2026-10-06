@@ -5,6 +5,8 @@ export type Municipio = {
   regiao: string;
   regiao_imediata: string | null;
   regiao_intermediaria: string | null;
+  // só na lista da busca (municipios.json): estimativa do IBGE, para ordenar sugestões
+  populacao?: number | null;
 };
 
 export type Ente = {
@@ -18,7 +20,18 @@ export type Ente = {
   exercicio: number;
 };
 
-export type MunicipioDetalhe = Municipio & { ente_siconfi: Ente | null };
+export type PopulacaoIbge = {
+  ano: number;
+  populacao: number;
+  fonte: string;
+  url_fonte: string | null;
+  resposta_id: number | null;
+};
+
+export type MunicipioDetalhe = Municipio & {
+  populacao_ibge: PopulacaoIbge | null;
+  ente_siconfi: Ente | null;
+};
 
 export type Pagina<T> = { total: number; itens: T[] };
 
@@ -53,6 +66,31 @@ export async function buscarMunicipios(uf: string, nome: string): Promise<Pagina
   );
   return { total: todos.length, itens: todos.slice(0, 100) };
 }
+
+/** Sugestões para a busca: sem diferenciar acentos e maiúsculas; quem começa com o termo
+ * vem primeiro, depois quem tem uma palavra começando com ele, depois quem o contém. */
+export async function sugerirMunicipios(texto: string, limite = 10): Promise<Municipio[]> {
+  const termo = normalizar(texto.trim());
+  if (!termo) return [];
+  const pontuados: [number, Municipio][] = [];
+  for (const m of await listaMunicipios()) {
+    const nome = normalizar(m.nome);
+    const i = nome.indexOf(termo);
+    if (i < 0) continue;
+    const inicioPalavra = i === 0 || /[\s'-]/.test(nome[i - 1]);
+    pontuados.push([i === 0 ? 0 : inicioPalavra ? 1 : 2, m]);
+  }
+  // empate: o mais populoso primeiro (estimativa do IBGE), depois a ordem alfabética
+  pontuados.sort(
+    (a, b) =>
+      a[0] - b[0] ||
+      (b[1].populacao ?? 0) - (a[1].populacao ?? 0) ||
+      a[1].nome.localeCompare(b[1].nome, "pt-BR"),
+  );
+  return pontuados.slice(0, limite).map(([, m]) => m);
+}
+
+export const todosMunicipios = () => listaMunicipios();
 
 export const obterMunicipio = async (cod: number) => (await arquivoMunicipio(cod)).detalhe;
 

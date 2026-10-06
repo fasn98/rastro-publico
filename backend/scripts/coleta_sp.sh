@@ -16,7 +16,7 @@ ANO_ATUAL="$(date +%Y)"
 
 echo "== migrações e cadastros"
 uv run alembic upgrade head
-uv run rastro coletar ibge-municipios siconfi-entes
+uv run rastro coletar ibge-municipios ibge-populacao siconfi-entes
 
 echo "== RREO/RGF (código 1 = algum item falhou; fica para a próxima execução)"
 uv run python -m rastro.coletores.siconfi_lote --uf SP --anos "2022-$ANO_ATUAL" || [ $? -eq 1 ]

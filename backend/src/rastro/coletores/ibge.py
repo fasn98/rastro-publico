@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from rastro.coletores.base import get_json_com_origem
-from rastro.models import Municipio
+from rastro.models import Municipio, PopulacaoIbge
 
 URL_MUNICIPIOS = "https://servicodados.ibge.gov.br/api/v1/localidades/municipios"
 
@@ -45,6 +45,48 @@ def coletar(session: Session, client: httpx.Client) -> int:
     stmt = stmt.on_conflict_do_update(
         index_elements=[Municipio.cod_ibge],
         set_={c: stmt.excluded[c] for c in linhas[0] if c != "cod_ibge"},
+    )
+    session.execute(stmt)
+    session.commit()
+    return len(linhas)
+
+
+# População residente estimada (SIDRA, tabela 6579, variável 9324), último ano publicado,
+# de todos os municípios. Documentação: https://servicodados.ibge.gov.br/api/docs/agregados
+TABELA_POPULACAO = 6579
+URL_POPULACAO = (
+    f"https://servicodados.ibge.gov.br/api/v3/agregados/{TABELA_POPULACAO}"
+    "/periodos/-1/variaveis/9324?localidades=N6[all]"
+)
+
+
+def normalizar_populacao(dados: list[dict]) -> list[dict]:
+    """[{cod_ibge, ano, populacao}] a partir da resposta da API de agregados."""
+    linhas = []
+    for resultado in dados[0]["resultados"]:
+        for s in resultado["series"]:
+            for ano, valor in s["serie"].items():
+                # o IBGE usa "-", "..." etc. para valor inexistente: fica de fora
+                if valor and valor.isdigit():
+                    linhas.append(
+                        {
+                            "cod_ibge": int(s["localidade"]["id"]),
+                            "ano": int(ano),
+                            "populacao": int(valor),
+                        }
+                    )
+    return linhas
+
+
+def coletar_populacao(session: Session, client: httpx.Client) -> int:
+    dados, origem = get_json_com_origem(client, URL_POPULACAO)
+    linhas = [{**linha, "resposta_id": origem} for linha in normalizar_populacao(dados)]
+    if not linhas:
+        return 0
+    stmt = insert(PopulacaoIbge).values(linhas)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[PopulacaoIbge.cod_ibge, PopulacaoIbge.ano],
+        set_={"populacao": stmt.excluded.populacao, "resposta_id": stmt.excluded.resposta_id},
     )
     session.execute(stmt)
     session.commit()

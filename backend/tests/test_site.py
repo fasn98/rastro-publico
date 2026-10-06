@@ -533,3 +533,13 @@ def test_mudanca_de_ano_remove_lancamentos_antigos(com_listas, tmp_path):
     assert json.loads((dados / "politicos" / "1" / "cota" / "2025.json").read_text())["aviso"]
     assert e["removidos"] >= 1
     assert site.verificar(dados) == []
+
+
+def test_previa_sem_ranking_nao_exporta_ranking_nem_notas(banco, tmp_path):
+    dados = tmp_path / "dados"
+    manifesto = site.exportar(dados, "SP", banco, sem_ranking=True)
+    assert not (dados / "ranking.json").exists() and not (dados / "ranking.csv").exists()
+    for arq in (dados / "municipios").glob("*.json"):
+        assert json.loads(arq.read_text())["nota"] is None
+    assert manifesto["contagens"]["municipios_com_nota"] == 0
+    assert site.verificar(dados) == []

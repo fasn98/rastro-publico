@@ -512,11 +512,15 @@ def exportar(
     session: Session | None = None,
     hoje: date | None = None,
     completa: bool = False,
+    sem_ranking: bool = False,
 ) -> dict:
     """Gera (ou atualiza) os arquivos do site em `saida` e devolve o manifesto.
 
     Se `saida` tiver uma exportação anterior no mesmo formato, os grupos sem mudança são
     reaproveitados e só os arquivos alterados são regravados (`completa` refaz tudo).
+
+    `sem_ranking` (prévia com dados fiscais parciais): o ranking e as notas não são
+    exportados, nem ficam acessíveis por URL.
     """
     inicio = time.monotonic()
     uf = uf.upper()
@@ -580,14 +584,25 @@ def exportar(
         for m in municipios:
             cod = m.cod_ibge
             detalhe = get(f"/api/municipios/{cod}")
-            lista.append({k: v for k, v in detalhe.items() if k != "ente_siconfi"})
+            # lista da busca: dados básicos e a população do IBGE (desempata as sugestões)
+            pop = detalhe.get("populacao_ibge")
+            lista.append(
+                {
+                    **{
+                        k: v
+                        for k, v in detalhe.items()
+                        if k not in ("ente_siconfi", "populacao_ibge")
+                    },
+                    "populacao": pop["populacao"] if pop else None,
+                }
+            )
             rep = reps[cod]
             out.json(
                 f"municipios/{cod}.json",
                 {
                     "detalhe": detalhe,
                     "serie": get(f"/api/entes/{cod}/indicadores/serie"),
-                    "nota": get(f"/api/ranking/{cod}", opcional=True),
+                    "nota": None if sem_ranking else get(f"/api/ranking/{cod}", opcional=True),
                     "representantes": {
                         "municipio": rep["municipio"],
                         "secoes": [secao(sec) for sec in rep["secoes"]],
@@ -597,7 +612,7 @@ def exportar(
             )
         out.json("municipios.json", lista)
 
-        ranking = get(f"/api/ranking?uf={uf}", opcional=True)
+        ranking = None if sem_ranking else get(f"/api/ranking?uf={uf}", opcional=True)
         if ranking:
             out.json("ranking.json", ranking)
             out.bruto("ranking.csv", api.get(f"/api/ranking.csv?uf={uf}").content)

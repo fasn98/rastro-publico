@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { buscarMunicipios, type Municipio } from "./api";
-import { urlAuditoria } from "./dados";
+import { AUDITORIA_ATIVA, urlAuditoria } from "./dados";
 import {
   CARGOS,
   FONTES,
@@ -50,7 +50,7 @@ export function LinkFonte({ url, sha256, recebidoEm }: {
       <a href={url} target="_blank" rel="noreferrer" title={url} aria-label={`Fonte oficial: ${url}`}>
         <span aria-hidden="true">↗</span> fonte
       </a>
-      {sha256 ? (
+      {sha256 && AUDITORIA_ATIVA ? (
         <>
           {" · "}
           <a

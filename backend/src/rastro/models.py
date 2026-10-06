@@ -44,6 +44,23 @@ class Municipio(Base):
     )
 
 
+class PopulacaoIbge(Base):
+    """População residente estimada pelo IBGE (tabela 6579 do SIDRA), por município e ano.
+
+    É a população oficial que o portal exibe. A do cadastro de entes do SICONFI é a que o
+    próprio ente informa ao Tesouro e fica só como informação.
+    """
+
+    __tablename__ = "populacao_ibge"
+
+    cod_ibge: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    ano: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    populacao: Mapped[int]
+    resposta_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("resposta_bruta.id"), index=True
+    )
+
+
 class EnteSiconfi(Base):
     """Ente da Federação cadastrado no SICONFI (Tesouro Nacional)."""
 
