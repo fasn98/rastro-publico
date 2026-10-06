@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from rastro import indicadores as ind
 from rastro import ranking as rk
+from rastro.api.politicos import router as politicos_router
 from rastro.coletores.arquivo import ler_payload, sha256
 from rastro.db import get_session
 from rastro.models import (
@@ -27,6 +28,7 @@ from rastro.models import (
 )
 
 app = FastAPI(title="Rastro Público", version="0.1.0")
+app.include_router(politicos_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],

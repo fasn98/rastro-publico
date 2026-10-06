@@ -1,14 +1,22 @@
 import { useEffect, useState } from "react";
 import Metodologia from "./Metodologia";
 import Municipios from "./Municipios";
+import { PaginaPolitico, QuemRepresenta } from "./Politicos";
 import RankingPagina from "./Ranking";
 
-type Rota = { pagina: "municipios" | "ranking" | "metodologia"; cod: number | null };
+type Rota = {
+  pagina: "municipios" | "ranking" | "metodologia" | "representantes" | "politico";
+  cod: number | null;
+};
 
 function lerRota(): Rota {
   const h = location.hash;
   const m = h.match(/^#\/municipio\/(\d+)/);
   if (m) return { pagina: "municipios", cod: Number(m[1]) };
+  const r = h.match(/^#\/representantes(?:\/(\d+))?/);
+  if (r) return { pagina: "representantes", cod: r[1] ? Number(r[1]) : null };
+  const p = h.match(/^#\/politico\/(\d+)/);
+  if (p) return { pagina: "politico", cod: Number(p[1]) };
   if (h.startsWith("#/ranking")) return { pagina: "ranking", cod: null };
   if (h.startsWith("#/metodologia")) return { pagina: "metodologia", cod: null };
   return { pagina: "municipios", cod: null };
@@ -18,6 +26,7 @@ const LINKS = [
   ["municipios", "#/", "Municípios"],
   ["ranking", "#/ranking", "Ranking Fiscal"],
   ["metodologia", "#/metodologia", "Metodologia"],
+  ["representantes", "#/representantes", "Quem representa você"],
 ] as const;
 
 export default function App() {
@@ -50,6 +59,8 @@ export default function App() {
       {rota.pagina === "municipios" && <Municipios cod={rota.cod} />}
       {rota.pagina === "ranking" && <RankingPagina />}
       {rota.pagina === "metodologia" && <Metodologia />}
+      {rota.pagina === "representantes" && <QuemRepresenta cod={rota.cod} />}
+      {rota.pagina === "politico" && rota.cod !== null && <PaginaPolitico id={rota.cod} />}
     </main>
   );
 }

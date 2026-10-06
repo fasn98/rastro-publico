@@ -267,3 +267,7 @@ class RespostaBruta(Base):
     duracao_ms: Mapped[int | None]
     sha256: Mapped[str] = mapped_column(ForeignKey("payload_bruto.sha256"), index=True)
     tamanho: Mapped[int]
+
+
+# Tabelas do módulo de políticos (pol_*), registradas no mesmo metadata
+from rastro.politicos import modelos as _politicos  # noqa: E402, F401

@@ -59,6 +59,7 @@ antes da coleta completa.
 | IBGE — municípios (API de Localidades) | `rastro coletar ibge-municipios` | `municipio` |
 | Tesouro — entes do SICONFI | `rastro coletar siconfi-entes` | `ente_siconfi` |
 | Tesouro — RREO e RGF do SICONFI | `rastro siconfi-demonstrativos ...` (abaixo) | `demonstrativo_siconfi`, `conta_demonstrativo` |
+| Câmara, Senado e Portal da Transparência — políticos de SP | `rastro politicos --uf SP --anos 2023-2026` | `pol_*` ([README do módulo](backend/src/rastro/politicos/README.md)) |
 
 Peculiaridades dos dados tratadas no código (verificadas nas respostas reais):
 
@@ -214,6 +215,13 @@ uv run ruff check .
 Os testes não acessam a internet: usam respostas reais gravadas em `backend/tests/fixtures/`.
 Para os testes de banco, crie o banco `rastro_teste` (o `docker-compose.yml` cria só
 `rastro`): `docker compose exec db createdb -U rastro rastro_teste`.
+
+## Políticos (v1, SP)
+
+Tela "Quem representa você" e página de cada político (deputados federais e senadores
+por SP): proposições, votos nominais, presenças, comissões e emendas, cada número com a
+fonte oficial e sem notas ou juízos. Fontes, campos descartados por LGPD, limitações e
+próximos passos: [backend/src/rastro/politicos/README.md](backend/src/rastro/politicos/README.md).
 
 ## Próximas fontes
 
