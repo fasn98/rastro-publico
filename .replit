@@ -1,0 +1,8 @@
+# Configuração do Replit. O mesmo repositório vira dois apps (ver docs/deploy-replit.md);
+# o Secret RASTRO_PAPEL de cada deployment escolhe o papel: "coleta" ou "auditoria".
+modules = ["python-3.12", "nodejs-20"]
+run = "bash backend/scripts/replit.sh"
+
+[deployment]
+build = ["bash", "backend/scripts/replit_build.sh"]
+run = ["bash", "backend/scripts/replit.sh"]

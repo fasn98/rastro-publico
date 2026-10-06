@@ -22,17 +22,34 @@ export type MunicipioDetalhe = Municipio & { ente_siconfi: Ente | null };
 
 export type Pagina<T> = { total: number; itens: T[] };
 
-async function get<T>(caminho: string, params: Record<string, string> = {}): Promise<T> {
-  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== ""));
-  const resp = await fetch(`/api${caminho}${qs.size ? `?${qs}` : ""}`);
-  if (!resp.ok) throw new Error(`Erro ${resp.status} ao consultar ${caminho}`);
-  return resp.json();
+import { lerJson, normalizar, urlDados } from "./dados";
+
+/** Arquivo estático de um município: detalhe, série, nota, representantes, emendas. */
+export type ArquivoMunicipio = {
+  detalhe: MunicipioDetalhe;
+  serie: IndicadoresAno[];
+  nota: DetalheRanking | null;
+  representantes: { municipio: unknown; grupos_ref: string };
+  emendas: unknown;
+};
+
+export const arquivoMunicipio = (cod: number) =>
+  lerJson<ArquivoMunicipio>(`municipios/${cod}.json`);
+
+const listaMunicipios = () => lerJson<Municipio[]>("municipios.json");
+
+export const ufsDisponiveis = async () =>
+  [...new Set((await listaMunicipios()).map((m) => m.uf))].sort();
+
+export async function buscarMunicipios(uf: string, nome: string): Promise<Pagina<Municipio>> {
+  const termo = normalizar(nome);
+  const todos = (await listaMunicipios()).filter(
+    (m) => (!uf || m.uf === uf) && (!termo || normalizar(m.nome).includes(termo)),
+  );
+  return { total: todos.length, itens: todos.slice(0, 100) };
 }
 
-export const buscarMunicipios = (uf: string, nome: string) =>
-  get<Pagina<Municipio>>("/municipios", { uf, nome, limite: "100" });
-
-export const obterMunicipio = (cod: number) => get<MunicipioDetalhe>(`/municipios/${cod}`);
+export const obterMunicipio = async (cod: number) => (await arquivoMunicipio(cod)).detalhe;
 
 type Referencia = {
   demonstrativo_id: number;
@@ -128,23 +145,19 @@ export type Indicadores = {
 };
 
 /** Devolve null quando o ente ainda não tem RREO/RGF coletado (404). */
-export async function obterIndicadores(cod: number, exercicio?: number) {
-  const qs = exercicio ? `?exercicio=${exercicio}` : "";
-  const resp = await fetch(`/api/entes/${cod}/indicadores${qs}`);
-  if (resp.status === 404) return null;
-  if (!resp.ok) throw new Error(`Erro ${resp.status} ao consultar indicadores`);
-  return (await resp.json()) as Indicadores;
-}
-
 export type IndicadoresAno = Omit<Indicadores, "exercicios_disponiveis">;
 
-export async function obterSerie(cod: number) {
-  const resp = await fetch(`/api/entes/${cod}/indicadores/serie`);
-  if (!resp.ok) throw new Error(`Erro ${resp.status} ao consultar a série histórica`);
-  return (await resp.json()) as IndicadoresAno[];
+/** Indicadores do exercício pedido (padrão: o mais recente); null se não há RREO/RGF. */
+export async function obterIndicadores(cod: number, exercicio?: number): Promise<Indicadores | null> {
+  const { serie } = await arquivoMunicipio(cod);
+  if (!serie.length) return null;
+  const anos = serie.map((a) => a.exercicio).sort((a, b) => b - a);
+  const alvo = exercicio ?? anos[0];
+  const ano = serie.find((a) => a.exercicio === alvo) ?? serie[serie.length - 1];
+  return { ...ano, exercicios_disponiveis: anos };
 }
 
-// --- Ranking Fiscal ---
+export const obterSerie = async (cod: number) => (await arquivoMunicipio(cod)).serie;
 
 export const INDICADORES_RANKING = [
   "autonomia",
@@ -219,21 +232,35 @@ export type Metodologia = {
   indicadores: Record<IndicadorRanking, RegraIndicador>;
 };
 
-const filtros = (f: Record<string, string>) =>
-  new URLSearchParams(Object.entries(f).filter(([, v]) => v !== "")).toString();
+const rankingCompleto = () => lerJson<Ranking>("ranking.json");
 
-export const buscarRanking = (f: { uf: string; faixa: string; busca: string }) =>
-  get<Ranking>("/ranking", f);
-
-export const urlCsvRanking = (f: { uf: string; faixa: string; busca: string }) =>
-  `/api/ranking.csv?${filtros(f)}`;
-
-/** null quando o município não tem nota calculada (404). */
-export async function obterNota(cod: number) {
-  const resp = await fetch(`/api/ranking/${cod}`);
-  if (resp.status === 404) return null;
-  if (!resp.ok) throw new Error(`Erro ${resp.status} ao consultar a nota`);
-  return (await resp.json()) as DetalheRanking;
+export async function buscarRanking(f: { uf: string; faixa: string; busca: string }): Promise<Ranking> {
+  const r = await rankingCompleto();
+  const termo = normalizar(f.busca);
+  return {
+    ...r,
+    itens: r.itens.filter(
+      (i) => (!f.faixa || i.faixa === f.faixa) && (!termo || normalizar(i.nome).includes(termo)),
+    ),
+  };
 }
 
-export const obterMetodologia = () => get<Metodologia>("/metodologia");
+/** CSV do ranking: o arquivo completo publicado, filtrado para os municípios mostrados. */
+export async function baixarCsvRanking(cods: Set<number> | null, nomeArquivo: string) {
+  const texto = await (await fetch(urlDados("ranking.csv"))).text();
+  const [cabecalho, ...linhas] = texto.replace(/^\uFEFF/, "").trimEnd().split("\n");
+  const col = cabecalho.split(";").indexOf("cod_ibge");
+  const filtradas = cods ? linhas.filter((l) => cods.has(Number(l.split(";")[col]))) : linhas;
+  const blob = new Blob(["\uFEFF" + [cabecalho, ...filtradas].join("\n") + "\n"], {
+    type: "text/csv;charset=utf-8",
+  });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = nomeArquivo;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+export const obterNota = async (cod: number) => (await arquivoMunicipio(cod)).nota;
+
+export const obterMetodologia = () => lerJson<Metodologia>("metodologia.json");

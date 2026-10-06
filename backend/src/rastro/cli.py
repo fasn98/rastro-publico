@@ -23,10 +23,25 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("coletar", help="executa coletores")
     p.add_argument("fontes", nargs="*", help="fontes a coletar (padrão: todas)")
     sub.add_parser("fontes", help="lista as fontes disponíveis")
-    sub.add_parser(
+    vr = sub.add_parser(
         "verificar-respostas",
-        help="recalcula o SHA-256 de todas as respostas brutas arquivadas",
+        help="recalcula o SHA-256 das respostas brutas arquivadas",
     )
+    vr.add_argument("--amostra", type=int, help="verifica só N payloads sorteados")
+    sub.add_parser("testar-fontes", help="testa o acesso às APIs oficiais a partir desta máquina")
+    ex = sub.add_parser("exportar-site", help="gera os arquivos estáticos do site (JSON)")
+    ex.add_argument("--uf", default="SP")
+    ex.add_argument("--saida", required=True, help="pasta de saída (ex.: ../frontend/dist/dados)")
+    pb = sub.add_parser(
+        "publicar-site", help="verifica e publica o site no GitHub Pages (branch gh-pages)"
+    )
+    pb.add_argument("--dist", required=True, help="frontend compilado, com dados/ dentro")
+    pb.add_argument("--repo", default="https://github.com/fasn98/rastro-publico.git")
+    lp = sub.add_parser("listar-publicacoes", help="lista as publicações guardadas (snapshots)")
+    lp.add_argument("--repo", default="https://github.com/fasn98/rastro-publico.git")
+    rv = sub.add_parser("reverter-site", help="volta o site para a publicação anterior")
+    rv.add_argument("--repo", default="https://github.com/fasn98/rastro-publico.git")
+    rv.add_argument("--para", help="tag de destino (padrão: a anterior à que está no ar)")
     rc = sub.add_parser(
         "reconstruir",
         help="reconstrói linhas do RREO/RGF a partir do arquivo bruto (sem chamar a API)",
@@ -92,7 +107,31 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.comando == "verificar-respostas":
-        return _verificar_respostas()
+        return _verificar_respostas(args.amostra)
+
+    if args.comando == "testar-fontes":
+        from rastro.testar_fontes import testar
+
+        resultados = testar()
+        for r in resultados:
+            situacao = "OK   " if r["ok"] else "FALHA"
+            print(f"{situacao} {r['fonte']:<28} {r['detalhe']} ({r['segundos']} s)")
+        return 0 if all(r["ok"] for r in resultados) else 1
+
+    if args.comando == "exportar-site":
+        from pathlib import Path
+
+        from rastro import site
+
+        m = site.exportar(Path(args.saida), args.uf)
+        print(
+            f"Site exportado: {m['arquivos']} arquivos, {m['bytes'] / 1e6:.1f} MB, "
+            f"{m['contagens']['municipios']} municípios, {m['contagens']['politicos']} políticos"
+        )
+        return 0
+
+    if args.comando in ("publicar-site", "listar-publicacoes", "reverter-site"):
+        return _publicacao(args)
 
     if args.comando == "ranking":
         from rastro import ranking
@@ -193,7 +232,29 @@ def _reconstruir(parser: argparse.ArgumentParser, args) -> int:
     return 0
 
 
-def _verificar_respostas() -> int:
+def _publicacao(args) -> int:
+    import os
+    from pathlib import Path
+
+    from rastro import publicacao
+
+    token = os.environ.get("RASTRO_GITHUB_TOKEN")
+    try:
+        if args.comando == "publicar-site":
+            tag = publicacao.publicar(Path(args.dist), args.repo, token)
+            print(f"Site publicado: {tag}")
+        elif args.comando == "listar-publicacoes":
+            for p in publicacao.listar(args.repo, token):
+                print(f"{p['tag']}  {p['sha'][:10]}{'  <- no ar' if p['no_ar'] else ''}")
+        else:
+            print(f"Site revertido para {publicacao.reverter(args.repo, token, args.para)}")
+    except publicacao.ErroPublicacao as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    return 0
+
+
+def _verificar_respostas(amostra: int | None = None) -> int:
     from sqlalchemy import func, select
 
     from rastro.coletores.arquivo import ler_payload
@@ -201,7 +262,10 @@ def _verificar_respostas() -> int:
 
     with get_sessionmaker()() as session:
         total = ruins = 0
-        for p in session.scalars(select(PayloadBruto).execution_options(yield_per=200)):
+        q = select(PayloadBruto)
+        if amostra:
+            q = q.order_by(func.random()).limit(amostra)
+        for p in session.scalars(q.execution_options(yield_per=200)):
             total += 1
             try:
                 ler_payload(p)

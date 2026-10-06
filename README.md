@@ -213,6 +213,46 @@ uv run rastro ranking --uf SP   # calcula, grava e mostra a distribuição da tr
 (10%) foram escolhidos com uma amostra de 10 municípios e precisam ser revistos com a
 coleta completa. O mesmo vale para a transparência, que deu 100% em toda a amostra.
 
+## Produção: site estático + API de auditoria
+
+```
+Replit "rastro-coleta" (Scheduled, semanal)            GitHub Pages (grátis)
+  coleta -> ranking -> exportar-site -> publicar ──git push──► fasn98.github.io/rastro-publico
+        │ (o banco só acorda aqui)                                │ links "resposta original"
+        ▼                                                         ▼
+  PostgreSQL de produção ◄──── Replit "rastro-auditoria" (Autoscale, só leitura, CORS)
+```
+
+- **Tudo o que o visitante vê é estático:** busca de municípios, indicadores, séries,
+  ranking, mapa, CSV, metodologia, "Quem representa você", políticos, proposições, votos,
+  presenças e emendas. São arquivos JSON gerados por `rastro exportar-site`, que chama as
+  próprias rotas da API, então o conteúdo é o mesmo que a API devolveria.
+- **Só a auditoria usa API:** `rastro.api.auditoria:app` tem só
+  `/api/respostas/{id}`, `/api/respostas/{id}/bruto` e
+  `/api/demonstrativos/{id}/respostas`.
+  - CORS restrito a `RASTRO_CORS_ORIGENS` (o GitHub Pages do projeto e localhost).
+  - Cache de 1 ano e `ETag` igual ao SHA-256, porque o conteúdo é endereçado pelo hash.
+  - Cache em memória dos payloads já verificados. A verificação de integridade sempre
+    relê do banco.
+- **Publicação (`rastro publicar-site`):**
+  - verifica antes de enviar: JSON válidos, nenhum município faltando, e as contagens de
+    municípios e políticos não podem cair em relação ao que está no ar;
+  - se a verificação falhar, nada é enviado (tudo ou nada);
+  - publica um commit sem histórico no `gh-pages` e cria uma tag `site-AAAAMMDD-HHMMSS`;
+  - guarda as 5 últimas publicações.
+- `rastro listar-publicacoes` e `rastro reverter-site [--para TAG]` revertem o site.
+- `rastro testar-fontes` testa o acesso às APIs oficiais a partir da máquina atual.
+- Fluxo agendado completo: `backend/scripts/coleta_sp.sh`. Passo a passo para colocar no
+  ar: **[docs/deploy-replit.md](docs/deploy-replit.md)**.
+
+Em desenvolvimento, o frontend também lê os arquivos estáticos:
+
+```bash
+cd backend && uv run rastro exportar-site --uf SP --saida ../frontend/public/dados
+uv run uvicorn rastro.api.auditoria:app --port 8000   # só para os links de auditoria
+cd ../frontend && npm run dev
+```
+
 ## Como rodar
 
 Requisitos: Docker (ou PostgreSQL 16 local), [uv](https://docs.astral.sh/uv/) e Node 22.

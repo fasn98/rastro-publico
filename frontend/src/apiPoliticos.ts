@@ -1,4 +1,4 @@
-// Cliente da API do módulo de políticos (/api/politicos, /api/municipios/{cod}/representantes)
+// Dados do módulo de políticos (arquivos estáticos do site)
 
 export type Fonte = { url: string; recebido_em: string; resposta_id: number };
 
@@ -119,27 +119,34 @@ export type Representantes = {
 
 export type Pagina<T> = { total: number; itens: T[] };
 
-async function get<T>(caminho: string, params: Record<string, string> = {}): Promise<T> {
-  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== ""));
-  const resp = await fetch(`/api${caminho}${qs.size ? `?${qs}` : ""}`);
-  if (!resp.ok) throw new Error(`Erro ${resp.status} ao consultar ${caminho}`);
-  return resp.json();
+// Dados estáticos (gerados por `rastro exportar-site`): nada aqui chama a API.
+import { arquivoMunicipio } from "./api";
+import { lerJson } from "./dados";
+
+const vazia = <T,>(): Pagina<T> => ({ total: 0, itens: [] });
+const semEmendas: Emendas = { coletadas: false, aviso: null, totais: [], itens: [] };
+const pasta = (a: number | null) => (a ? String(a) : "todos");
+
+export async function obterRepresentantes(cod: number): Promise<Representantes> {
+  const { representantes } = await arquivoMunicipio(cod);
+  const grupos = await lerJson<Representantes["grupos"]>(representantes.grupos_ref);
+  return { municipio: representantes.municipio as Representantes["municipio"], grupos };
 }
-
-const ano = (a: number | null) => (a ? String(a) : "");
-
-export const obterRepresentantes = (cod: number) =>
-  get<Representantes>(`/municipios/${cod}/representantes`);
-export const obterPolitico = (id: number) => get<PoliticoDetalhe>(`/politicos/${id}`);
-export const listarProposicoes = (id: number, a: number | null) =>
-  get<Pagina<Proposicao>>(`/politicos/${id}/proposicoes`, { ano: ano(a), limite: "500" });
-export const listarVotacoes = (id: number, a: number | null) =>
-  get<Pagina<Votacao>>(`/politicos/${id}/votacoes`, { ano: ano(a), limite: "500" });
-export const listarPresencas = (id: number, a: number | null) =>
-  get<Pagina<Presenca>>(`/politicos/${id}/presencas`, { ano: ano(a), limite: "500" });
-export const obterEmendas = (id: number, a: number | null) =>
-  get<Emendas>(`/politicos/${id}/emendas`, { ano: ano(a) });
-export const obterEmendasMunicipio = (cod: number) => get<Emendas>(`/municipios/${cod}/emendas`);
+export const obterPolitico = (id: number) => lerJson<PoliticoDetalhe>(`politicos/${id}.json`);
+// sem arquivo para o ano = nada registrado naquele ano
+export const listarProposicoes = async (id: number, a: number | null) =>
+  (await lerJson<Pagina<Proposicao>>(`politicos/${id}/proposicoes/${pasta(a)}.json`, true)) ??
+  vazia<Proposicao>();
+export const listarVotacoes = async (id: number, a: number | null) =>
+  (await lerJson<Pagina<Votacao>>(`politicos/${id}/votacoes/${pasta(a)}.json`, true)) ??
+  vazia<Votacao>();
+export const listarPresencas = async (id: number, a: number | null) =>
+  (await lerJson<Pagina<Presenca>>(`politicos/${id}/presencas/${pasta(a)}.json`, true)) ??
+  vazia<Presenca>();
+export const obterEmendas = async (id: number, a: number | null) =>
+  (await lerJson<Emendas>(`politicos/${id}/emendas/${pasta(a)}.json`, true)) ?? semEmendas;
+export const obterEmendasMunicipio = async (cod: number) =>
+  (await arquivoMunicipio(cod)).emendas as Emendas;
 
 export const CARGOS: Record<string, string> = {
   prefeito: "Prefeito(a)",
