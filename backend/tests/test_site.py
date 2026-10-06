@@ -145,6 +145,7 @@ def test_travas_desligadas_nao_vao_para_o_site(
 def test_verificacao_recusa_dado_travado_no_arquivo(com_politicos, tmp_path, monkeypatch):
     """Segunda barreira: mesmo que algo travado escape da API, a publicação é recusada."""
     _trava(monkeypatch, "RASTRO_POL_PUBLICAR_TSE", "0")
+    _trava(monkeypatch, "RASTRO_POL_PUBLICAR_TSE_2026", "0")
     _trava(monkeypatch, "RASTRO_POL_PUBLICAR_EMENDAS", "0")
     dados = tmp_path / "dados"
     site.exportar(dados, "SP", com_politicos)
