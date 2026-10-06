@@ -33,8 +33,10 @@ from rastro.coletores.redacao import redator_csv
 from rastro.politicos.comum import upsert_politico
 from rastro.politicos.modelos import (
     DEPUTADO_ESTADUAL,
+    DEPUTADO_FEDERAL,
     GOVERNADOR,
     PREFEITO,
+    SENADOR,
     VEREADOR,
     PolPendencia,
     PolPolitico,
@@ -72,6 +74,13 @@ ELEITO = {"ELEITO", "ELEITO POR QP", "ELEITO POR MÉDIA"}
 CARGOS = {
     2024: {"PREFEITO": PREFEITO, "VEREADOR": VEREADOR},
     2022: {"GOVERNADOR": GOVERNADOR, "DEPUTADO ESTADUAL": DEPUTADO_ESTADUAL},
+    # 2026: mandatos a partir de 2027; senador e deputados federais também vêm do TSE
+    2026: {
+        "GOVERNADOR": GOVERNADOR,
+        "SENADOR": SENADOR,
+        "DEPUTADO FEDERAL": DEPUTADO_FEDERAL,
+        "DEPUTADO ESTADUAL": DEPUTADO_ESTADUAL,
+    },
 }
 
 
@@ -154,7 +163,7 @@ def selecionar_eleitos(linhas: list[dict], cargos: dict[str, str]):
 
 
 def _motivo(cargo_tse: str, posteriores: list[list[dict]]) -> str:
-    base = f"Sem {cargo_tse.lower()} eleito no arquivo de candidatos do TSE."
+    base = f"Não consta {cargo_tse.lower()} eleito no arquivo do TSE."
     if posteriores:
         e = posteriores[-1][0]
         quando = f"{e['DS_ELEICAO']} marcada para {e['DT_ELEICAO']}"
@@ -218,6 +227,8 @@ def coletar_eleitos(
                     "situacao": situacao,
                     "em_exercicio": None,
                     "eleicao_ano": ano,
+                    "situacao_candidatura": r["DS_SITUACAO_CANDIDATURA"] or None,
+                    "data_divulgacao": _data(r["DT_GERACAO"]).date(),
                     "url_fonte": url,
                     "url_pagina": None,
                     "resposta_id": rid,

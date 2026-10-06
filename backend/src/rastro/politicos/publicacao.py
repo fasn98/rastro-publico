@@ -1,23 +1,25 @@
 """Travas de publicação: dados novos só aparecem nas telas depois de validados.
 
-Os dados podem ser coletados e conferidos antes (pela API de auditoria e pelo banco),
-mas a API pública só os mostra quando a variável correspondente for "1".
-- RASTRO_POL_PUBLICAR_TSE: eleitos do TSE (prefeitos, vereadores, governador,
-  deputados estaduais), depois de conferidas as colunas e o cruzamento TSE <-> IBGE.
-- RASTRO_POL_PUBLICAR_EMENDAS: emendas, depois de conferido o cruzamento de
-  `localidadeDoGasto` com o código IBGE.
+Os dados podem ser coletados e conferidos antes (pela API de auditoria e pelo banco), mas
+a API pública (e o site estático, que é gerado a partir dela) só os mostra quando a trava
+estiver ligada. As travas ficam em `rastro.config.Settings` (padrão = decisão vigente,
+variáveis RASTRO_POL_PUBLICAR_TSE, RASTRO_POL_PUBLICAR_TSE_2026 e
+RASTRO_POL_PUBLICAR_EMENDAS sobrepõem).
 """
 
-import os
+from rastro.config import get_settings
 
-
-def _ligado(nome: str) -> bool:
-    return os.environ.get(nome, "") == "1"
+# eleições cujos eleitos ainda não exercem o mandato (publicação separada)
+ELEICOES_FUTURAS = (2026,)
 
 
 def tse() -> bool:
-    return _ligado("RASTRO_POL_PUBLICAR_TSE")
+    return get_settings().pol_publicar_tse
+
+
+def tse_2026() -> bool:
+    return get_settings().pol_publicar_tse_2026
 
 
 def emendas() -> bool:
-    return _ligado("RASTRO_POL_PUBLICAR_EMENDAS")
+    return get_settings().pol_publicar_emendas

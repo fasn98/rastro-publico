@@ -17,6 +17,8 @@ export type Politico = {
   mandato_inicio: string | null;
   mandato_fim: string | null;
   eleicao_ano: number | null;
+  situacao_candidatura: string | null;
+  data_divulgacao: string | null;
   url_fonte: string;
   url_pagina: string | null;
   resposta_id: number | null;
@@ -128,7 +130,12 @@ export type Emendas = {
   itens: Emenda[];
 };
 
-export type GrupoRepresentantes = { cargo: string; politicos: Politico[]; pendente: string | null };
+export type GrupoRepresentantes = {
+  cargo: string;
+  politicos: Politico[];
+  pendente: string | null;
+  pendente_url: string | null;
+};
 
 export type Representantes = {
   municipio: { cod_ibge: number; nome: string; uf: string };

@@ -30,6 +30,15 @@ from rastro.politicos.modelos import PolDespesaCota, PolEmenda
 
 POL = FIXTURES / "politicos"
 
+
+def _trava(monkeypatch, nome: str, valor: str) -> None:
+    """Liga/desliga uma trava de publicação (Settings) durante o teste."""
+    from rastro.config import get_settings
+
+    monkeypatch.setenv(nome, valor)
+    get_settings.cache_clear()
+
+
 # cabeçalho real do Ano-2025.csv, na ordem original
 CABECALHO_COTA = (
     "txNomeParlamentar;cpf;ideCadastro;nuCarteiraParlamentar;nuLegislatura;sgUF;sgPartido;"
@@ -142,24 +151,29 @@ def test_cota_grava_sem_dados_pessoais(session, cliente, deputados):
 def test_emendas_do_arquivo_com_codigo_ibge_oficial(session, cliente, deputados):
     original = _zip_emendas()
     respx.get(transparencia.URL_ARQUIVO).respond(content=original)
+    from rastro.politicos.vinculo import Autor
+
+    # deputados da legislatura 57: orçamentos de 2024 a 2027 (votados de 2023 a 2026)
     autores = {
-        transparencia.normalizar_nome(n): pid
-        for n, pid in (
-            ("Tabata Amaral", deputados[204534]),
-            ("Missionário José Olimpio", deputados[160561]),
-            ("Pr. Marco Feliciano", deputados[160601]),
+        transparencia.normalizar_nome(n): Autor(deputados[i], n, 2024, 2027)
+        for n, i in (
+            ("Tabata Amaral", 204534),
+            ("Missionário José Olimpio", 160561),
+            ("Pr. Marco Feliciano", 160601),
         )
     }
     r = transparencia.coletar_arquivo(session, cliente, "SP", 2023, autores)
     # fora do recorte: a de 2022 e a da Bahia de autor de outra UF
     assert r["linhas"] == 7
+    # emenda de 2023 (orçamento votado em 2022, legislatura anterior): fora do mandato
+    assert r["fora_do_mandato"] == {"PR. MARCO FELICIANO": 1, "TABATA AMARAL": 1}
     por_codigo = {e.codigo_emenda: e for e in session.scalars(select(PolEmenda))}
     assert por_codigo["202441320023"].cod_ibge_destino == 3551009  # São Vicente
     assert por_codigo["202441320023"].transferencia_especial
     assert por_codigo["202441320023"].politico_id == deputados[204534]
     # "EMBU - SP" (nome antigo) não casa por texto, mas o código oficial resolve
     assert por_codigo["202328120015"].cod_ibge_destino == 3515004
-    assert por_codigo["202328120015"].politico_id == deputados[160601]
+    assert por_codigo["202328120015"].politico_id is None  # 2023: sem link, nome da fonte
     # autor com sufixo "(EX-PARLAMENTAR ...)" casa pelo nome antes do parêntese
     herdada = por_codigo["202630880003"]
     assert herdada.politico_id == deputados[160561] and "EX-PARLAMENTAR" in herdada.nome_autor
@@ -187,10 +201,10 @@ def test_api_emendas_so_publica_com_a_trava_ligada(session, cliente, deputados, 
     app.dependency_overrides[get_session] = lambda: session
     try:
         api = TestClient(app)
-        monkeypatch.delenv("RASTRO_POL_PUBLICAR_EMENDAS", raising=False)
+        _trava(monkeypatch, "RASTRO_POL_PUBLICAR_EMENDAS", "0")
         e = api.get("/api/municipios/3509502/emendas").json()
         assert e["coletadas"] and not e["publicadas"] and e["itens"] == []
-        monkeypatch.setenv("RASTRO_POL_PUBLICAR_EMENDAS", "1")
+        _trava(monkeypatch, "RASTRO_POL_PUBLICAR_EMENDAS", "1")
         e = api.get("/api/municipios/3509502/emendas").json()
         assert e["publicadas"] and [x["codigo_emenda"] for x in e["itens"]] == ["202339090001"]
         [autor] = e["por_parlamentar"]
@@ -200,3 +214,40 @@ def test_api_emendas_so_publica_com_a_trava_ligada(session, cliente, deputados, 
         )
     finally:
         app.dependency_overrides.clear()
+
+
+def test_vinculo_recusa_nome_ambiguo_ou_ausente(session, deputados):
+    from rastro.politicos import vinculo
+
+    # identificadores "teste:*" são marcadores de teste, não parlamentares reais
+    universo = {
+        transparencia.normalizar_nome("Tabata Amaral"): {"camara:204534"},
+        transparencia.normalizar_nome("Pr. Marco Feliciano"): {"camara:160601", "teste:1"},
+    }
+    autores, recusados = vinculo.autores_confirmaveis(session, "SP", universo)
+    assert set(autores) == {"TABATA AMARAL"}
+    assert autores["TABATA AMARAL"].politico_id == deputados[204534]
+    assert (autores["TABATA AMARAL"].primeiro_ano, autores["TABATA AMARAL"].ultimo_ano) == (
+        2024,
+        2027,
+    )
+    assert "outro parlamentar" in recusados["Pr. Marco Feliciano"]
+    assert recusados["Adilson Barroso"] == "não encontrado na lista da legislatura"
+
+
+@respx.mock
+def test_codigo_de_autor_diferente_desfaz_o_vinculo(session, cliente, deputados):
+    from rastro.politicos.vinculo import Autor
+
+    # o mesmo parlamentar com dois "Código do Autor" no arquivo: não liga nenhuma
+    texto = (POL / "transparencia_emendas_amostra.csv").read_text()
+    linhas = texto.splitlines()
+    tabata = [x for x in linhas if '"TABATA AMARAL"' in x and '"2024"' in x][0]
+    outra = tabata.replace('"4132"', '"MARCADOR-TESTE"').replace('"202441320023"', '"T-1"')
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("EmendasParlamentares.csv", "\r\n".join([*linhas, outra]).encode("latin-1"))
+    respx.get(transparencia.URL_ARQUIVO).respond(content=buf.getvalue())
+    autores = {"TABATA AMARAL": Autor(deputados[204534], "Tabata Amaral", 2024, 2027)}
+    r = transparencia.coletar_arquivo(session, cliente, "SP", 2023, autores)
+    assert r["codigo_de_autor_ambiguo"] == [deputados[204534]] and r["ligadas"] == 0

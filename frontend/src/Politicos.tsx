@@ -206,7 +206,17 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
                     {g.politicos.length > 0 && <span className="sub"> ({g.politicos.length})</span>}
                   </h4>
                   {g.pendente ? (
-                    <p className="pendente">{g.pendente}</p>
+                    <p className="pendente">
+                      {g.pendente}
+                      {g.pendente_url && (
+                        <>
+                          {" "}
+                          <a href={g.pendente_url} target="_blank" rel="noreferrer">
+                            Arquivo de origem
+                          </a>
+                        </>
+                      )}
+                    </p>
                   ) : (
                     <ul className="lista">
                       {g.politicos.map((p) => (
@@ -285,7 +295,7 @@ export function PaginaPolitico({ id }: { id: number }) {
         </dd>
         <dt>Partido</dt>
         <dd>{p.partido ?? "—"}</dd>
-        {p.situacao && (
+        {p.situacao && p.fonte !== "tse" && (
           <>
             <dt>Situação</dt>
             <dd>{p.situacao}</dd>
@@ -293,6 +303,26 @@ export function PaginaPolitico({ id }: { id: number }) {
         )}
         <dt>Em exercício</dt>
         <dd>{p.em_exercicio === null ? "—" : p.em_exercicio ? "Sim" : "Não"}</dd>
+        {p.fonte === "tse" && (
+          <>
+            <dt>Eleição</dt>
+            <dd>
+              {p.eleicao_ano}
+              {p.eleicao_ano && p.eleicao_ano >= 2026 && " (mandato a partir de 2027)"}
+            </dd>
+            <dt>Situação no arquivo do TSE</dt>
+            <dd>
+              {p.situacao}
+              {p.situacao_candidatura && ` · candidatura: ${p.situacao_candidatura}`}
+            </dd>
+            {p.data_divulgacao && (
+              <>
+                <dt>Arquivo gerado pelo TSE em</dt>
+                <dd>{data(p.data_divulgacao)}</dd>
+              </>
+            )}
+          </>
+        )}
         {p.legislatura && (
           <>
             <dt>Legislatura</dt>

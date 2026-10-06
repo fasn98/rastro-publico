@@ -26,6 +26,15 @@ from rastro.politicos.modelos import PolPendencia, PolPolitico
 
 POL = FIXTURES / "politicos"
 
+
+def _trava(monkeypatch, nome: str, valor: str) -> None:
+    """Liga/desliga uma trava de publicação (Settings) durante o teste."""
+    from rastro.config import get_settings
+
+    monkeypatch.setenv(nome, valor)
+    get_settings.cache_clear()
+
+
 # cabeçalho real do consulta_cand_2024_SP.csv (e de 2022), na ordem original
 CABECALHO = (
     "DT_GERACAO;HH_GERACAO;ANO_ELEICAO;CD_TIPO_ELEICAO;NM_TIPO_ELEICAO;NR_TURNO;CD_ELEICAO;"
@@ -134,7 +143,7 @@ def test_eleitos_2024_com_suplementar_e_pendencias(session, cliente):
         "Suplementar de Martinópolis - out/26 marcada para 25/10/2026, "
         "ainda sem resultado no arquivo."
     )
-    assert pend[3551207] == "Sem prefeito eleito no arquivo de candidatos do TSE."
+    assert pend[3551207] == "Não consta prefeito eleito no arquivo do TSE."
     # vereadores: exatamente os ELEITO / POR QP / POR MÉDIA da amostra, por município
     amostra = list(
         csv.DictReader(
@@ -235,13 +244,73 @@ def test_representantes_so_mostram_tse_com_a_trava_ligada(session, cliente, monk
             [g] = [g for s in r["secoes"] for g in s["grupos"] if g["cargo"] == "prefeito"]
             return g
 
-        monkeypatch.delenv("RASTRO_POL_PUBLICAR_TSE", raising=False)
+        _trava(monkeypatch, "RASTRO_POL_PUBLICAR_TSE", "0")
         g = prefeito()
         assert g["politicos"] == [] and "TSE" in g["pendente"]
         assert api.get("/api/politicos", params={"cargo": "vereador"}).json()["total"] == 0
-        monkeypatch.setenv("RASTRO_POL_PUBLICAR_TSE", "1")
+        _trava(monkeypatch, "RASTRO_POL_PUBLICAR_TSE", "1")
         g = prefeito()
         assert [p["nome"] for p in g["politicos"]] == ["JOSÉ TIVERON"] and g["pendente"] is None
         assert api.get("/api/politicos", params={"cargo": "vereador"}).json()["total"] > 0
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_padrao_das_travas_e_a_decisao_vigente(monkeypatch):
+    from rastro.config import get_settings
+    from rastro.politicos import publicacao
+
+    for v in (
+        "RASTRO_POL_PUBLICAR_TSE",
+        "RASTRO_POL_PUBLICAR_TSE_2026",
+        "RASTRO_POL_PUBLICAR_EMENDAS",
+    ):
+        monkeypatch.delenv(v, raising=False)
+    get_settings.cache_clear()
+    assert (publicacao.tse(), publicacao.tse_2026(), publicacao.emendas()) == (True, False, False)
+
+
+@respx.mock
+def test_eleitos_2026_ficam_ocultos_ate_a_trava(session, cliente, monkeypatch):
+    """Amostra real do arquivo de 2026 (gerado pelo TSE em 05/10/2026), sem colunas pessoais."""
+    from fastapi.testclient import TestClient
+
+    from rastro.api.main import app
+    from rastro.db import get_session
+    from rastro.models import Municipio
+
+    session.add(Municipio(cod_ibge=3500105, nome="Adamantina", uf="SP", regiao="SE"))
+    session.commit()
+    _mock()
+    respx.get(tse.URL_CANDIDATOS.format(ano=2026)).respond(content=_zip_original(2026))
+    r = tse.coletar_eleitos(session, cliente, 2026, "SP", set())
+    amostra = list(
+        csv.DictReader(
+            io.StringIO((POL / "tse_consulta_cand_2026_SP_amostra.csv").read_text()),
+            delimiter=";",
+        )
+    )
+    assert r["eleitos"] == sum(1 for x in amostra if x["DS_SIT_TOT_TURNO"] in tse.ELEITO) == 6
+    gov = session.scalars(
+        select(PolPolitico).where(
+            PolPolitico.eleicao_ano == 2026, PolPolitico.cargo == "governador"
+        )
+    ).one()
+    assert gov.situacao_candidatura and gov.data_divulgacao is not None
+    app.dependency_overrides[get_session] = lambda: session
+    try:
+        api = TestClient(app)
+        _trava(monkeypatch, "RASTRO_POL_PUBLICAR_TSE_2026", "0")
+        assert api.get(f"/api/politicos/{gov.id}").status_code == 404
+        secoes = api.get("/api/municipios/3500105/representantes").json()["secoes"]
+        assert not any("2026" in s["titulo"] for s in secoes)
+        _trava(monkeypatch, "RASTRO_POL_PUBLICAR_TSE_2026", "1")
+        assert api.get(f"/api/politicos/{gov.id}").status_code == 200
+        [s26] = [
+            s
+            for s in api.get("/api/municipios/3500105/representantes").json()["secoes"]
+            if "2026" in s["titulo"]
+        ]
+        assert "mandato a partir de 2027" in s26["titulo"]
     finally:
         app.dependency_overrides.clear()
