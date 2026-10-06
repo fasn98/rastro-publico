@@ -75,7 +75,7 @@ class Coleta(Base):
 
 
 class DemonstrativoSiconfi(Base):
-    """Um RREO ou RGF entregue por um ente em um período (cabeçalho)."""
+    """Um RREO ou RGF entregue por uma instituição de um ente em um período (cabeçalho)."""
 
     __tablename__ = "demonstrativo_siconfi"
     __table_args__ = (
@@ -86,6 +86,7 @@ class DemonstrativoSiconfi(Base):
             "periodicidade",
             "periodo",
             "poder",
+            "instituicao",
             name="uq_demonstrativo_siconfi",
             postgresql_nulls_not_distinct=True,
         ),
@@ -102,6 +103,7 @@ class DemonstrativoSiconfi(Base):
     # Só no RGF: E = Executivo, L = Legislativo, J = Judiciário, M = Ministério Público,
     # D = Defensoria. Nulo no RREO, que é do ente como um todo.
     poder: Mapped[str | None] = mapped_column(String(1))
+    # Um RGF por instituição: o mesmo poder pode ter várias (Câmara e TCM, TJ e TJM...)
     instituicao: Mapped[str | None] = mapped_column(String(200))
     # Data do último status no extrato de entregas; muda quando o ente retifica o relatório.
     data_status: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

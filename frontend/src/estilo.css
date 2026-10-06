@@ -42,3 +42,83 @@ dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margi
 dt { color: var(--suave); }
 dd { margin: 0; }
 .erro { color: #c0392b; }
+
+/* Indicadores fiscais. Cores de status fixas (good/warning/serious/critical), sempre
+   acompanhadas de ícone e texto; a cor nunca carrega o significado sozinha. */
+:root {
+  --trilha: #cde2fb;
+  --preenchimento: #2a78d6;
+  --tick: #52514e;
+  --sit-alerta: #fab219;
+  --sit-prudencial: #ec835a;
+  --sit-maximo: #d03b3b;
+  --sit-regular-texto: #006300;
+  --sit-alerta-texto: #8a5a00;
+  --sit-prudencial-texto: #a8441c;
+  --sit-maximo-texto: #b02828;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --trilha: #0d366b;
+    --preenchimento: #3987e5;
+    --tick: #c3c2b7;
+    --sit-regular-texto: #0ca30c;
+    --sit-alerta-texto: #fab219;
+    --sit-prudencial-texto: #ec835a;
+    --sit-maximo-texto: #ff7b7b;
+  }
+}
+.indicadores { margin-top: 20px; border-top: 1px solid var(--borda); padding-top: 12px; }
+.indicadores-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.indicadores h3 { margin: 0; }
+.indicadores h4 { margin: 20px 0 8px; font-size: 0.95em; }
+.indicadores .sub { font-size: 0.85em; }
+.indicadores code { font-size: 0.85em; word-break: break-all; }
+.linha-medidor { margin-bottom: 16px; }
+.linha-cabecalho, .linha-rodape {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap;
+}
+.linha-cabecalho .valor { font-weight: 600; }
+.medidor { position: relative; height: 12px; background: var(--trilha); border-radius: 4px; margin: 6px 0; }
+.medidor-preenchimento { height: 100%; border-radius: 4px; background: var(--preenchimento); position: relative; }
+.medidor-preenchimento.sit-acima_alerta { background: var(--sit-alerta); }
+.medidor-preenchimento.sit-acima_prudencial { background: var(--sit-prudencial); }
+.medidor-preenchimento.sit-acima_maximo { background: var(--sit-maximo); }
+.medidor-limite {
+  position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px;
+  background: var(--tick); opacity: 0.55;
+}
+.medidor-limite.limite-máximo { width: 3px; opacity: 1; }
+/* área de hover maior que a marca */
+.medidor-limite::before { content: ""; position: absolute; inset: -4px -6px; }
+.dica {
+  display: none; position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  white-space: nowrap; background: var(--texto); color: var(--fundo); font-size: 0.75em;
+  padding: 3px 6px; border-radius: 4px; pointer-events: none; z-index: 1;
+}
+.medidor-preenchimento .dica { left: auto; right: 0; transform: none; }
+.medidor-preenchimento:hover .dica, .medidor-limite:hover .dica { display: block; }
+.legenda-limites { margin: 0; font-size: 0.8em; color: var(--suave); }
+.status { font-size: 0.85em; font-weight: 600; display: inline-flex; gap: 6px; align-items: center; }
+.status-icone {
+  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 3px;
+  border-radius: 9px; font-size: 0.75em; color: #fff;
+}
+.status-regular { color: var(--sit-regular-texto); }
+.status-regular .status-icone { background: #0ca30c; }
+.status-acima_alerta { color: var(--sit-alerta-texto); }
+.status-acima_alerta .status-icone { background: var(--sit-alerta); color: #1d1d1b; }
+.status-acima_prudencial { color: var(--sit-prudencial-texto); }
+.status-acima_prudencial .status-icone { background: var(--sit-prudencial); color: #1d1d1b; }
+.status-acima_maximo { color: var(--sit-maximo-texto); }
+.status-acima_maximo .status-icone { background: var(--sit-maximo); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+.tile { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--borda); border-radius: 6px; }
+.tile-rotulo { font-size: 0.8em; color: var(--suave); }
+.tile-valor { font-size: 1.35em; font-weight: 600; }
+.nota { font-size: 0.85em; color: var(--suave); margin: 6px 0 0; }
+dd { overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  dl { grid-template-columns: 1fr; gap: 0; }
+  dt { margin-top: 8px; }
+}

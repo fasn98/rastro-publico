@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from rastro import indicadores as ind
 from rastro.db import get_session
 from rastro.models import (
     Coleta,
@@ -167,3 +168,63 @@ def listar_contas(
     if cod_conta:
         q = q.where(ContaDemonstrativo.cod_conta == cod_conta)
     return session.scalars(q.order_by(ContaDemonstrativo.id)).all()
+
+
+class Referencia(BaseModel):
+    demonstrativo_id: int
+    demonstrativo: str
+    periodicidade: str
+    periodo: int
+
+
+class Pessoal(Referencia):
+    poder: str | None
+    nome_poder: str | None
+    instituicao: str | None
+    despesa_total_pessoal: Decimal | None
+    rcl_ajustada: Decimal | None
+    percentual: Decimal | None
+    limite_alerta: Decimal | None
+    limite_prudencial: Decimal | None
+    limite_maximo: Decimal | None
+    situacao: str | None
+
+
+class Divida(Referencia):
+    divida_consolidada_liquida: Decimal | None
+    rcl_ajustada: Decimal | None
+    percentual: Decimal | None
+    limite_alerta: Decimal | None
+    limite_maximo: Decimal | None
+    situacao: str | None
+
+
+class Execucao(Referencia):
+    receita_prevista: Decimal | None
+    receita_realizada: Decimal | None
+    despesa_dotacao: Decimal | None
+    despesa_empenhada: Decimal | None
+    despesa_liquidada: Decimal | None
+    despesa_paga: Decimal | None
+    resultado: Decimal | None
+    superavit_financeiro_utilizado: Decimal | None
+
+
+class Indicadores(BaseModel):
+    cod_ibge: int
+    exercicio: int
+    exercicios_disponiveis: list[int]
+    pessoal: list[Pessoal]
+    divida: Divida | None
+    execucao: Execucao | None
+
+
+@app.get("/api/entes/{cod_ibge}/indicadores", response_model=Indicadores)
+def obter_indicadores(cod_ibge: int, session: SessionDep, exercicio: int | None = None):
+    """Indicadores fiscais do último período disponível do exercício (padrão: o mais recente)."""
+    disponiveis = ind.exercicios_disponiveis(session, cod_ibge)
+    if exercicio is None:
+        if not disponiveis:
+            raise HTTPException(404, "Nenhum RREO/RGF coletado para este ente")
+        exercicio = disponiveis[0]
+    return {**ind.indicadores(session, cod_ibge, exercicio), "exercicios_disponiveis": disponiveis}

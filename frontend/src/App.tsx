@@ -6,6 +6,7 @@ import {
   type MunicipioDetalhe,
   type Pagina,
 } from "./api";
+import Indicadores from "./Indicadores";
 
 const UFS = [
   "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA",
@@ -112,6 +113,7 @@ export default function App() {
               </>
             )}
           </dl>
+          {detalhe.ente_siconfi && <Indicadores cod={detalhe.cod_ibge} />}
         </aside>
       )}
     </main>

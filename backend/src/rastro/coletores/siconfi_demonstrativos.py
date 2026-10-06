@@ -126,13 +126,20 @@ def baixar(
     return por_poder
 
 
-def _instituicao(linhas: list[dict]) -> str | None:
-    nomes = sorted({i["instituicao"] for i in linhas if i.get("instituicao")})
-    return "; ".join(nomes)[:200] or None
+def _por_instituicao(linhas: list[dict]) -> dict[str | None, list[dict]]:
+    """Separa as linhas por instituição.
+
+    Um mesmo poder pode ter mais de uma (ex.: Câmara e Tribunal de Contas do Município
+    no Legislativo de São Paulo), e cada uma entrega seu próprio RGF.
+    """
+    grupos: dict[str | None, list[dict]] = {}
+    for linha in linhas:
+        grupos.setdefault(linha.get("instituicao"), []).append(linha)
+    return grupos
 
 
 def gravar(session: Session, cod_ibge: int, exercicio: int, e: Entrega, por_poder: dict) -> int:
-    """Substitui o relatório (todos os poderes) pelas linhas baixadas."""
+    """Substitui o relatório (todos os poderes e instituições) pelas linhas baixadas."""
     session.execute(
         delete(DemonstrativoSiconfi).where(
             DemonstrativoSiconfi.cod_ibge == cod_ibge,
@@ -143,36 +150,37 @@ def gravar(session: Session, cod_ibge: int, exercicio: int, e: Entrega, por_pode
         )
     )
     total = 0
-    for poder, linhas in por_poder.items():
-        cab = DemonstrativoSiconfi(
-            cod_ibge=cod_ibge,
-            exercicio=exercicio,
-            demonstrativo=e.demonstrativo,
-            periodicidade=e.periodicidade,
-            periodo=e.periodo,
-            poder=poder,
-            instituicao=_instituicao(linhas),
-            data_status=e.data_status,
-            linhas=len(linhas),
-        )
-        session.add(cab)
-        session.flush()
-        session.execute(
-            ContaDemonstrativo.__table__.insert(),
-            [
-                {
-                    "demonstrativo_id": cab.id,
-                    "anexo": i["anexo"],
-                    "rotulo": i["rotulo"],
-                    "coluna": i["coluna"],
-                    "cod_conta": i["cod_conta"],
-                    "conta": i["conta"],
-                    "valor": i.get("valor"),
-                }
-                for i in linhas
-            ],
-        )
-        total += len(linhas)
+    for poder, linhas_poder in por_poder.items():
+        for instituicao, linhas in _por_instituicao(linhas_poder).items():
+            cab = DemonstrativoSiconfi(
+                cod_ibge=cod_ibge,
+                exercicio=exercicio,
+                demonstrativo=e.demonstrativo,
+                periodicidade=e.periodicidade,
+                periodo=e.periodo,
+                poder=poder,
+                instituicao=instituicao,
+                data_status=e.data_status,
+                linhas=len(linhas),
+            )
+            session.add(cab)
+            session.flush()
+            session.execute(
+                ContaDemonstrativo.__table__.insert(),
+                [
+                    {
+                        "demonstrativo_id": cab.id,
+                        "anexo": i["anexo"],
+                        "rotulo": i["rotulo"],
+                        "coluna": i["coluna"],
+                        "cod_conta": i["cod_conta"],
+                        "conta": i["conta"],
+                        "valor": i.get("valor"),
+                    }
+                    for i in linhas
+                ],
+            )
+            total += len(linhas)
     session.commit()
     return total
 

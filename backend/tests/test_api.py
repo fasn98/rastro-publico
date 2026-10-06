@@ -69,3 +69,7 @@ def test_demonstrativos_e_contas(client, session):
     r = client.get(f"/api/demonstrativos/{d.id}/contas", params={"anexo": "RGF-Anexo 01"})
     assert r.json()[0]["valor"] == "3033403573.83"
     assert client.get("/api/demonstrativos/999999/contas").status_code == 404
+
+
+def test_indicadores_404_sem_dados(client):
+    assert client.get("/api/entes/3550308/indicadores").status_code == 404

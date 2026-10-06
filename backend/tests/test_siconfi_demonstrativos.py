@@ -88,6 +88,33 @@ def test_coleta_grava_por_poder_com_valores_exatos(session):
 
 
 @respx.mock
+def test_rgf_separa_instituicoes_do_mesmo_poder(session):
+    # No Legislativo de São Paulo, Câmara e Tribunal de Contas do Município entregam
+    # cada um o seu RGF, e a API devolve as linhas dos dois juntas.
+    rgf_l = carregar("siconfi_rgf_simplificado_L.json")
+    tcm = copy.deepcopy(rgf_l["items"][:2])
+    for linha in tcm:
+        linha["instituicao"] = "Tribunal de Contas do Município"
+        linha["valor"] = 1
+    rgf_l["items"] += tcm
+    _mock_api()
+    respx.get(sd.URL_RGF, params__contains={"co_poder": "L"}).respond(json=rgf_l)
+    with httpx.Client() as client:
+        sd.coletar_ente(session, client, ADAMANTINA, 2025)
+
+    legislativo = session.scalars(
+        select(DemonstrativoSiconfi)
+        .where(DemonstrativoSiconfi.poder == "L")
+        .order_by(DemonstrativoSiconfi.instituicao)
+    ).all()
+    assert [(d.instituicao, d.linhas) for d in legislativo] == [
+        ("Câmara de Vereadores de Adamantina - SP", 5),
+        ("Tribunal de Contas do Município", 2),
+    ]
+    assert {c.valor for c in legislativo[1].contas} == {1}
+
+
+@respx.mock
 def test_segunda_coleta_so_le_o_extrato(session):
     rotas = _mock_api()
     with httpx.Client() as client:

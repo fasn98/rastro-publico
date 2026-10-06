@@ -62,8 +62,31 @@ Como funciona:
 5. Valores ficam em `NUMERIC` (sem erro de ponto flutuante). Falha em um ente não
    interrompe os outros: a coleta fica com status `parcial` e o erro registrado.
 
+6. O RGF é gravado **por instituição**: um mesmo poder pode ter várias (no Legislativo
+   de São Paulo, a Câmara e o Tribunal de Contas do Município; no Judiciário estadual,
+   o TJ e o TJ Militar).
+
 Consulta pela API: `GET /api/entes/{cod_ibge}/demonstrativos?exercicio=2025` e
 `GET /api/demonstrativos/{id}/contas?anexo=RGF-Anexo 01`.
+
+### Indicadores fiscais
+
+`GET /api/entes/{cod_ibge}/indicadores?exercicio=2025` (e o painel no detalhe do
+município) usa o último período entregue no exercício:
+
+| Indicador | Origem | Limites mostrados |
+|---|---|---|
+| Despesa total com pessoal / RCL ajustada, por instituição | RGF Anexo 1 | alerta, prudencial e máximo (art. 20, 22 e 59 da LRF), como declarados no relatório |
+| Dívida consolidada líquida / RCL ajustada | RGF Anexo 2 (Executivo) | alerta e máximo calculados a partir dos valores de limite declarados no relatório |
+| Receita realizada x prevista; despesa empenhada, liquidada e paga; resultado orçamentário | RREO Anexo 1 | — |
+
+Percentuais e limites vêm prontos do relatório sempre que ele os traz; o resultado
+orçamentário (receita realizada − despesa empenhada) confere com o déficit/superávit
+declarado no próprio RREO. Os limites não são fixos no código: a Resolução do Senado
+40/2001 prevê 120% da RCL para municípios e 200% para estados, mas o RGF do Estado de
+SP no 3º quadrimestre de 2025, por exemplo, declara 169,93%; o painel mostra o valor
+declarado. "Acima do limite" compara com os números informados pelo
+ente; não substitui a análise do Tribunal de Contas.
 
 Volume medido (exercício 2025): município de São Paulo ≈ 21 mil linhas, Adamantina/SP
 ≈ 8,5 mil, Estado de SP ≈ 27 mil; cerca de 200 bytes por linha no banco. Cada ente leva
