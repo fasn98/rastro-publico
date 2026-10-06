@@ -18,9 +18,10 @@ Quem ocupa cada cargo e os fatos registrados nas fontes oficiais sobre sua atua�
 | Cota parlamentar (CEAP) dos deputados de SP | feito (arquivo anual da Câmara) |
 | Senadores por SP (Senado): mandato, matérias, votações, comissões | feito |
 | Eleitos 2024 (prefeitos e vereadores) e 2022 (governador, deputados estaduais), TSE | **publicado** (aprovado em 06/10/2026) |
-| Emendas parlamentares (Portal da Transparência, arquivo em lote) | coletado; **publicação travada** até validação do vínculo de autores |
+| Emendas parlamentares (Portal da Transparência, arquivo em lote) | **publicado** (aprovado em 06/10/2026), com vínculo confirmado e tabela de exceções |
+| Linha do tempo do mandato dos deputados (histórico oficial da Câmara) | **publicado** |
 | Emendas pela API do Portal (`emendas-api`) | implementado; aguardando a chave em `RASTRO_TRANSPARENCIA_CHAVE` |
-| Eleitos 2026 (governador, senadores, deputados federais e estaduais) | coletado (arquivo gerado pelo TSE em 05/10/2026); **publicação travada** até depois do 2º turno |
+| Eleitos 2026 (governador, senadores, deputados federais e estaduais) | **publicado** para SP, com o rótulo "sujeito a alterações até a diplomação"; cargo/UF com 2º turno pendente fica oculto |
 
 **Travas de publicação** (`rastro.config.Settings`, valem para a API e para o site
 exportado a partir dela):
@@ -28,8 +29,38 @@ exportado a partir dela):
 | Trava | Padrão | Variável que sobrepõe |
 |---|---|---|
 | `pol_publicar_tse` | ligada | `RASTRO_POL_PUBLICAR_TSE` |
-| `pol_publicar_tse_2026` | desligada | `RASTRO_POL_PUBLICAR_TSE_2026` |
-| `pol_publicar_emendas` | desligada | `RASTRO_POL_PUBLICAR_EMENDAS` |
+| `pol_publicar_tse_2026` | ligada | `RASTRO_POL_PUBLICAR_TSE_2026` |
+| `pol_publicar_emendas` | ligada | `RASTRO_POL_PUBLICAR_EMENDAS` |
+
+**2026 e 2º turno.** Os eleitos de 2026 de um cargo/UF só são publicados quando não há 2º
+turno pendente para aquele cargo/UF. O coletor marca a pendência (`pol_pendencia.tipo =
+"segundo_turno"`) quando a eleição mais recente tem candidatos com situação "2º TURNO" e
+ainda nenhum eleito no 2º turno; a seção de 2026 omite esse cargo naquela UF. No arquivo
+de 05/10/2026 isso ocorre para governador em AC, AM, DF, ES, RJ, RN e TO; em SP não ocorre.
+
+**Linha do tempo do mandato.**
+- Fonte: `GET /api/v2/deputados/{id}/historico`.
+- Grava os eventos da legislatura 57: exercício, licença, suplência, afastamento,
+  vacância.
+- `descricaoStatus` fica exatamente como na fonte, por exemplo "Saída - Afastamento sem
+  prazo determinado - Ministro de Estado".
+- O e-mail de gabinete que vem em cada evento é retirado também do arquivo bruto.
+- A página do deputado mostra os períodos (de / até / situação / motivo) e avisa que os
+  indicadores devem ser lidos com esse contexto.
+- Em 06/10/2026: 373 eventos, dos 90 deputados.
+
+**Exceções de emendas.**
+- As exceções ao vínculo automático ficam em `politicos/excecoes_emendas.toml`, um
+  arquivo versionado. Cada linha registra o texto exato da fonte, o parlamentar, a
+  justificativa e quem aprovou e quando.
+- Toda linha nova exige aprovação do mantenedor; um teste falha sem esses campos.
+- Hoje são 2 exceções: emendas herdadas nos termos do art. 78 da LDO 2025.
+  - "JOAO CURY NETO (EX-PARLAMENTAR ALBERTO MOURAO…)" → João Cury: 6 linhas.
+  - "RIBAMAR ANTONIO DA SILVA (EX-PARLAMENTAR RICARDO SILVA…)" → Ribamar Silva: 2 linhas.
+- Na tela, aparecem com o rótulo "Emenda herdada do ex-parlamentar [nome], nos termos do
+  art. 78 da LDO 2025" e com o texto exato da fonte.
+- Essas emendas trazem o "Código do Autor" do ex-parlamentar e ficam fora da conferência
+  de código único.
 
 ## Como coletar
 
