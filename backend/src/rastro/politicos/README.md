@@ -17,10 +17,19 @@ Quem ocupa cada cargo e os fatos registrados nas fontes oficiais sobre sua atua�
 | Deputados federais por SP (Câmara): mandato, proposições, votos nominais, presenças | feito |
 | Cota parlamentar (CEAP) dos deputados de SP | feito (arquivo anual da Câmara) |
 | Senadores por SP (Senado): mandato, matérias, votações, comissões | feito |
-| Eleitos 2024 (prefeitos e vereadores) e 2022 (governador, deputados estaduais), TSE | coletado; **publicação travada** até validação (`RASTRO_POL_PUBLICAR_TSE=1`) |
-| Emendas parlamentares (Portal da Transparência, arquivo em lote) | coletado; **publicação travada** até validação (`RASTRO_POL_PUBLICAR_EMENDAS=1`) |
-| Emendas pela API do Portal (`emendas-api`) | implementado; a API recusa a chave do ambiente ("Chave de API inválida!") |
-| Eleitos 2026 | publicados pelo TSE em 05/10/2026 (mandatos a partir de 2027); **não carregados**, aguardando decisão |
+| Eleitos 2024 (prefeitos e vereadores) e 2022 (governador, deputados estaduais), TSE | **publicado** (aprovado em 06/10/2026) |
+| Emendas parlamentares (Portal da Transparência, arquivo em lote) | coletado; **publicação travada** até validação do vínculo de autores |
+| Emendas pela API do Portal (`emendas-api`) | implementado; aguardando a chave em `RASTRO_TRANSPARENCIA_CHAVE` |
+| Eleitos 2026 (governador, senadores, deputados federais e estaduais) | coletado (arquivo gerado pelo TSE em 05/10/2026); **publicação travada** até depois do 2º turno |
+
+**Travas de publicação** (`rastro.config.Settings`, valem para a API e para o site
+exportado a partir dela):
+
+| Trava | Padrão | Variável que sobrepõe |
+|---|---|---|
+| `pol_publicar_tse` | ligada | `RASTRO_POL_PUBLICAR_TSE` |
+| `pol_publicar_tse_2026` | desligada | `RASTRO_POL_PUBLICAR_TSE_2026` |
+| `pol_publicar_emendas` | desligada | `RASTRO_POL_PUBLICAR_EMENDAS` |
 
 ## Como coletar
 
@@ -103,9 +112,10 @@ A carga falha sem gravar nada se o par não for único ou se faltar algum munic�
   Alegre, Eldorado, Guará, Guatapará, Mongaguá, Neves Paulista, Panorama, Reginópolis,
   Sales Oliveira e Tuiuti.
 - 7.047 vereadores, nos 645 municípios.
-- 4 pendências:
-  - Macedônia, Martinópolis e Narandiba: suplementar marcada para 25/10/2026;
-  - Sarutaiá: sem prefeito eleito no arquivo.
+- 4 pendências, com texto neutro e link para o arquivo de origem:
+  - Macedônia, Martinópolis e Narandiba: "Não consta prefeito eleito no arquivo do TSE.
+    Suplementar de … marcada para 25/10/2026, ainda sem resultado no arquivo.";
+  - Sarutaiá: "Não consta prefeito eleito no arquivo do TSE."
 
 **Resultado 2022:**
 - Governador: Tarcísio (REPUBLICANOS), eleito no 2º turno.
@@ -115,6 +125,21 @@ A carga falha sem gravar nada se o par não for único ou se faltar algum munic�
 - Senador e deputados federais vêm da Câmara e do Senado, porque mostram quem está em
   exercício.
 - Vice-prefeito, vice-governador e suplentes de senador estão fora do escopo.
+
+**2026** (mesmo coletor, mesma redação). Arquivo gerado pelo TSE em 05/10/2026 10:14:11.
+Traz 1 governador (Tarcísio, ELEITO no 1º turno), 2 senadores (André do Prado e Guilherme
+Derrite), 70 deputados federais e 94 estaduais. A situação de cada candidatura é gravada
+como está no arquivo:
+- `DS_SIT_TOT_TURNO`: ELEITO, ELEITO POR QP ou ELEITO POR MÉDIA;
+- `DS_SITUACAO_CANDIDATURA`: em 05/10/2026, "#NE" em todas as linhas, ou seja, o arquivo
+  ainda não traz a situação jurídica (sub judice etc.).
+
+Quando a trava for ligada, a tela mostra a seção "Eleitos em 2026 por SP — resultado
+divulgado pelo TSE em 05/10/2026, mandato a partir de 2027". O cruzamento TSE ↔ IBGE não
+se aplica a 2026, porque são cargos estaduais e federais, sem município.
+
+`data_divulgacao` é o `DT_GERACAO` do arquivo, ou seja, quando o TSE gerou aquele arquivo.
+Os arquivos de 2022 e 2024 são regerados diariamente.
 
 **Limites do dado:** são os eleitos segundo o TSE. Posse, cassação ou substituição
 posteriores não aparecem nesse arquivo.
@@ -139,8 +164,23 @@ nenhum par divergente e 18 sem par:
 
 Com o código oficial, 100% das linhas com código ficam resolvidas.
 
-**Autor → parlamentar**, pelo nome normalizado, ignorando o sufixo "(EX-PARLAMENTAR ...)"
-que o arquivo acrescenta a emendas herdadas:
+**Autor → parlamentar: só com vínculo confirmado** (`politicos/vinculo.py`). Uma emenda
+só aparece ligada à página de um político quando:
+1. o nome do autor, sem o sufixo "(EX-PARLAMENTAR ...)", é igual (normalizado) ao de
+   exatamente **um** parlamentar federal da legislatura 57, de qualquer UF (901 nomes da
+   Câmara e do Senado);
+2. esse parlamentar é de SP;
+3. o ano da emenda cai no mandato: o orçamento do ano Y é votado em Y-1;
+4. todas as emendas ligadas a ele têm o mesmo "Código do Autor".
+
+Nos demais casos, o autor aparece exatamente como está na fonte, sem link.
+
+Resultado em 06/10/2026:
+- 2.505 das 3.375 linhas ligadas, a 78 parlamentares de SP;
+- nenhum código de autor ambíguo;
+- as emendas de 2023 (orçamento votado em 2022) ficam sem link.
+
+Antes da regra acima, o cruzamento era só pelo nome:
 - 77 dos 93 parlamentares de SP têm emendas de 2024 em diante no arquivo.
 - Em exercício sem par: Paulo Teixeira, Marina Silva, Sônia Guajajara, Milton Vieira e
   Paulo Soares. Não há, no arquivo, autor com esses nomes.

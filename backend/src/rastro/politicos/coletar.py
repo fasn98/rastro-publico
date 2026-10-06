@@ -96,14 +96,12 @@ def coletor_emendas_arquivo(uf: str, anos: list[int]):
     """Emendas do arquivo em lote do Portal (sem chave), com o código IBGE oficial."""
 
     def coletar(session: Session, client: httpx.Client) -> int:
-        autores = {
-            transparencia.normalizar_nome(nome): pid
-            for pid, nome in session.execute(
-                select(PolPolitico.id, PolPolitico.nome).where(
-                    PolPolitico.uf == uf, PolPolitico.cargo.in_([DEPUTADO_FEDERAL, SENADOR])
-                )
-            )
-        }
+        from rastro.politicos import vinculo
+
+        nomes = vinculo.universo(client)
+        autores, recusados = vinculo.autores_confirmaveis(session, uf, nomes)
+        if recusados:
+            log.info("autores sem vínculo confirmável: %s", recusados)
         r = transparencia.coletar_arquivo(session, client, uf, min(anos), autores)
         log.info("emendas (arquivo): %s", r)
         return r["linhas"]
@@ -169,7 +167,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--anos", help="anos de atuação, ex.: 2023-2026 (câmara, senado, emendas)")
     p.add_argument("--fontes", nargs="+", choices=FONTES, default=list(FONTES))
     p.add_argument(
-        "--eleicoes", default="2022,2024", help="anos de eleição do TSE (padrão: 2022,2024)"
+        "--eleicoes",
+        default="2022,2024,2026",
+        help="anos de eleição do TSE (padrão: 2022,2024,2026)",
     )
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

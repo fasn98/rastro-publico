@@ -189,14 +189,15 @@ def coletar_arquivo(
     client: httpx.Client,
     uf: str,
     ano_min: int,
-    autores: dict[str, int],
+    autores: dict,
 ) -> dict:
     """Emendas do arquivo em lote do Portal (não exige chave).
 
     Grava as linhas do ano `ano_min` em diante cujo destino é a UF (coluna UF) ou cujo
-    autor é um parlamentar da UF (`autores`: nome normalizado -> pol_politico.id). O
-    município de destino vem da coluna oficial "Código Município IBGE" (não do texto).
-    O arquivo bruto guarda só esse recorte do CSV (sem dados pessoais: o arquivo não traz),
+    autor é um parlamentar da UF. O município de destino vem da coluna oficial "Código
+    Município IBGE" (não do texto). `autores`: nome normalizado -> `vinculo.Autor` (só os
+    confirmáveis); a ligação com a página do político segue as regras de `vinculo`.
+    O arquivo bruto guarda só esse recorte do CSV (o arquivo não traz dados pessoais),
     com o SHA-256 do ZIP original.
     """
     nome_uf = NOMES_UF[uf]
@@ -219,23 +220,29 @@ def coletar_arquivo(
     url = str(resp.url)  # endereço final, depois do redirecionamento
     with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
         texto = z.read(MEMBRO_ARQUIVO).decode("latin-1")
-    linhas, sem_autor = [], {}
+    linhas = []
+    fora_do_mandato: dict[str, int] = {}
     for n, r in enumerate(csv.DictReader(io.StringIO(texto), delimiter=";"), start=1):
         if not no_recorte(r):
             continue
         tipo = r["Tipo de Emenda"]
         cod = r["Código Município IBGE"]
         nome_autor = r["Nome do Autor da Emenda"]
-        politico_id = autores.get(normalizar_nome(nome_autor))
-        if politico_id is None and r["UF"] == nome_uf:
-            sem_autor[nome_autor] = sem_autor.get(nome_autor, 0) + 1
+        ano = int(r["Ano da Emenda"])
+        autor = autores.get(normalizar_nome(nome_autor))
+        politico_id = None
+        if autor is not None:
+            if autor.primeiro_ano <= ano <= autor.ultimo_ano:
+                politico_id = autor.politico_id
+            else:
+                fora_do_mandato[nome_autor] = fora_do_mandato.get(nome_autor, 0) + 1
         linhas.append(
             {
                 "fonte_dados": "arquivo",
                 "linha": n,
                 "codigo_emenda": r["Código da Emenda"],
                 "codigo_autor": r["Código do Autor da Emenda"],
-                "ano": int(r["Ano da Emenda"]),
+                "ano": ano,
                 "tipo_emenda": tipo,
                 "transferencia_especial": "especia" in tipo.lower(),
                 "autor": nome_autor,
@@ -257,8 +264,22 @@ def coletar_arquivo(
                 "resposta_id": rid,
             }
         )
+    # regra 4: um mesmo político, um só "Código do Autor"; se houver mais de um, não liga
+    codigos: dict[int, set[str]] = {}
+    for x in linhas:
+        if x["politico_id"]:
+            codigos.setdefault(x["politico_id"], set()).add(x["codigo_autor"])
+    ambiguos = {pid for pid, c in codigos.items() if len(c) > 1}
+    for x in linhas:
+        if x["politico_id"] in ambiguos:
+            x["politico_id"] = None
     session.execute(delete(PolEmenda).where(PolEmenda.fonte_dados == "arquivo"))
     for i in range(0, len(linhas), 2000):
         session.execute(insert(PolEmenda), linhas[i : i + 2000])
     session.commit()
-    return {"linhas": len(linhas), "autores_sem_par_com_destino_na_uf": sem_autor}
+    return {
+        "linhas": len(linhas),
+        "ligadas": sum(1 for x in linhas if x["politico_id"]),
+        "fora_do_mandato": fora_do_mandato,
+        "codigo_de_autor_ambiguo": sorted(ambiguos),
+    }

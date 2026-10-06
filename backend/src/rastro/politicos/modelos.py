@@ -63,6 +63,10 @@ class PolPolitico(Base):
     mandato_inicio: Mapped[date | None] = mapped_column(Date)
     mandato_fim: Mapped[date | None] = mapped_column(Date)
     eleicao_ano: Mapped[int | None]
+    # TSE: situação da candidatura como está no arquivo (DS_SITUACAO_CANDIDATURA, ex.: "APTO",
+    # "#NE") e data de geração do arquivo (DT_GERACAO), isto é, quando o TSE divulgou o dado
+    situacao_candidatura: Mapped[str | None] = mapped_column(String(80))
+    data_divulgacao: Mapped[date | None] = mapped_column(Date)
     url_fonte: Mapped[str] = mapped_column(Text)  # registro na API oficial
     url_pagina: Mapped[str | None] = mapped_column(Text)  # página oficial para pessoas
     resposta_id: Mapped[int | None] = _resposta()

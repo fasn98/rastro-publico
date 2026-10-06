@@ -7,7 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import extract, func, or_, select, true
+from sqlalchemy import and_, extract, func, or_, select
 from sqlalchemy.orm import Session
 
 from rastro.db import get_session
@@ -42,8 +42,22 @@ PENDENTE_TSE = (
 
 
 def _visivel():
-    """Filtro dos políticos exibíveis: os do TSE só depois de validados."""
-    return PolPolitico.fonte != "tse" if not publicacao.tse() else true()
+    """Filtro dos políticos exibíveis: os do TSE só com a trava da eleição ligada."""
+    futuras = PolPolitico.eleicao_ano.in_(publicacao.ELEICOES_FUTURAS)
+    condicoes = [PolPolitico.fonte != "tse"]
+    if publicacao.tse():
+        condicoes.append(and_(PolPolitico.fonte == "tse", ~futuras))
+    if publicacao.tse_2026():
+        condicoes.append(and_(PolPolitico.fonte == "tse", futuras))
+    return or_(*condicoes)
+
+
+def _pode_ver(p: PolPolitico) -> bool:
+    if p.fonte != "tse":
+        return True
+    if p.eleicao_ano in publicacao.ELEICOES_FUTURAS:
+        return publicacao.tse_2026()
+    return publicacao.tse()
 
 
 class Fonte(BaseModel):
@@ -70,6 +84,8 @@ class PoliticoOut(BaseModel):
     mandato_inicio: date | None
     mandato_fim: date | None
     eleicao_ano: int | None
+    situacao_candidatura: str | None
+    data_divulgacao: date | None
     url_fonte: str
     url_pagina: str | None
     resposta_id: int | None
@@ -206,6 +222,7 @@ class GrupoRepresentantes(BaseModel):
     cargo: str
     politicos: list[PoliticoOut]
     pendente: str | None
+    pendente_url: str | None = None  # arquivo de origem que fundamenta a pendência
 
 
 class SecaoRepresentantes(BaseModel):
@@ -231,7 +248,7 @@ def _ordem_nome():
 
 def _politico(session: Session, politico_id: int) -> PolPolitico:
     p = session.get(PolPolitico, politico_id)
-    if p is None or (p.fonte == "tse" and not publicacao.tse()):
+    if p is None or not _pode_ver(p):
         raise HTTPException(404, "Político não encontrado")
     return p
 
@@ -491,8 +508,8 @@ def _emendas(session: Session, filtro, ano: int | None, por_parlamentar=False) -
         aviso = "Emendas ainda não coletadas do Portal da Transparência."
     elif not publicadas:
         aviso = (
-            "Emendas coletadas e em validação (cruzamento do local do gasto com o código "
-            "IBGE); ainda não publicadas."
+            "Emendas coletadas e em validação (vínculo entre autor e parlamentar); "
+            "ainda não publicadas."
         )
     else:
         aviso = None
@@ -577,6 +594,23 @@ SECOES = (
     ("estado", (GOVERNADOR, DEPUTADO_ESTADUAL)),
     ("federal", (SENADOR, DEPUTADO_FEDERAL)),
 )
+CARGOS_2026 = (GOVERNADOR, SENADOR, DEPUTADO_FEDERAL, DEPUTADO_ESTADUAL)
+
+
+def _pendencia(session: Session, cargo: str, uf: str, cod_ibge: int | None):
+    local = (
+        PolPendencia.cod_ibge == cod_ibge
+        if cargo in CARGOS_MUNICIPAIS
+        else PolPendencia.cod_ibge.is_(None)
+    )
+    return session.execute(
+        select(PolPendencia.motivo, PolPendencia.url_fonte).where(
+            PolPendencia.cargo == cargo,
+            PolPendencia.uf == uf,
+            local,
+            PolPendencia.eleicao_ano.not_in(publicacao.ELEICOES_FUTURAS),
+        )
+    ).first()
 
 
 @router.get("/municipios/{cod_ibge}/representantes", response_model=Representantes)
@@ -602,29 +636,51 @@ def representantes(cod_ibge: int, session: SessionDep):
             q = select(PolPolitico).where(
                 PolPolitico.cargo == cargo, PolPolitico.uf == m.uf, _visivel()
             )
+            if chave == "federal":
+                # mandato atual: quem está em exercício na Câmara e no Senado
+                q = q.where(PolPolitico.fonte != "tse", PolPolitico.em_exercicio.is_(True))
+            else:
+                q = q.where(PolPolitico.eleicao_ano.not_in(publicacao.ELEICOES_FUTURAS))
             if cargo in CARGOS_MUNICIPAIS:
                 q = q.where(PolPolitico.cod_ibge == cod_ibge)
-            if cargo in (SENADOR, DEPUTADO_FEDERAL):
-                q = q.where(PolPolitico.em_exercicio.is_(True))
             politicos = session.scalars(q.order_by(*_ordem_nome())).all()
-            pendente = None
-            if not politicos and cargo not in (SENADOR, DEPUTADO_FEDERAL):
-                motivo = None
-                if publicacao.tse():
-                    local = (
-                        PolPendencia.cod_ibge == cod_ibge
-                        if cargo in CARGOS_MUNICIPAIS
-                        else PolPendencia.cod_ibge.is_(None)
-                    )
-                    motivo = session.scalar(
-                        select(PolPendencia.motivo).where(
-                            PolPendencia.cargo == cargo, PolPendencia.uf == m.uf, local
-                        )
-                    )
-                pendente = motivo or PENDENTE_TSE
-            grupos.append(GrupoRepresentantes(cargo=cargo, politicos=politicos, pendente=pendente))
+            pendente = pendente_url = None
+            if not politicos and chave != "federal":
+                p = _pendencia(session, cargo, m.uf, cod_ibge) if publicacao.tse() else None
+                pendente, pendente_url = (p.motivo, p.url_fonte) if p else (PENDENTE_TSE, None)
+            grupos.append(
+                GrupoRepresentantes(
+                    cargo=cargo, politicos=politicos, pendente=pendente, pendente_url=pendente_url
+                )
+            )
         titulo, nota = titulos[chave]
         secoes.append(SecaoRepresentantes(titulo=titulo, nota=nota, grupos=grupos))
+    if publicacao.tse_2026():
+        secoes.append(_secao_2026(session, m.uf))
     return Representantes(
         municipio=MunicipioRef(cod_ibge=m.cod_ibge, nome=m.nome, uf=m.uf), secoes=secoes
+    )
+
+
+def _secao_2026(session: Session, uf: str) -> SecaoRepresentantes:
+    grupos, datas = [], set()
+    for cargo in CARGOS_2026:
+        politicos = session.scalars(
+            select(PolPolitico)
+            .where(
+                PolPolitico.fonte == "tse",
+                PolPolitico.eleicao_ano == 2026,
+                PolPolitico.cargo == cargo,
+                PolPolitico.uf == uf,
+            )
+            .order_by(*_ordem_nome())
+        ).all()
+        datas |= {p.data_divulgacao for p in politicos if p.data_divulgacao}
+        grupos.append(GrupoRepresentantes(cargo=cargo, politicos=politicos, pendente=None))
+    quando = ", ".join(f"{d:%d/%m/%Y}" for d in sorted(datas)) or "—"
+    return SecaoRepresentantes(
+        titulo=f"Eleitos em 2026 por {uf} — resultado divulgado pelo TSE em {quando}, "
+        "mandato a partir de 2027",
+        nota="Situação de cada candidatura exatamente como está no arquivo do TSE.",
+        grupos=grupos,
     )
