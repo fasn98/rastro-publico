@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from rastro import mapeamento as mp
@@ -126,7 +127,7 @@ def _atualizar_contagem(session: Session, ids: set[int]) -> None:
 
 
 def gravar(session: Session, linhas: list[LinhaReconstruida]) -> int:
-    """Insere as linhas que ainda não estão em conta_demonstrativo. Devolve quantas."""
+    """Insere as linhas que ainda não estão em conta_demonstrativo. Devolve quantas entraram."""
     novas, vistos = [], {}
     for li in linhas:
         if li.demonstrativo_id not in vistos:
@@ -134,17 +135,28 @@ def gravar(session: Session, linhas: list[LinhaReconstruida]) -> int:
         if li.chave() not in vistos[li.demonstrativo_id]:
             vistos[li.demonstrativo_id].add(li.chave())
             novas.append(li)
+    inseridas = 0
     if novas:
-        session.execute(
-            ContaDemonstrativo.__table__.insert(),
-            [
-                {c: getattr(li, c) for c in (*CAMPOS, "valor", "resposta_id", "demonstrativo_id")}
-                for li in novas
-            ],
-        )
+        # ON CONFLICT: se outro processo gravou a mesma célula entre a leitura de
+        # `_existentes` e este insert, a linha dele vale e esta é ignorada
+        ids = session.scalars(
+            pg_insert(ContaDemonstrativo)
+            .values(
+                [
+                    {
+                        c: getattr(li, c)
+                        for c in (*CAMPOS, "valor", "resposta_id", "demonstrativo_id")
+                    }
+                    for li in novas
+                ]
+            )
+            .on_conflict_do_nothing(constraint="uq_conta_demonstrativo")
+            .returning(ContaDemonstrativo.id)
+        ).all()
+        inseridas = len(ids)
         _atualizar_contagem(session, {li.demonstrativo_id for li in novas})
     session.commit()
-    return len(novas)
+    return inseridas
 
 
 def aplicar_mapeamento(

@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from rastro import mapeamento as mp
@@ -185,6 +186,23 @@ def _por_instituicao(linhas: list[dict]) -> dict[str | None, list[dict]]:
     return grupos
 
 
+CHAVE_CONTA = ("anexo", "rotulo", "cod_conta", "conta", "coluna")
+
+
+def _sem_duplicatas(linhas: list[dict], cod_ibge: int) -> list[dict]:
+    """Uma linha por célula. Na amostra real a API não repetiu nenhuma; se repetir, fica a
+    primeira e o caso é registrado no log (a resposta inteira continua no bruto)."""
+    vistas, unicas = set(), []
+    for i in linhas:
+        chave = tuple(i.get(c) for c in CHAVE_CONTA)
+        if chave in vistas:
+            log.warning("Linha repetida na API (ente %s): %s", cod_ibge, chave)
+            continue
+        vistas.add(chave)
+        unicas.append(i)
+    return unicas
+
+
 def gravar(
     session: Session,
     cod_ibge: int,
@@ -212,7 +230,7 @@ def gravar(
     total = 0
     for poder, linhas_poder in por_poder.items():
         for instituicao, linhas in _por_instituicao(linhas_poder).items():
-            gravadas = [i for i in linhas if mapeamento.aceita(i)]
+            gravadas = _sem_duplicatas([i for i in linhas if mapeamento.aceita(i)], cod_ibge)
             cab = DemonstrativoSiconfi(
                 cod_ibge=cod_ibge,
                 exercicio=exercicio,
@@ -233,7 +251,9 @@ def gravar(
             )
             if gravadas:
                 session.execute(
-                    ContaDemonstrativo.__table__.insert(),
+                    pg_insert(ContaDemonstrativo).on_conflict_do_nothing(
+                        constraint="uq_conta_demonstrativo"
+                    ),
                     [
                         {
                             "demonstrativo_id": cab.id,

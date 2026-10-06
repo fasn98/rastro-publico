@@ -53,6 +53,22 @@ def test_regras_do_mapeamento(linha, aceita):
     assert mp.padrao().aceita(linha) is aceita
 
 
+def _confere_origem(session, linhas):
+    """Cada linha está, com o mesmo valor, na resposta bruta para a qual aponta."""
+    from rastro.coletores.arquivo import ler_payload
+    from rastro.models import PayloadBruto, RespostaBruta
+
+    assert linhas
+    for li in linhas:
+        r = session.get(RespostaBruta, li.resposta_id)
+        itens = json.loads(ler_payload(session.get(PayloadBruto, r.sha256)), parse_float=D)
+        assert any(
+            all(i[c] == getattr(li, c) for c in ("anexo", "rotulo", "cod_conta", "conta", "coluna"))
+            and i["valor"] == li.valor
+            for i in itens["items"]
+        ), (li.cod_conta, li.coluna, li.valor, li.resposta_id)
+
+
 @pytest.fixture
 def coletado(session, engine):
     ente = EnteSiconfi(**ADAMANTINA)
@@ -111,7 +127,7 @@ def test_reconstroi_linha_fora_do_mapeamento(session, coletado):
     ]  # fmt: skip
     # semestres 1 e 2 vieram do mesmo fixture: cada linha aparece nos dois períodos
     assert len(linhas) == 2 * len(esperado)
-    assert all(li.resposta_id for li in linhas)
+    _confere_origem(session, linhas)
     valores = sorted(str(li.valor) for li in linhas)
     assert valores == sorted(str(i["valor"]) for i in esperado * 2)
 
@@ -137,6 +153,11 @@ def test_aplicar_mapeamento_poda_e_reconstroi(session, coletado, tmp_path):
     assert resumo["podadas"] == 0 and resumo["reconstruidas"] > 0
     depois = session.scalar(select(func.count()).select_from(ContaDemonstrativo))
     assert depois == antes + resumo["reconstruidas"]
+    novas = session.scalars(
+        select(ContaDemonstrativo).filter_by(cod_conta="DespesaComPessoalBruta")
+    ).all()
+    assert len(novas) == resumo["reconstruidas"]
+    _confere_origem(session, novas)
 
     # voltar ao mapeamento original poda exatamente o que foi acrescentado
     resumo = rc.aplicar_mapeamento(session, mp.padrao(), podar=True)
@@ -170,3 +191,30 @@ def test_fixture_tem_linhas_fora_do_mapeamento():
     itens = carregar("adamantina_2025_rgf2_E.json")["items"]
     assert any(not mp.padrao().aceita(i) for i in itens)
     assert json.dumps(itens)  # serializável
+
+
+def test_gravar_concorrente_nao_duplica(session, coletado, monkeypatch):
+    """Dois processos que leram a tabela antes de qualquer um gravar: a restrição de
+    unicidade + ON CONFLICT fazem o segundo não inserir nada."""
+    from rastro import reconstrucao as rc
+
+    filtro = rc.Filtro(anexo="RGF-Anexo 01", cod_conta=["DespesaComPessoalBruta"])
+    linhas = list(rc.reconstruir(session, filtro))
+    monkeypatch.setattr(rc, "_existentes", lambda *_: set())  # leitura "velha"
+    assert rc.gravar(session, linhas) == len(linhas)
+    assert rc.gravar(session, linhas) == 0
+    total = session.scalar(
+        select(func.count())
+        .select_from(ContaDemonstrativo)
+        .filter_by(cod_conta="DespesaComPessoalBruta")
+    )
+    assert total == len(linhas)
+
+
+def test_linha_repetida_na_api_entra_uma_vez(session):
+    from rastro.coletores.siconfi_demonstrativos import _sem_duplicatas
+
+    linha = {"anexo": "a", "rotulo": "r", "cod_conta": "c", "conta": "x", "coluna": "k"}
+    assert _sem_duplicatas([dict(linha, valor=1), dict(linha, valor=2)], 1) == [
+        dict(linha, valor=1)
+    ]

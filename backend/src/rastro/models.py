@@ -137,6 +137,14 @@ class ContaDemonstrativo(Base):
     """Uma célula de um anexo do RREO/RGF: conta x coluna = valor."""
 
     __tablename__ = "conta_demonstrativo"
+    # uma célula por demonstrativo: impede linhas em dobro mesmo com dois processos
+    # gravando ao mesmo tempo (ex.: duas reconstruções concorrentes)
+    __table_args__ = (
+        UniqueConstraint(
+            "demonstrativo_id", "anexo", "rotulo", "cod_conta", "conta", "coluna",
+            name="uq_conta_demonstrativo",
+        ),
+    )  # fmt: skip
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     demonstrativo_id: Mapped[int] = mapped_column(
