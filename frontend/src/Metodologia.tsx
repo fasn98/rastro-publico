@@ -198,6 +198,29 @@ export default function Metodologia() {
         <li>Municípios ainda não coletados aparecem sem nota.</li>
       </ul>
 
+      <h3>Auditoria: de cada número até a resposta original</h3>
+      <p>
+        Toda resposta recebida das APIs oficiais é guardada antes de qualquer processamento,
+        inclusive respostas de erro: os bytes exatamente como chegaram, a URL completa com
+        parâmetros, a data e hora e o SHA-256 dos bytes. Cada valor gravado (cada célula do
+        RREO/RGF, cada município, cada entrega) aponta para a resposta de onde saiu.
+      </p>
+      <ul>
+        <li>
+          <code>GET /api/respostas/{"{id}"}/bruto</code>: os bytes originais. O cabeçalho{" "}
+          <code>X-Rastro-SHA256</code> traz o hash, e quem baixar pode conferir com{" "}
+          <code>sha256sum</code>.
+        </li>
+        <li>
+          <code>GET /api/respostas/{"{id}"}</code>: URL, data e verificação de integridade feita na hora.
+        </li>
+        <li>
+          <code>GET /api/demonstrativos/{"{id}"}/respostas</code>: as respostas (páginas) que formam um
+          relatório; <code>/api/demonstrativos/{"{id}"}/contas</code> traz o <code>resposta_id</code> de
+          cada valor.
+        </li>
+      </ul>
+
       <h3>Fontes</h3>
       <ul>
         <li>

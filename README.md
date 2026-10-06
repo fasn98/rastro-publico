@@ -21,6 +21,37 @@ coletores (Python)  ──►  PostgreSQL  ──►  API (FastAPI)  ──►  
 Cada execução de coletor fica registrada na tabela `coleta` (fonte, status, quantidade
 de registros, erro), consultável em `GET /api/coletas`.
 
+### Auditoria: todo número rastreável até a resposta original
+
+Princípio do portal: todo número precisa ser auditável até a resposta original da fonte.
+Isso é feito no core (`backend/src/rastro/coletores/arquivo.py`) e vale para qualquer
+coletor que use `novo_cliente()`:
+
+- Toda resposta HTTP é arquivada **antes** de qualquer processamento, em transação
+  própria (sobrevive a falhas e rollbacks da coleta), inclusive respostas de erro e novas
+  tentativas.
+- `resposta_bruta`: URL completa com parâmetros, método, status HTTP, content-type, data,
+  duração, tamanho, SHA-256 e a coleta (`coleta_id`) em que ocorreu.
+- `payload_bruto`: os bytes originais, comprimidos com gzip, indexados pelo SHA-256 dos
+  bytes **originais**; conteúdo idêntico é guardado uma única vez.
+- `municipio`, `ente_siconfi`, `entrega_siconfi` e `conta_demonstrativo` têm
+  `resposta_id`: cada valor aponta para a resposta (a página exata) de onde saiu.
+- API: `GET /api/respostas/{id}/bruto` (bytes originais, cabeçalho `X-Rastro-SHA256`),
+  `GET /api/respostas/{id}` (metadados + verificação de integridade),
+  `GET /api/demonstrativos/{id}/respostas`.
+- `uv run rastro verificar-respostas` recalcula o SHA-256 de todo o arquivo.
+- `RASTRO_ARQUIVAR_RESPOSTAS=false` desliga o arquivo (não recomendado).
+
+Dados coletados antes desta funcionalidade não têm origem; recolete com `--forcar`.
+
+**Espaço em disco (medido na amostra de 10 municípios × 4 anos, 40 itens):** 507
+respostas, 193 MB de respostas originais que ocupam **8,8 MB** no banco (gzip, ~20×), e
+145 MB para as 517 mil linhas de `conta_demonstrativo` (~270 bytes/linha). Projeção para
+os 645 municípios de SP × 2022–2025 (2.580 itens; a amostra tem mais cidades grandes que
+a média, então é um teto): **~0,6 GB** de respostas brutas e **~6 a 9 GB** de linhas de
+demonstrativos (22 a 33 milhões de linhas). Confira o limite de armazenamento do banco
+antes da coleta completa.
+
 ### Fontes implementadas
 
 | Fonte | Comando | Tabela |

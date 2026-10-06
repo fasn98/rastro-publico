@@ -24,6 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from rastro.coletores import siconfi
+from rastro.coletores.arquivo import coleta_atual
 from rastro.coletores.base import executar, novo_cliente
 from rastro.coletores.siconfi_demonstrativos import coletar_ente, selecionar_entes
 from rastro.db import get_sessionmaker
@@ -204,6 +205,7 @@ def main(argv: list[str] | None = None) -> int:
         coleta = Coleta(fonte="siconfi-lote", status="executando")
         session.add(coleta)
         session.commit()
+        coleta_atual.set(coleta.id)  # liga cada resposta bruta a esta coleta
         try:
             with novo_cliente() as client:
                 resumo = executar_lote(session, client, lote, args.forcar, args.max_tentativas)

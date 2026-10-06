@@ -209,6 +209,18 @@ export default function Indicadores({ cod }: { cod: number }) {
         {ref && ` · RGF até o ${ref.periodo}º ${PERIODO[ref.periodicidade]}`}
         {execucao && ` · RREO até o ${execucao.periodo}º ${PERIODO[execucao.periodicidade]}`} ·
         Fonte: SICONFI/Tesouro Nacional, valores declarados pelo ente
+        {(ref || execucao) && " · respostas originais da API: "}
+        {ref && (
+          <a href={`/api/demonstrativos/${ref.demonstrativo_id}/respostas`} target="_blank" rel="noreferrer">
+            RGF
+          </a>
+        )}
+        {ref && execucao && " · "}
+        {execucao && (
+          <a href={`/api/demonstrativos/${execucao.demonstrativo_id}/respostas`} target="_blank" rel="noreferrer">
+            RREO
+          </a>
+        )}
       </p>
 
       <NotaRanking cod={cod} />

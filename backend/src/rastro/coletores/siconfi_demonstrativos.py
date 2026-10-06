@@ -94,6 +94,7 @@ def gravar_extrato(session: Session, cod_ibge: int, exercicio: int, itens: list[
             tipo_relatorio=i.get("tipo_relatorio"),
             forma_envio=i.get("forma_envio"),
             data_status=_data(i.get("data_status")),
+            resposta_id=i.get("_resposta_id"),
         )
         for i in itens
     )
@@ -220,6 +221,7 @@ def gravar(session: Session, cod_ibge: int, exercicio: int, e: Entrega, por_pode
                         "cod_conta": i["cod_conta"],
                         "conta": i["conta"],
                         "valor": i.get("valor"),
+                        "resposta_id": i.get("_resposta_id"),
                     }
                     for i in linhas
                 ],
