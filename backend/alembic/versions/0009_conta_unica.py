@@ -20,8 +20,17 @@ COLUNAS = ["demonstrativo_id", "anexo", "rotulo", "cod_conta", "conta", "coluna"
 def upgrade() -> None:
     # remove duplicatas eventuais (fica a de menor id) antes de criar a restrição
     op.execute(
-        "DELETE FROM conta_demonstrativo a USING conta_demonstrativo b "
-        "WHERE a.id > b.id AND " + " AND ".join(f"a.{c} = b.{c}" for c in COLUNAS)
+        """
+        DELETE FROM conta_demonstrativo a
+        USING conta_demonstrativo b
+        WHERE a.id > b.id
+          AND a.demonstrativo_id = b.demonstrativo_id
+          AND a.anexo = b.anexo
+          AND a.rotulo = b.rotulo
+          AND a.cod_conta = b.cod_conta
+          AND a.conta = b.conta
+          AND a.coluna = b.coluna
+        """
     )
     op.create_unique_constraint("uq_conta_demonstrativo", "conta_demonstrativo", COLUNAS)
 
