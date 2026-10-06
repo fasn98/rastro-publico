@@ -6,7 +6,7 @@ import {
   type Indicadores as Dados,
   type Situacao,
 } from "./api";
-import { urlAuditoria } from "./dados";
+import { AUDITORIA_ATIVA, PREVIA, urlAuditoria } from "./dados";
 import { nota10 } from "./Ranking";
 import Evolucao from "./Evolucao";
 
@@ -210,21 +210,21 @@ export default function Indicadores({ cod }: { cod: number }) {
         {ref && ` · RGF até o ${ref.periodo}º ${PERIODO[ref.periodicidade]}`}
         {execucao && ` · RREO até o ${execucao.periodo}º ${PERIODO[execucao.periodicidade]}`} ·
         Fonte: SICONFI/Tesouro Nacional, valores declarados pelo ente
-        {(ref || execucao) && " · respostas originais da API: "}
-        {ref && (
+        {AUDITORIA_ATIVA && (ref || execucao) && " · respostas originais da API: "}
+        {AUDITORIA_ATIVA && ref && (
           <a href={urlAuditoria(`/api/demonstrativos/${ref.demonstrativo_id}/respostas`)} target="_blank" rel="noreferrer">
             RGF
           </a>
         )}
-        {ref && execucao && " · "}
-        {execucao && (
+        {AUDITORIA_ATIVA && ref && execucao && " · "}
+        {AUDITORIA_ATIVA && execucao && (
           <a href={urlAuditoria(`/api/demonstrativos/${execucao.demonstrativo_id}/respostas`)} target="_blank" rel="noreferrer">
             RREO
           </a>
         )}
       </p>
 
-      <NotaRanking cod={cod} />
+      {!PREVIA && <NotaRanking cod={cod} />}
 
       {pessoal.length > 0 && (
         <div className="bloco">

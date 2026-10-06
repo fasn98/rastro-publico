@@ -104,8 +104,14 @@ class _Escritor:
         self.bytes += len(conteudo)
 
 
-def exportar(saida: Path, uf: str = "SP", session: Session | None = None) -> dict:
-    """Gera os arquivos do site em `saida` e devolve o manifesto."""
+def exportar(
+    saida: Path, uf: str = "SP", session: Session | None = None, sem_ranking: bool = False
+) -> dict:
+    """Gera os arquivos do site em `saida` e devolve o manifesto.
+
+    `sem_ranking` (prévia com dados fiscais parciais): o ranking e as notas não são
+    exportados, nem ficam acessíveis por URL.
+    """
     uf = uf.upper()
     api = _cliente(session)
     out = _Escritor(saida)
@@ -163,7 +169,7 @@ def exportar(saida: Path, uf: str = "SP", session: Session | None = None) -> dic
             {
                 "detalhe": detalhe,
                 "serie": get(f"/api/entes/{cod}/indicadores/serie"),
-                "nota": get(f"/api/ranking/{cod}", opcional=True),
+                "nota": None if sem_ranking else get(f"/api/ranking/{cod}", opcional=True),
                 "representantes": {
                     "municipio": rep["municipio"],
                     "secoes": [secao(sec) for sec in rep["secoes"]],
@@ -183,7 +189,7 @@ def exportar(saida: Path, uf: str = "SP", session: Session | None = None) -> dic
         if not pagina["itens"] or deslocamento >= pagina["total"]:
             break
 
-    ranking = get(f"/api/ranking?uf={uf}", opcional=True)
+    ranking = None if sem_ranking else get(f"/api/ranking?uf={uf}", opcional=True)
     if ranking:
         out.json("ranking.json", ranking)
         out.bruto("ranking.csv", api.get(f"/api/ranking.csv?uf={uf}").content)

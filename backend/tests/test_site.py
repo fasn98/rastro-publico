@@ -255,3 +255,13 @@ def test_token_nunca_aparece_em_mensagens():
         publicacao.listar("https://127.0.0.1:9/repo-inexistente.git", token)
     assert token not in str(erro.value)
     assert "***" in str(erro.value) or "127.0.0.1" in str(erro.value)
+
+
+def test_previa_sem_ranking_nao_exporta_ranking_nem_notas(banco, tmp_path):
+    dados = tmp_path / "dados"
+    manifesto = site.exportar(dados, "SP", banco, sem_ranking=True)
+    assert not (dados / "ranking.json").exists() and not (dados / "ranking.csv").exists()
+    for arq in (dados / "municipios").glob("*.json"):
+        assert json.loads(arq.read_text())["nota"] is None
+    assert manifesto["contagens"]["municipios_com_nota"] == 0
+    assert site.verificar(dados) == []
