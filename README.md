@@ -21,6 +21,45 @@ coletores (Python)  ──►  PostgreSQL  ──►  API (FastAPI)  ──►  
 Cada execução de coletor fica registrada na tabela `coleta` (fonte, status, quantidade
 de registros, erro), consultável em `GET /api/coletas`.
 
+### Auditoria: respostas brutas das fontes
+
+Todo número do portal precisa ser rastreável até a resposta original da fonte. Por isso,
+**toda resposta HTTP recebida por um coletor é gravada**, sem exceção de fonte ou formato
+(JSON, CSV, ZIP), inclusive novas tentativas e respostas de erro:
+
+| Tabela | Conteúdo |
+|---|---|
+| `resposta_bruta` | uma linha por resposta: `coleta_id`, fonte, método, **URL completa com parâmetros**, status HTTP, `content-type`, data/hora de recebimento, **SHA-256 do corpo original** e tamanho |
+| `conteudo_bruto` | o corpo, comprimido com gzip, guardado **uma vez por SHA-256** (respostas idênticas, comuns em coletas incrementais, não ocupam espaço de novo) |
+
+Como funciona: `executar()` (e o lote do SICONFI) instala um *event hook* de resposta no
+cliente httpx enquanto o coletor roda (`gravar_respostas` em `coletores/base.py`). Cada
+resposta é gravada em transação própria, já confirmada, para ficar registrada mesmo
+quando a coleta falha. Coletores novos não precisam fazer nada para ter isso.
+
+- **LGPD:** quando a fonte devolve dados pessoais que não podem ser armazenados (ex.: CPF
+  e data de nascimento no detalhe de deputado da Câmara), o coletor passa um `redator` a
+  `get_json`. Grava-se a versão sem esses campos, com `redacao` descrevendo o que foi
+  removido; o SHA-256 do **original** continua registrado em `sha256_original`.
+- **Ligar um dado à resposta:** `get_json(..., com_origem=True)` devolve
+  `(dados, resposta_id)` para o coletor guardar o id junto do dado.
+- **Conferir:** `GET /api/coletas/{id}/respostas` lista as respostas de uma coleta;
+  `GET /api/respostas/{id}` traz os metadados; `GET /api/respostas/{id}/corpo` devolve o
+  corpo gravado, com os cabeçalhos `X-SHA256-Original`, `X-SHA256-Gravado` e `X-Fonte-URL`.
+  Para verificar: `curl .../corpo | sha256sum` deve dar o mesmo hash; baixar de novo a
+  URL da fonte dá o mesmo hash enquanto a fonte não mudar o conteúdo.
+- O hash é do corpo **já descomprimido** (sem a compressão de transporte do HTTP), igual
+  ao que se obtém com `curl` sem `--compressed`.
+
+Medido em 06/10/2026: a lista de municípios do IBGE (2,47 MB) e os entes do SICONFI
+(2 páginas, 0,87 MB) ocupam 230 kB em `conteudo_bruto` (gzip).
+
+Limitações atuais: as tabelas já existentes (`municipio`, `ente_siconfi`,
+`demonstrativo_siconfi`...) ainda não guardam o `resposta_id` de cada linha; a ligação é
+pela coleta (`coleta_id`) e pela URL, que identifica o ente, o exercício, o período e o
+anexo. Arquivos muito grandes (ex.: ZIPs do TSE) são gravados inteiros, a menos que o
+coletor use um `redator` para gravar só o recorte necessário.
+
 ### Fontes implementadas
 
 | Fonte | Comando | Tabela |

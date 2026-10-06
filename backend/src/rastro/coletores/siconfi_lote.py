@@ -24,7 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from rastro.coletores import siconfi
-from rastro.coletores.base import executar, novo_cliente
+from rastro.coletores.base import executar, gravar_respostas, novo_cliente
 from rastro.coletores.siconfi_demonstrativos import coletar_ente, selecionar_entes
 from rastro.db import get_sessionmaker
 from rastro.models import Coleta, EnteSiconfi, ItemLote, LoteColeta
@@ -205,7 +205,7 @@ def main(argv: list[str] | None = None) -> int:
         session.add(coleta)
         session.commit()
         try:
-            with novo_cliente() as client:
+            with novo_cliente() as client, gravar_respostas(client, session, coleta):
                 resumo = executar_lote(session, client, lote, args.forcar, args.max_tentativas)
         except KeyboardInterrupt:
             session.rollback()

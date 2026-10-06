@@ -1,11 +1,16 @@
+import gzip
+import hashlib
 import json
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
+from sqlalchemy import Engine, insert
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 from tenacity import (
     retry,
@@ -15,7 +20,7 @@ from tenacity import (
 )
 
 from rastro.config import get_settings
-from rastro.models import Coleta
+from rastro.models import Coleta, ConteudoBruto, RespostaBruta
 
 log = logging.getLogger(__name__)
 
@@ -58,10 +63,101 @@ def _erro_transitorio(exc: BaseException) -> bool:
     return False
 
 
-def get_json(client: httpx.Client, url: str, params: dict | None = None, *, decimal=False):
+# Função que recebe o corpo original e devolve (corpo a gravar, descrição do que foi removido).
+# Usada quando a resposta traz dados pessoais que não podem ser armazenados (LGPD).
+Redator = Callable[[bytes], tuple[bytes, str]]
+
+_EXT_REDATOR = "rastro_redator"
+_EXT_RESPOSTA_ID = "rastro_resposta_id"
+
+
+class GravadorRespostas:
+    """Grava cada resposta HTTP recebida em `resposta_bruta`/`conteudo_bruto`.
+
+    Instalado como *event hook* de resposta do cliente httpx, vale para qualquer requisição
+    feita pelo coletor (JSON, CSV, ZIP...), inclusive novas tentativas e respostas de erro.
+    Grava em transação própria, já confirmada, para que a resposta fique registrada mesmo
+    quando a coleta falha e a sessão do coletor é desfeita.
+    """
+
+    def __init__(self, engine: Engine, coleta_id: int | None, fonte: str | None):
+        self.engine = engine
+        self.coleta_id = coleta_id
+        self.fonte = fonte
+
+    def __call__(self, response: httpx.Response) -> None:
+        original = response.read()
+        sha_original = hashlib.sha256(original).hexdigest()
+        redator: Redator | None = response.request.extensions.get(_EXT_REDATOR)
+        gravado, redacao = (original, None)
+        if redator is not None and response.is_success:
+            gravado, redacao = redator(original)
+        sha_gravado = hashlib.sha256(gravado).hexdigest()
+        with self.engine.begin() as conn:
+            conn.execute(
+                pg_insert(ConteudoBruto)
+                .values(
+                    sha256=sha_gravado,
+                    tamanho=len(gravado),
+                    corpo_gzip=gzip.compress(gravado, mtime=0),
+                )
+                .on_conflict_do_nothing(index_elements=[ConteudoBruto.sha256])
+            )
+            resposta_id = conn.execute(
+                insert(RespostaBruta)
+                .values(
+                    coleta_id=self.coleta_id,
+                    fonte=self.fonte,
+                    metodo=response.request.method,
+                    url=str(response.request.url),
+                    status_http=response.status_code,
+                    content_type=response.headers.get("content-type"),
+                    recebida_em=datetime.now(UTC),
+                    sha256_original=sha_original,
+                    tamanho_original=len(original),
+                    sha256_gravado=sha_gravado,
+                    redacao=redacao,
+                )
+                .returning(RespostaBruta.id)
+            ).scalar_one()
+        # permite ao coletor ligar o dado gravado à resposta de origem
+        response.request.extensions[_EXT_RESPOSTA_ID] = resposta_id
+
+
+@contextmanager
+def gravar_respostas(
+    client: httpx.Client, session: Session, coleta: Coleta | None, fonte: str | None = None
+) -> Iterator[GravadorRespostas]:
+    """Enquanto ativo, toda resposta recebida pelo `client` é gravada para auditoria."""
+    gravador = GravadorRespostas(
+        session.get_bind(), coleta.id if coleta else None, fonte or (coleta and coleta.fonte)
+    )
+    client.event_hooks["response"].append(gravador)
+    try:
+        yield gravador
+    finally:
+        client.event_hooks["response"].remove(gravador)
+
+
+def resposta_id(response: httpx.Response) -> int | None:
+    """Id em `resposta_bruta` da resposta (nulo se não havia gravação ativa)."""
+    return response.request.extensions.get(_EXT_RESPOSTA_ID)
+
+
+def get_json(
+    client: httpx.Client,
+    url: str,
+    params: dict | None = None,
+    *,
+    decimal=False,
+    redator: Redator | None = None,
+    com_origem=False,
+):
     """GET com novas tentativas para falhas de rede, 429 e 5xx.
 
     Com `decimal=True`, números com casas decimais viram `Decimal` (valores monetários).
+    `redator` remove dados pessoais do que é gravado em `resposta_bruta` (o SHA-256 do
+    original continua registrado). Com `com_origem=True`, devolve `(dados, resposta_id)`.
     """
 
     @retry(
@@ -71,11 +167,14 @@ def get_json(client: httpx.Client, url: str, params: dict | None = None, *, deci
         reraise=True,
     )
     def _get():
-        resp = client.get(url, params=params)
+        extensions = {_EXT_REDATOR: redator} if redator else None
+        resp = client.get(url, params=params, extensions=extensions)
         resp.raise_for_status()
         if decimal:
-            return json.loads(resp.content, parse_float=Decimal)
-        return resp.json()
+            dados = json.loads(resp.content, parse_float=Decimal)
+        else:
+            dados = resp.json()
+        return (dados, resposta_id(resp)) if com_origem else dados
 
     return _get()
 
@@ -98,7 +197,8 @@ def executar(session: Session, fonte: str, coletor: Coletor, client: httpx.Clien
     session.add(coleta)
     session.commit()
     try:
-        coleta.registros = coletor(session, client)
+        with gravar_respostas(client, session, coleta):
+            coleta.registros = coletor(session, client)
         coleta.status = "sucesso"
     except ColetaParcial as exc:
         session.rollback()

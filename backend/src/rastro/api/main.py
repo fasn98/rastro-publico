@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from rastro import indicadores as ind
 from rastro import ranking as rk
+from rastro.api.auditoria import router as auditoria
 from rastro.db import get_session
 from rastro.models import (
     Coleta,
@@ -24,6 +25,7 @@ from rastro.models import (
 )
 
 app = FastAPI(title="Rastro Público", version="0.1.0")
+app.include_router(auditoria)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],

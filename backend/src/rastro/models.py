@@ -6,6 +6,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -221,3 +222,39 @@ class NotaRanking(Base):
     posicao_faixa: Mapped[int | None]
     # nota, peso e valores/notas por ano de cada indicador
     componentes: Mapped[dict] = mapped_column(JSONB)
+
+
+class ConteudoBruto(Base):
+    """Corpo de uma resposta HTTP, guardado uma única vez por SHA-256 (gzip)."""
+
+    __tablename__ = "conteudo_bruto"
+
+    # SHA-256 do corpo como gravado (o original, ou a versão sem dados pessoais)
+    sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tamanho: Mapped[int] = mapped_column(BigInteger)
+    corpo_gzip: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class RespostaBruta(Base):
+    """Cada resposta recebida de uma fonte, para auditar qualquer número até a origem."""
+
+    __tablename__ = "resposta_bruta"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    coleta_id: Mapped[int | None] = mapped_column(
+        ForeignKey("coleta.id", ondelete="SET NULL"), index=True
+    )
+    fonte: Mapped[str | None] = mapped_column(String(60), index=True)
+    metodo: Mapped[str] = mapped_column(String(10))
+    # URL completa, com os parâmetros, como enviada à fonte
+    url: Mapped[str] = mapped_column(Text)
+    status_http: Mapped[int]
+    content_type: Mapped[str | None] = mapped_column(String(200))
+    recebida_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    # SHA-256 dos bytes exatamente como recebidos da fonte
+    sha256_original: Mapped[str] = mapped_column(String(64), index=True)
+    tamanho_original: Mapped[int] = mapped_column(BigInteger)
+    # Conteúdo gravado. Difere do original só quando o coletor remove dados pessoais (LGPD)
+    sha256_gravado: Mapped[str] = mapped_column(ForeignKey("conteudo_bruto.sha256"), index=True)
+    # Descrição do que foi removido antes de gravar (nulo = gravado como recebido)
+    redacao: Mapped[str | None] = mapped_column(Text)
