@@ -192,6 +192,10 @@ def exportar(saida: Path, uf: str = "SP", session: Session | None = None) -> dic
     for pid in sorted(politicos):
         detalhe = get(f"/api/politicos/{pid}")
         out.json(f"politicos/{pid}.json", detalhe)
+        if detalhe.get("fonte") == "tse":
+            # eleitos do TSE não têm proposições, votos, presenças, cota nem emendas: a
+            # página deles não lê essas listas (arquivo ausente = lista vazia)
+            continue
         anos = sorted({c["ano"] for k in ANOS_POLITICO for c in detalhe.get(k, [])}, reverse=True)
         for ano in [None, *anos]:
             nome_ano = "todos" if ano is None else str(ano)

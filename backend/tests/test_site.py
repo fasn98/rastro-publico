@@ -256,3 +256,14 @@ def test_token_nunca_aparece_em_mensagens():
         publicacao.listar("https://127.0.0.1:9/repo-inexistente.git", token)
     assert token not in str(erro.value)
     assert "***" in str(erro.value) or "127.0.0.1" in str(erro.value)
+
+
+def test_eleito_do_tse_so_tem_o_arquivo_de_detalhe(com_politicos, tmp_path, monkeypatch):
+    """Eleitos do TSE não têm listas (proposições, votos...): só o detalhe é exportado."""
+    _trava(monkeypatch, "RASTRO_POL_PUBLICAR_TSE", "1")
+    dados = tmp_path / "dados"
+    site.exportar(dados, "SP", com_politicos)
+    assert (dados / "politicos" / "2.json").exists()
+    assert not (dados / "politicos" / "2").exists()
+    assert (dados / "politicos" / "1" / "emendas" / "todos.json").exists()
+    assert site.verificar(dados) == []
