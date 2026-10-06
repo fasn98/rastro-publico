@@ -96,7 +96,9 @@ def test_municipio_aponta_para_a_resposta(session, cliente):
 
 
 @respx.mock
-def test_cada_valor_do_demonstrativo_aponta_para_a_pagina_de_origem(session, cliente, monkeypatch):
+def test_cada_valor_do_demonstrativo_aponta_para_a_pagina_de_origem(
+    session, cliente, monkeypatch, mapeamento_total
+):
     """RREO em duas páginas: cada linha aponta para a página exata de onde veio."""
     from rastro.config import get_settings
 

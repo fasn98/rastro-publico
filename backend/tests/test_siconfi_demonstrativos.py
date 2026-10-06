@@ -12,6 +12,13 @@ from rastro.coletores import siconfi_demonstrativos as sd
 from rastro.coletores.base import executar
 from rastro.models import ContaDemonstrativo, DemonstrativoSiconfi, EnteSiconfi
 
+
+@pytest.fixture(autouse=True)
+def _grava_tudo(mapeamento_total):
+    # estes testes cobrem a mecânica do coletor; o filtro tem testes próprios
+    pass
+
+
 ADAMANTINA = EnteSiconfi(cod_ibge=3500105, nome="Adamantina", esfera="M", uf="SP")
 
 

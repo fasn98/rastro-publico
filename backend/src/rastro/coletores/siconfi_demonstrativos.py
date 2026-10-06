@@ -18,10 +18,12 @@ import httpx
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from rastro import mapeamento as mp
 from rastro.coletores.base import ColetaParcial
 from rastro.coletores.siconfi import paginas
 from rastro.models import (
     ContaDemonstrativo,
+    DemonstrativoResposta,
     DemonstrativoSiconfi,
     EnteSiconfi,
     EntregaSiconfi,
@@ -183,8 +185,21 @@ def _por_instituicao(linhas: list[dict]) -> dict[str | None, list[dict]]:
     return grupos
 
 
-def gravar(session: Session, cod_ibge: int, exercicio: int, e: Entrega, por_poder: dict) -> int:
-    """Substitui o relatório (todos os poderes e instituições) pelas linhas baixadas."""
+def gravar(
+    session: Session,
+    cod_ibge: int,
+    exercicio: int,
+    e: Entrega,
+    por_poder: dict,
+    mapeamento: mp.Mapeamento | None = None,
+) -> int:
+    """Substitui o relatório (todos os poderes e instituições) pelas linhas baixadas.
+
+    Grava em `conta_demonstrativo` só as linhas do mapeamento; todas continuam no arquivo
+    bruto, ligado ao demonstrativo por `demonstrativo_resposta`. Devolve o total de linhas
+    devolvidas pela API.
+    """
+    mapeamento = mapeamento or mp.padrao()
     session.execute(
         delete(DemonstrativoSiconfi).where(
             DemonstrativoSiconfi.cod_ibge == cod_ibge,
@@ -197,6 +212,7 @@ def gravar(session: Session, cod_ibge: int, exercicio: int, e: Entrega, por_pode
     total = 0
     for poder, linhas_poder in por_poder.items():
         for instituicao, linhas in _por_instituicao(linhas_poder).items():
+            gravadas = [i for i in linhas if mapeamento.aceita(i)]
             cab = DemonstrativoSiconfi(
                 cod_ibge=cod_ibge,
                 exercicio=exercicio,
@@ -207,25 +223,31 @@ def gravar(session: Session, cod_ibge: int, exercicio: int, e: Entrega, por_pode
                 instituicao=instituicao,
                 data_status=e.data_status,
                 linhas=len(linhas),
+                linhas_gravadas=len(gravadas),
             )
             session.add(cab)
             session.flush()
-            session.execute(
-                ContaDemonstrativo.__table__.insert(),
-                [
-                    {
-                        "demonstrativo_id": cab.id,
-                        "anexo": i["anexo"],
-                        "rotulo": i["rotulo"],
-                        "coluna": i["coluna"],
-                        "cod_conta": i["cod_conta"],
-                        "conta": i["conta"],
-                        "valor": i.get("valor"),
-                        "resposta_id": i.get("_resposta_id"),
-                    }
-                    for i in linhas
-                ],
+            origens = {i["_resposta_id"] for i in linhas if i.get("_resposta_id")}
+            session.add_all(
+                DemonstrativoResposta(demonstrativo_id=cab.id, resposta_id=r) for r in origens
             )
+            if gravadas:
+                session.execute(
+                    ContaDemonstrativo.__table__.insert(),
+                    [
+                        {
+                            "demonstrativo_id": cab.id,
+                            "anexo": i["anexo"],
+                            "rotulo": i["rotulo"],
+                            "coluna": i["coluna"],
+                            "cod_conta": i["cod_conta"],
+                            "conta": i["conta"],
+                            "valor": i.get("valor"),
+                            "resposta_id": i.get("_resposta_id"),
+                        }
+                        for i in gravadas
+                    ],
+                )
             total += len(linhas)
     session.commit()
     return total
