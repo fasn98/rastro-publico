@@ -212,6 +212,12 @@ export default function Metodologia() {
           <code>sha256sum</code>.
         </li>
         <li>
+          <code>GET /api/bruto/{"{sha256}"}</code>: os mesmos bytes, endereçados pelo próprio SHA-256. O
+          endereço não muda entre publicações e o conteúdo nunca muda. Nas respostas com dados
+          pessoais, devolve a versão gravada, com o hash do original em{" "}
+          <code>X-Rastro-SHA256-Original</code>.
+        </li>
+        <li>
           <code>GET /api/respostas/{"{id}"}</code>: URL, data e verificação de integridade feita na hora.
         </li>
         <li>

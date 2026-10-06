@@ -6,6 +6,10 @@ endpoints, para baixar a resposta original de uma fonte e verificar o SHA-256 de
     GET /api/respostas/{id}                         metadados + verificação de integridade
     GET /api/respostas/{id}/bruto                   bytes originais
     GET /api/demonstrativos/{id}/respostas          respostas que formam um relatório
+    GET /api/bruto/{sha256}                         bytes gravados, pelo SHA-256 deles
+
+O endereço por hash não depende de ids do banco: o mesmo link vale em qualquer exportação
+(é o que permite a exportação incremental). Os endpoints por id continuam valendo.
 
 Em produção roda sozinha (`uvicorn rastro.api.auditoria:app`), com CORS limitado à origem
 do site (RASTRO_CORS_ORIGENS). Respostas brutas nunca mudam (são endereçadas pelo
@@ -17,7 +21,7 @@ from datetime import datetime
 from threading import Lock
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
@@ -168,6 +172,53 @@ def baixar_resposta(resposta_id: int, session: SessionDep, request: Request):
     )
 
 
+@router.get("/bruto/{sha}")
+def bruto_por_hash(
+    sha: Annotated[str, Path(pattern="^[0-9a-f]{64}$", description="SHA-256 do conteúdo gravado")],
+    session: SessionDep,
+    request: Request,
+):
+    """Os bytes gravados com este SHA-256 (confira com sha256sum).
+
+    São os bytes exatamente como a fonte devolveu, exceto nas respostas gravadas com
+    redação (LGPD): aí vêm sem os campos pessoais, `X-Rastro-SHA256` é o hash da versão
+    gravada e `X-Rastro-SHA256-Original` o do original, para conferir baixando de novo a
+    URL da fonte (`X-Rastro-URL-Origem`).
+    """
+    p = session.get(PayloadBruto, sha)
+    if p is None:
+        raise HTTPException(404, "Conteúdo não encontrado")
+    # respostas que gravaram este conteúdo (a mesma resposta pode ter vindo mais de uma vez)
+    respostas = session.scalars(
+        select(RespostaBruta).where(RespostaBruta.sha256 == sha).order_by(RespostaBruta.id)
+    ).all()
+    etag = f'"{sha}"'
+    cabecalhos = {
+        "ETag": etag,
+        "Cache-Control": IMUTAVEL,
+        "X-Rastro-SHA256": sha,
+        # quando este conteúdo foi gravado pela primeira vez
+        "X-Rastro-Primeiro-Recebimento": p.criado_em.isoformat(),
+    }
+    if respostas:
+        primeira = respostas[0]
+        cabecalhos["X-Rastro-URL-Origem"] = primeira.url
+        cabecalhos["X-Rastro-Recebido-Em"] = primeira.recebido_em.isoformat()
+    originais = sorted({r.sha256_original for r in respostas if r.sha256_original})
+    if originais:
+        cabecalhos["X-Rastro-SHA256-Original"] = ",".join(originais)
+        campos = sorted({c for r in respostas for c in (r.campos_removidos or [])})
+        cabecalhos["X-Rastro-Campos-Removidos"] = ",".join(campos)
+    if _nao_modificado(request, etag):
+        return Response(status_code=304, headers=cabecalhos)
+    try:
+        conteudo = _payload(session, sha)
+    except ValueError as exc:
+        raise HTTPException(500, str(exc)) from exc
+    tipo = respostas[0].content_type if respostas else None
+    return Response(conteudo, media_type=tipo or "application/octet-stream", headers=cabecalhos)
+
+
 @router.get("/demonstrativos/{demonstrativo_id}/respostas", response_model=list[RespostaOut])
 def respostas_do_demonstrativo(demonstrativo_id: int, session: SessionDep, response: Response):
     """Respostas brutas de onde veio um demonstrativo (uma por página)."""
@@ -201,6 +252,7 @@ def criar_app() -> FastAPI:
             "X-Rastro-Recebido-Em",
             "X-Rastro-SHA256-Original",
             "X-Rastro-Campos-Removidos",
+            "X-Rastro-Primeiro-Recebimento",
             "ETag",
         ],
     )
