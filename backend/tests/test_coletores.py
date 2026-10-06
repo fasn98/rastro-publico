@@ -83,17 +83,10 @@ def test_coleta_siconfi_grava(session):
 
 
 @respx.mock
-def test_executar_registra_falha(session, monkeypatch):
-    monkeypatch.setattr("rastro.coletores.base.get_settings", lambda: _settings_sem_espera())
+def test_executar_registra_falha(session):
     respx.get(ibge.URL_MUNICIPIOS).respond(status_code=503)
     with httpx.Client() as client:
         coleta = executar(session, "ibge-municipios", ibge.coletar, client)
     assert coleta.status == "falha"
     assert "503" in coleta.erro
     assert session.scalars(select(Coleta)).one().finalizada_em is not None
-
-
-def _settings_sem_espera():
-    from rastro.config import Settings
-
-    return Settings(http_tentativas=1)

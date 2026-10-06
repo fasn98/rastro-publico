@@ -19,6 +19,18 @@ def carregar(nome: str):
     return json.loads((FIXTURES / nome).read_text(encoding="utf-8"))
 
 
+@pytest.fixture(autouse=True)
+def configuracao_rapida(monkeypatch):
+    """Sem pausas entre requisições nem novas tentativas durante os testes."""
+    from rastro.config import get_settings
+
+    monkeypatch.setenv("RASTRO_SICONFI_INTERVALO", "0")
+    monkeypatch.setenv("RASTRO_HTTP_TENTATIVAS", "1")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture(scope="session")
 def engine():
     eng = create_engine(URL_TESTE)

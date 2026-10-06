@@ -1,6 +1,8 @@
+import json
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
+from decimal import Decimal
 
 import httpx
 from sqlalchemy.orm import Session
@@ -34,8 +36,11 @@ def _erro_transitorio(exc: BaseException) -> bool:
     return False
 
 
-def get_json(client: httpx.Client, url: str, params: dict | None = None):
-    """GET com novas tentativas para falhas de rede, 429 e 5xx."""
+def get_json(client: httpx.Client, url: str, params: dict | None = None, *, decimal=False):
+    """GET com novas tentativas para falhas de rede, 429 e 5xx.
+
+    Com `decimal=True`, números com casas decimais viram `Decimal` (valores monetários).
+    """
 
     @retry(
         retry=retry_if_exception(_erro_transitorio),
@@ -46,9 +51,20 @@ def get_json(client: httpx.Client, url: str, params: dict | None = None):
     def _get():
         resp = client.get(url, params=params)
         resp.raise_for_status()
+        if decimal:
+            return json.loads(resp.content, parse_float=Decimal)
         return resp.json()
 
     return _get()
+
+
+class ColetaParcial(Exception):
+    """Coleta que gravou dados mas teve falhas em parte dos itens."""
+
+    def __init__(self, registros: int, erros: list[str]):
+        super().__init__(f"{len(erros)} falha(s)")
+        self.registros = registros
+        self.erros = erros
 
 
 Coletor = Callable[[Session, httpx.Client], int]
@@ -62,6 +78,12 @@ def executar(session: Session, fonte: str, coletor: Coletor, client: httpx.Clien
     try:
         coleta.registros = coletor(session, client)
         coleta.status = "sucesso"
+    except ColetaParcial as exc:
+        session.rollback()
+        coleta.registros = exc.registros
+        coleta.status = "parcial"
+        coleta.erro = "\n".join(exc.erros)
+        log.warning("Coleta %s parcial: %s", fonte, exc)
     except Exception as exc:
         session.rollback()
         coleta.status = "falha"

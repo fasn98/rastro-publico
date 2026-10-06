@@ -40,3 +40,32 @@ def test_detalhe_inclui_ente_siconfi(client):
 
 def test_detalhe_inexistente(client):
     assert client.get("/api/municipios/9999999").status_code == 404
+
+
+def test_demonstrativos_e_contas(client, session):
+    from datetime import UTC, datetime
+    from decimal import Decimal
+
+    from rastro.models import ContaDemonstrativo, DemonstrativoSiconfi
+
+    d = DemonstrativoSiconfi(
+        cod_ibge=3550308, exercicio=2025, demonstrativo="RGF", periodicidade="Q", periodo=3,
+        poder="E", instituicao="Prefeitura Municipal de São Paulo - SP",
+        data_status=datetime(2026, 1, 30, tzinfo=UTC), linhas=1,
+        contas=[
+            ContaDemonstrativo(
+                anexo="RGF-Anexo 01", rotulo="Padrão", coluna="<MR-11>",
+                cod_conta="DespesaComPessoalBruta", conta="DESPESA BRUTA COM PESSOAL (I)",
+                valor=Decimal("3033403573.83"),
+            )
+        ],
+    )  # fmt: skip
+    session.add(d)
+    session.commit()
+
+    r = client.get("/api/entes/3550308/demonstrativos", params={"exercicio": 2025})
+    assert [x["demonstrativo"] for x in r.json()] == ["RGF"]
+
+    r = client.get(f"/api/demonstrativos/{d.id}/contas", params={"anexo": "RGF-Anexo 01"})
+    assert r.json()[0]["valor"] == "3033403573.83"
+    assert client.get("/api/demonstrativos/999999/contas").status_code == 404

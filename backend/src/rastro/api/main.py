@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -8,7 +9,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from rastro.db import get_session
-from rastro.models import Coleta, EnteSiconfi, Municipio
+from rastro.models import (
+    Coleta,
+    ContaDemonstrativo,
+    DemonstrativoSiconfi,
+    EnteSiconfi,
+    Municipio,
+)
 
 app = FastAPI(title="Rastro Público", version="0.1.0")
 app.add_middleware(
@@ -62,6 +69,31 @@ class ColetaOut(BaseModel):
     finalizada_em: datetime | None
 
 
+class DemonstrativoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    cod_ibge: int
+    exercicio: int
+    demonstrativo: str
+    periodicidade: str
+    periodo: int
+    poder: str | None
+    instituicao: str | None
+    data_status: datetime | None
+    linhas: int
+    coletado_em: datetime
+
+
+class ContaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    anexo: str
+    rotulo: str
+    coluna: str
+    cod_conta: str
+    conta: str
+    valor: Decimal | None
+
+
 @app.get("/api/saude")
 def saude():
     return {"status": "ok"}
@@ -97,3 +129,41 @@ def obter_municipio(cod_ibge: int, session: SessionDep):
 @app.get("/api/coletas", response_model=list[ColetaOut])
 def ultimas_coletas(session: SessionDep, limite: Annotated[int, Query(ge=1, le=100)] = 20):
     return session.scalars(select(Coleta).order_by(Coleta.id.desc()).limit(limite)).all()
+
+
+@app.get("/api/entes/{cod_ibge}/demonstrativos", response_model=list[DemonstrativoOut])
+def listar_demonstrativos(
+    cod_ibge: int,
+    session: SessionDep,
+    exercicio: int | None = None,
+    demonstrativo: str | None = None,
+):
+    q = select(DemonstrativoSiconfi).where(DemonstrativoSiconfi.cod_ibge == cod_ibge)
+    if exercicio:
+        q = q.where(DemonstrativoSiconfi.exercicio == exercicio)
+    if demonstrativo:
+        q = q.where(DemonstrativoSiconfi.demonstrativo == demonstrativo)
+    q = q.order_by(
+        DemonstrativoSiconfi.exercicio.desc(),
+        DemonstrativoSiconfi.demonstrativo,
+        DemonstrativoSiconfi.periodo,
+        DemonstrativoSiconfi.poder,
+    )
+    return session.scalars(q).all()
+
+
+@app.get("/api/demonstrativos/{demonstrativo_id}/contas", response_model=list[ContaOut])
+def listar_contas(
+    demonstrativo_id: int,
+    session: SessionDep,
+    anexo: str | None = None,
+    cod_conta: str | None = None,
+):
+    if not session.get(DemonstrativoSiconfi, demonstrativo_id):
+        raise HTTPException(404, "Demonstrativo não encontrado")
+    q = select(ContaDemonstrativo).where(ContaDemonstrativo.demonstrativo_id == demonstrativo_id)
+    if anexo:
+        q = q.where(ContaDemonstrativo.anexo == anexo)
+    if cod_conta:
+        q = q.where(ContaDemonstrativo.cod_conta == cod_conta)
+    return session.scalars(q.order_by(ContaDemonstrativo.id)).all()

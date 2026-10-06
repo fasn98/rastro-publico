@@ -22,11 +22,15 @@ UF_POR_CODIGO = {
 }  # fmt: skip
 
 
-def paginas(client: httpx.Client, url: str, limite: int = 5000):
+def paginas(
+    client: httpx.Client, url: str, params: dict | None = None, limite: int = 5000, **kwargs
+):
     """Percorre a paginação do ORDS (Oracle REST Data Services) usando offset/hasMore."""
     offset = 0
     while True:
-        dados = get_json(client, url, params={"offset": offset, "limit": limite})
+        dados = get_json(
+            client, url, params={**(params or {}), "offset": offset, "limit": limite}, **kwargs
+        )
         itens = dados.get("items", [])
         yield from itens
         if not dados.get("hasMore") or not itens:

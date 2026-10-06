@@ -1,0 +1,70 @@
+{
+ "items": [
+  {
+   "exercicio": 2025,
+   "cod_ibge": 3500105,
+   "populacao": 34357,
+   "instituicao": "Câmara de Vereadores de Adamantina - SP",
+   "entregavel": "Relatório de Gestão Fiscal Simplificado",
+   "periodo": 2,
+   "periodicidade": "S",
+   "status_relatorio": "HO",
+   "data_status": "2026-01-28T14:45:39Z",
+   "forma_envio": "P",
+   "tipo_relatorio": "S"
+  },
+  {
+   "exercicio": 2025,
+   "cod_ibge": 3500105,
+   "populacao": 34357,
+   "instituicao": "Prefeitura Municipal de Adamantina - SP",
+   "entregavel": "Relatório de Gestão Fiscal Simplificado",
+   "periodo": 2,
+   "periodicidade": "S",
+   "status_relatorio": "RE",
+   "data_status": "2026-03-20T22:30:37Z",
+   "forma_envio": "M",
+   "tipo_relatorio": "S"
+  },
+  {
+   "exercicio": 2025,
+   "cod_ibge": 3500105,
+   "populacao": 34357,
+   "instituicao": "Prefeitura Municipal de Adamantina - SP",
+   "entregavel": "Relatório Resumido de Execução Orçamentária Simplificado",
+   "periodo": 2,
+   "periodicidade": "B",
+   "status_relatorio": "HO",
+   "data_status": "2025-06-03T22:32:08Z",
+   "forma_envio": "M",
+   "tipo_relatorio": "S"
+  },
+  {
+   "exercicio": 2025,
+   "cod_ibge": 3500105,
+   "populacao": 34357,
+   "instituicao": "Prefeitura Municipal de Adamantina - SP",
+   "entregavel": "Relatório Resumido de Execução Orçamentária Simplificado",
+   "periodo": 6,
+   "periodicidade": "B",
+   "status_relatorio": "RE",
+   "data_status": "2026-03-20T22:30:48Z",
+   "forma_envio": "M",
+   "tipo_relatorio": "S"
+  },
+  {
+   "exercicio": 2025,
+   "cod_ibge": 3500105,
+   "populacao": 34357,
+   "instituicao": "Câmara de Vereadores de Adamantina - SP",
+   "entregavel": "MSC Agregada",
+   "periodo": 1,
+   "periodicidade": "M",
+   "status_relatorio": null,
+   "data_status": "2025-02-28T16:07:24Z",
+   "forma_envio": "XML",
+   "tipo_relatorio": null
+  }
+ ],
+ "hasMore": false
+}
