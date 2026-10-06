@@ -44,6 +44,14 @@ coletor que use `novo_cliente()`:
 
 Dados coletados antes desta funcionalidade não têm origem; recolete com `--forcar`.
 
+**Espaço em disco (medido na amostra de 10 municípios × 4 anos, 40 itens):** 507
+respostas, 193 MB de respostas originais que ocupam **8,8 MB** no banco (gzip, ~20×), e
+145 MB para as 517 mil linhas de `conta_demonstrativo` (~270 bytes/linha). Projeção para
+os 645 municípios de SP × 2022–2025 (2.580 itens; a amostra tem mais cidades grandes que
+a média, então é um teto): **~0,6 GB** de respostas brutas e **~6 a 9 GB** de linhas de
+demonstrativos (22 a 33 milhões de linhas). Confira o limite de armazenamento do banco
+antes da coleta completa.
+
 ### Fontes implementadas
 
 | Fonte | Comando | Tabela |
