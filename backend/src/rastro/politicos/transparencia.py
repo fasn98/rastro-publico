@@ -190,6 +190,7 @@ def coletar_arquivo(
     uf: str,
     ano_min: int,
     autores: dict,
+    excecoes: dict[str, tuple[int, str]] | None = None,
 ) -> dict:
     """Emendas do arquivo em lote do Portal (não exige chave).
 
@@ -197,14 +198,17 @@ def coletar_arquivo(
     autor é um parlamentar da UF. O município de destino vem da coluna oficial "Código
     Município IBGE" (não do texto). `autores`: nome normalizado -> `vinculo.Autor` (só os
     confirmáveis); a ligação com a página do político segue as regras de `vinculo`.
+    `excecoes`: texto exato do autor -> (pol_politico.id, rótulo), da tabela aprovada.
     O arquivo bruto guarda só esse recorte do CSV (o arquivo não traz dados pessoais),
     com o SHA-256 do ZIP original.
     """
     nome_uf = NOMES_UF[uf]
+    excecoes = excecoes or {}
 
     def no_recorte(r: dict) -> bool:
+        autor = r["Nome do Autor da Emenda"]
         return r["Ano da Emenda"] >= str(ano_min) and (
-            r["UF"] == nome_uf or normalizar_nome(r["Nome do Autor da Emenda"]) in autores
+            r["UF"] == nome_uf or normalizar_nome(autor) in autores or autor in excecoes
         )
 
     redator = redator_csv(
@@ -230,10 +234,13 @@ def coletar_arquivo(
         nome_autor = r["Nome do Autor da Emenda"]
         ano = int(r["Ano da Emenda"])
         autor = autores.get(normalizar_nome(nome_autor))
-        politico_id = None
-        if autor is not None:
+        politico_id = vinculo = nota = None
+        if nome_autor in excecoes:
+            politico_id, nota = excecoes[nome_autor]
+            vinculo = "excecao"
+        elif autor is not None:
             if autor.primeiro_ano <= ano <= autor.ultimo_ano:
-                politico_id = autor.politico_id
+                politico_id, vinculo = autor.politico_id, "nome"
             else:
                 fora_do_mandato[nome_autor] = fora_do_mandato.get(nome_autor, 0) + 1
         linhas.append(
@@ -260,19 +267,22 @@ def coletar_arquivo(
                 "valor_resto_cancelado": valor(r["Valor Restos A Pagar Cancelados"]),
                 "valor_resto_pago": valor(r["Valor Restos A Pagar Pagos"]),
                 "politico_id": politico_id,
+                "vinculo": vinculo,
+                "nota_vinculo": nota,
                 "url_fonte": url,
                 "resposta_id": rid,
             }
         )
     # regra 4: um mesmo político, um só "Código do Autor"; se houver mais de um, não liga
+    # (as exceções aprovadas trazem o código do ex-parlamentar e ficam fora dessa conferência)
     codigos: dict[int, set[str]] = {}
     for x in linhas:
-        if x["politico_id"]:
+        if x["vinculo"] == "nome":
             codigos.setdefault(x["politico_id"], set()).add(x["codigo_autor"])
     ambiguos = {pid for pid, c in codigos.items() if len(c) > 1}
     for x in linhas:
-        if x["politico_id"] in ambiguos:
-            x["politico_id"] = None
+        if x["vinculo"] == "nome" and x["politico_id"] in ambiguos:
+            x["politico_id"] = x["vinculo"] = None
     session.execute(delete(PolEmenda).where(PolEmenda.fonte_dados == "arquivo"))
     for i in range(0, len(linhas), 2000):
         session.execute(insert(PolEmenda), linhas[i : i + 2000])
@@ -280,6 +290,7 @@ def coletar_arquivo(
     return {
         "linhas": len(linhas),
         "ligadas": sum(1 for x in linhas if x["politico_id"]),
+        "por_excecao": sum(1 for x in linhas if x["vinculo"] == "excecao"),
         "fora_do_mandato": fora_do_mandato,
         "codigo_de_autor_ambiguo": sorted(ambiguos),
     }

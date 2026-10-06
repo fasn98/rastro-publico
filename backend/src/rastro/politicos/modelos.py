@@ -193,6 +193,10 @@ class PolEmenda(Base):
     politico_id: Mapped[int | None] = mapped_column(
         ForeignKey("pol_politico.id", ondelete="SET NULL"), index=True
     )
+    # como a emenda foi ligada ao político: "nome" (regra de vinculo.py) ou "excecao"
+    # (tabela aprovada em excecoes_emendas.toml); nulo = sem vínculo
+    vinculo: Mapped[str | None] = mapped_column(String(10))
+    nota_vinculo: Mapped[str | None] = mapped_column(Text)  # rótulo exibido (exceções)
     url_fonte: Mapped[str] = mapped_column(Text)
     resposta_id: Mapped[int | None] = _resposta()
     atualizado_em: Mapped[datetime] = mapped_column(
@@ -223,6 +227,8 @@ class PolPendencia(Base):
     cargo: Mapped[str] = mapped_column(String(30))
     uf: Mapped[str] = mapped_column(String(2))
     cod_ibge: Mapped[int | None] = mapped_column(Integer, index=True)
+    # "sem_eleito" | "segundo_turno" (2º turno ainda não realizado para o cargo/UF)
+    tipo: Mapped[str] = mapped_column(String(20), default="sem_eleito", server_default="sem_eleito")
     motivo: Mapped[str] = mapped_column(Text)
     url_fonte: Mapped[str] = mapped_column(Text)
     resposta_id: Mapped[int | None] = _resposta()
@@ -260,5 +266,28 @@ class PolDespesaCota(Base):
     valor_restituicao: Mapped[Decimal | None] = mapped_column(Numeric)
     ide_documento: Mapped[str | None] = mapped_column(String(20))
     url_documento: Mapped[str | None] = mapped_column(Text)
+    url_fonte: Mapped[str] = mapped_column(Text)
+    resposta_id: Mapped[int | None] = _resposta()
+
+
+class PolEventoMandato(Base):
+    """Evento do mandato no histórico oficial da Câmara (/deputados/{id}/historico).
+
+    Posse, licença, reassunção, afastamento de suplente etc., com a descrição exatamente
+    como está na fonte. Cada evento vale até o seguinte (ver API: períodos do mandato).
+    """
+
+    __tablename__ = "pol_evento_mandato"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    politico_id: Mapped[int] = mapped_column(
+        ForeignKey("pol_politico.id", ondelete="CASCADE"), index=True
+    )
+    data_hora: Mapped[datetime] = mapped_column(DateTime)
+    legislatura: Mapped[int]
+    situacao: Mapped[str | None] = mapped_column(String(60))
+    condicao_eleitoral: Mapped[str | None] = mapped_column(String(60))
+    descricao_status: Mapped[str | None] = mapped_column(Text)
+    partido: Mapped[str | None] = mapped_column(String(30))
     url_fonte: Mapped[str] = mapped_column(Text)
     resposta_id: Mapped[int | None] = _resposta()

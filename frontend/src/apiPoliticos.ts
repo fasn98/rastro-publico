@@ -41,6 +41,17 @@ export type Comissao = {
 
 export type ContagemValor = Contagem & { valor_liquido: string };
 
+export type PeriodoMandato = {
+  inicio: string;
+  fim: string | null;
+  situacao: string | null;
+  condicao_eleitoral: string | null;
+  descricao_status: string | null;
+  partido: string | null;
+  url_fonte: string;
+  resposta_id: number | null;
+};
+
 export type PoliticoDetalhe = Politico & {
   fonte_registro: Fonte | null;
   proposicoes: Contagem[];
@@ -49,6 +60,7 @@ export type PoliticoDetalhe = Politico & {
   cota: ContagemValor[];
   comissoes: Comissao[];
   descricao_votos: Record<string, string>;
+  linha_do_tempo: PeriodoMandato[];
 };
 
 export type Proposicao = {
@@ -97,6 +109,9 @@ export type Emenda = {
   valor_empenhado: string | null;
   valor_liquidado: string | null;
   valor_pago: string | null;
+  politico_id: number | null;
+  vinculo: string | null;
+  nota_vinculo: string | null;
   url_fonte: string;
   resposta_id: number | null;
 };
@@ -113,6 +128,8 @@ export type TotalEmendas = {
 export type EmendasPorParlamentar = {
   politico_id: number | null;
   nome_autor: string | null;
+  nome_fonte: string | null;
+  nota_vinculo: string | null;
   partido: string | null;
   cargo: string | null;
   quantidade: number;

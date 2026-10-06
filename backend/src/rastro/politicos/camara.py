@@ -32,6 +32,7 @@ from rastro.politicos.comum import (
 from rastro.politicos.modelos import (
     DEPUTADO_FEDERAL,
     PolDespesaCota,
+    PolEventoMandato,
     PolPolitico,
     PolPresenca,
     PolProposicao,
@@ -189,6 +190,37 @@ def mapa_gravado(session: Session, uf: str) -> dict[int, int]:
         )
     )
     return {int(id_fonte): pid for id_fonte, pid in rows}
+
+
+def coletar_historico(
+    session: Session, client: httpx.Client, id_camara: int, politico_id: int
+) -> int:
+    """Eventos do mandato na legislatura (posse, licença, reassunção, afastamento...).
+
+    A resposta traz o e-mail de gabinete em cada evento: vai ao arquivo bruto sem ele.
+    """
+    url = f"{API}/deputados/{id_camara}/historico"
+    dados, rid = get_json_com_origem(client, url, redator=lgpd.CAMARA_DEPUTADOS)
+    eventos = [
+        {
+            "politico_id": politico_id,
+            "data_hora": data_hora(e["dataHora"]),
+            "legislatura": e["idLegislatura"],
+            "situacao": e.get("situacao"),
+            "condicao_eleitoral": e.get("condicaoEleitoral"),
+            "descricao_status": e.get("descricaoStatus"),
+            "partido": e.get("siglaPartido"),
+            "url_fonte": url,
+            "resposta_id": rid,
+        }
+        for e in dados["dados"]
+        if e["idLegislatura"] == LEGISLATURA
+    ]
+    session.execute(delete(PolEventoMandato).where(PolEventoMandato.politico_id == politico_id))
+    if eventos:
+        session.execute(insert(PolEventoMandato), eventos)
+    session.commit()
+    return len(eventos)
 
 
 URL_COTA = "https://www.camara.leg.br/cotas/Ano-{ano}.csv.zip"

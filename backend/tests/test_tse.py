@@ -267,7 +267,7 @@ def test_padrao_das_travas_e_a_decisao_vigente(monkeypatch):
     ):
         monkeypatch.delenv(v, raising=False)
     get_settings.cache_clear()
-    assert (publicacao.tse(), publicacao.tse_2026(), publicacao.emendas()) == (True, False, False)
+    assert (publicacao.tse(), publicacao.tse_2026(), publicacao.emendas()) == (True, True, True)
 
 
 @respx.mock

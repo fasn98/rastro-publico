@@ -132,7 +132,12 @@ def _data(texto: str) -> datetime:
 
 
 def selecionar_eleitos(linhas: list[dict], cargos: dict[str, str]):
-    """Aplica a regra de eleitos. Gera (unidade, cargo, eleitos, eleições sem resultado)."""
+    """Aplica a regra de eleitos.
+
+    Gera (unidade, cargo, eleitos, eleições suplementares sem resultado, candidatos com
+    2º turno pendente). Há 2º turno pendente quando a eleição mais recente tem candidatos
+    com situação "2º TURNO" e ainda nenhum eleito no 2º turno; aí não há eleitos.
+    """
     grupos: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for r in linhas:
         if r["DS_CARGO"] in cargos:
@@ -159,7 +164,17 @@ def selecionar_eleitos(linhas: list[dict], cargos: dict[str, str]):
             and e not in com_eleitos
             and (ultima is None or _data(e[0]["DT_ELEICAO"]) > _data(ultima[0]["DT_ELEICAO"]))
         ]
-        yield ue, cargo, eleitos, posteriores
+        recente = ordem[-1]
+        segundo_turno = sorted(
+            {r["NM_URNA_CANDIDATO"] for r in recente if r["DS_SIT_TOT_TURNO"] == "2º TURNO"}
+        )
+        if segundo_turno and any(
+            r["NR_TURNO"] == "2" and r["DS_SIT_TOT_TURNO"] in ELEITO for r in recente
+        ):
+            segundo_turno = []
+        if segundo_turno:
+            eleitos = []
+        yield ue, cargo, eleitos, posteriores, segundo_turno
 
 
 def _motivo(cargo_tse: str, posteriores: list[list[dict]]) -> str:
@@ -197,7 +212,7 @@ def coletar_eleitos(
     )
     resumo = {"eleitos": 0, "pendencias": 0, "unidades": set()}
     sem_par = set()
-    for ue, cargo_tse, eleitos, posteriores in selecionar_eleitos(linhas, cargos):
+    for ue, cargo_tse, eleitos, posteriores, segundo_turno in selecionar_eleitos(linhas, cargos):
         cargo = cargos[cargo_tse]
         if posteriores:
             # há eleição posterior (suplementar) sem resultado: o eleito anterior não vale
@@ -243,7 +258,12 @@ def coletar_eleitos(
                     cargo=cargo,
                     uf=uf,
                     cod_ibge=cod_ibge,
-                    motivo=_motivo(cargo_tse, posteriores),
+                    tipo="segundo_turno" if segundo_turno else "sem_eleito",
+                    motivo=(
+                        f"2º turno pendente no arquivo do TSE: {', '.join(segundo_turno)}."
+                        if segundo_turno
+                        else _motivo(cargo_tse, posteriores)
+                    ),
                     url_fonte=url,
                     resposta_id=rid,
                 )

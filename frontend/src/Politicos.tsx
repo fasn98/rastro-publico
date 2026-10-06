@@ -183,6 +183,11 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
                         <th scope="row">
                           {x.politico_id ? <a href={`#/politico/${x.politico_id}`}>{x.nome_autor}</a> : x.nome_autor}
                           {x.partido && <span className="sub"> {x.partido}</span>}
+                          {x.nota_vinculo && (
+                            <div className="rotulo-vinculo">
+                              {x.nota_vinculo}. Na fonte: “{x.nome_fonte}”
+                            </div>
+                          )}
                         </th>
                         <td>{inteiro(x.quantidade)}</td>
                         <td>{reais(x.valor_empenhado)}</td>
@@ -357,6 +362,8 @@ export function PaginaPolitico({ id }: { id: number }) {
       </dl>
       <Contestar titulo={`${p.nome} (${CARGOS[p.cargo] ?? p.cargo}, id ${p.id})`} />
 
+      {p.linha_do_tempo.length > 0 && <LinhaDoTempo periodos={p.linha_do_tempo} />}
+
       {federal && (
         <>
           <div className="filtros">
@@ -438,6 +445,45 @@ export function PaginaPolitico({ id }: { id: number }) {
         no portal em {dataHora(p.atualizado_em)}.
       </p>
     </article>
+  );
+}
+
+function LinhaDoTempo({ periodos }: { periodos: PoliticoDetalhe["linha_do_tempo"] }) {
+  return (
+    <section className="linha-do-tempo" aria-labelledby="titulo-mandato">
+      <h3 id="titulo-mandato">Linha do tempo do mandato (legislatura 2023–2027)</h3>
+      <p className="nota">
+        Exercício, licença, suplência e afastamentos segundo o histórico oficial da Câmara, com o
+        motivo exatamente como está na fonte. Leia proposições, votos, presenças e emendas com
+        este contexto: fora do exercício, o parlamentar não vota nem registra presença.
+      </p>
+      <div className="tabela-rolagem">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">De</th>
+              <th scope="col">Até</th>
+              <th scope="col">Situação</th>
+              <th scope="col">Motivo (como na fonte)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {periodos.map((x) => (
+              <tr key={x.inicio + (x.descricao_status ?? "")}>
+                <td>{data(x.inicio)}</td>
+                <td>{x.fim ? data(x.fim) : "atual"}</td>
+                <td className="esq">
+                  {x.situacao}
+                  {x.condicao_eleitoral && <span className="sub"> ({x.condicao_eleitoral})</span>}
+                </td>
+                <td className="esq">{x.descricao_status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {periodos[0] && <LinkFonte url={periodos[0].url_fonte} respostaId={periodos[0].resposta_id} />}
+    </section>
   );
 }
 
@@ -640,7 +686,9 @@ function TabelaEmendas({ emendas, mostrarAutor = false }: { emendas: Emendas; mo
           {emendas.itens.map((x) => (
             <li key={x.codigo_emenda}>
               {x.ano} · {x.numero_emenda} · {x.tipo_emenda}
-              {mostrarAutor && ` · ${x.nome_autor}`} · {x.localidade_gasto} · empenhado{" "}
+              {(mostrarAutor || x.nota_vinculo) && ` · autor na fonte: “${x.nome_autor}”`}
+              {x.nota_vinculo && <div className="rotulo-vinculo">{x.nota_vinculo}</div>} ·{" "}
+              {x.localidade_gasto} · empenhado{" "}
               {reais(x.valor_empenhado)} → liquidado {reais(x.valor_liquidado)} → pago{" "}
               {reais(x.valor_pago)} <LinkFonte url={x.url_fonte} respostaId={x.resposta_id} />
             </li>

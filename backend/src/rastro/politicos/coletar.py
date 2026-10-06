@@ -40,6 +40,16 @@ def coletor_camara(uf: str, anos: list[int]):
         erros: list[str] = []
         mapa = camara.coletar_deputados(session, client, uf)
         total = len(mapa)
+        for id_camara, pid in sorted(mapa.items()):
+            total += _tentar(
+                erros,
+                f"histórico {id_camara}",
+                camara.coletar_historico,
+                session,
+                client,
+                id_camara,
+                pid,
+            )
         for ano in anos:
             for id_camara, pid in sorted(mapa.items()):
                 total += _tentar(
@@ -102,7 +112,8 @@ def coletor_emendas_arquivo(uf: str, anos: list[int]):
         autores, recusados = vinculo.autores_confirmaveis(session, uf, nomes)
         if recusados:
             log.info("autores sem vínculo confirmável: %s", recusados)
-        r = transparencia.coletar_arquivo(session, client, uf, min(anos), autores)
+        excecoes = vinculo.excecoes_por_texto(session)
+        r = transparencia.coletar_arquivo(session, client, uf, min(anos), autores, excecoes)
         log.info("emendas (arquivo): %s", r)
         return r["linhas"]
 
