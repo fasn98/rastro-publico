@@ -54,3 +54,14 @@ def session(engine):
     with engine.begin() as conn:
         for tabela in reversed(Base.metadata.sorted_tables):
             conn.execute(tabela.delete())
+
+
+@pytest.fixture
+def mapeamento_total(monkeypatch):
+    """Grava todas as linhas (para testar a mecânica do coletor, não o filtro)."""
+    from rastro import mapeamento as mp
+
+    tudo = mp.Mapeamento(0, "tudo", ())
+    monkeypatch.setattr(mp.Mapeamento, "aceita", lambda self, linha: True)
+    monkeypatch.setattr(mp, "padrao", lambda: tudo)
+    return tudo

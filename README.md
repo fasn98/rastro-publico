@@ -44,13 +44,42 @@ coletor que use `novo_cliente()`:
 
 Dados coletados antes desta funcionalidade não têm origem; recolete com `--forcar`.
 
-**Espaço em disco (medido na amostra de 10 municípios × 4 anos, 40 itens):** 507
-respostas, 193 MB de respostas originais que ocupam **8,8 MB** no banco (gzip, ~20×), e
-145 MB para as 517 mil linhas de `conta_demonstrativo` (~270 bytes/linha). Projeção para
-os 645 municípios de SP × 2022–2025 (2.580 itens; a amostra tem mais cidades grandes que
-a média, então é um teto): **~0,6 GB** de respostas brutas e **~6 a 9 GB** de linhas de
-demonstrativos (22 a 33 milhões de linhas). Confira o limite de armazenamento do banco
-antes da coleta completa.
+### Armazenamento enxuto e reconstrução a partir do bruto
+
+O arquivo bruto guarda **100%** das respostas. Já `conta_demonstrativo` guarda só as
+linhas e colunas que os indicadores usam, definidas em
+`backend/src/rastro/mapeamento_siconfi.yaml`, sempre com `resposta_id`. Cada
+demonstrativo registra quantas linhas a API devolveu (`linhas`), quantas foram gravadas
+(`linhas_gravadas`) e de quais respostas veio (`demonstrativo_resposta`), mesmo quando
+nenhuma linha dele entra no mapeamento.
+
+```bash
+# qualquer linha, de qualquer demonstrativo coletado, direto do arquivo bruto (CSV)
+uv run rastro reconstruir --anexo "RGF-Anexo 01" --cod-conta DespesaComPessoalBruta \
+    --ente 3500105 --exercicio 2025            # --gravar para inserir na tabela
+# depois de mudar o mapeamento: reconstrói o que falta e (com --podar) apaga o que saiu
+uv run rastro aplicar-mapeamento --podar
+```
+
+Para usar uma conta nova: adicione-a ao YAML e rode `rastro aplicar-mapeamento`. Nada é
+baixado de novo.
+
+**Medido na amostra** (10 municípios de SP × 2022–2025 + Estado de SP, 41 itens): a API
+devolve de 5,7 mil a 21,9 mil linhas por município/ano; o mapeamento grava de 120 a 186.
+Aplicado à amostra, `conta_demonstrativo` caiu de 544.045 para 6.611 linhas (145 MB →
+1,5 MB), com o ranking e todos os indicadores **idênticos** antes e depois. O bruto
+comprimido ocupa de 84 KB (municípios pequenos) a 368 KB (capital) por município/ano.
+
+**Projeção 2022–2025** (médias por faixa populacional da amostra; estados estimados pelo
+Estado de SP, o maior, então é um teto):
+
+| | Itens | Arquivo bruto | Tabelas | Total | Antes (tudo em tabela) |
+|---|---|---|---|---|---|
+| SP: 645 municípios + Estado | 2.584 | 0,35 GB | 0,18 GB | **~0,5 GB** | ~6,7 GB |
+| Brasil: 5.570 municípios + 27 UFs | 22.388 | 2,9 GB | 1,5 GB | **~4,4 GB** | ~56 GB |
+
+Cada execução incremental acrescenta uma `resposta_bruta` por item (o extrato); o
+conteúdo só ocupa espaço novo se mudou.
 
 ### Fontes implementadas
 

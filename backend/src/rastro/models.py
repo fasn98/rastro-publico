@@ -117,11 +117,17 @@ class DemonstrativoSiconfi(Base):
     instituicao: Mapped[str | None] = mapped_column(String(200))
     # Data do último status no extrato de entregas; muda quando o ente retifica o relatório.
     data_status: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # linhas devolvidas pela API (todas estão no arquivo bruto)
     linhas: Mapped[int]
+    # linhas gravadas em conta_demonstrativo (só as do mapeamento)
+    linhas_gravadas: Mapped[int | None]
     coletado_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
 
+    respostas: Mapped[list["DemonstrativoResposta"]] = relationship(
+        cascade="all, delete-orphan", passive_deletes=True
+    )
     contas: Mapped[list["ContaDemonstrativo"]] = relationship(
         back_populates="demonstrativo", cascade="all, delete-orphan", passive_deletes=True
     )
@@ -131,6 +137,14 @@ class ContaDemonstrativo(Base):
     """Uma célula de um anexo do RREO/RGF: conta x coluna = valor."""
 
     __tablename__ = "conta_demonstrativo"
+    # uma célula por demonstrativo: impede linhas em dobro mesmo com dois processos
+    # gravando ao mesmo tempo (ex.: duas reconstruções concorrentes)
+    __table_args__ = (
+        UniqueConstraint(
+            "demonstrativo_id", "anexo", "rotulo", "cod_conta", "conta", "coluna",
+            name="uq_conta_demonstrativo",
+        ),
+    )  # fmt: skip
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     demonstrativo_id: Mapped[int] = mapped_column(
@@ -267,6 +281,23 @@ class RespostaBruta(Base):
     duracao_ms: Mapped[int | None]
     sha256: Mapped[str] = mapped_column(ForeignKey("payload_bruto.sha256"), index=True)
     tamanho: Mapped[int]
+
+
+class DemonstrativoResposta(Base):
+    """Respostas brutas (páginas) que compõem um demonstrativo.
+
+    Liga o relatório ao arquivo bruto mesmo quando nenhuma linha dele foi gravada em
+    `conta_demonstrativo`; é o ponto de partida para reconstruir qualquer linha.
+    """
+
+    __tablename__ = "demonstrativo_resposta"
+
+    demonstrativo_id: Mapped[int] = mapped_column(
+        ForeignKey("demonstrativo_siconfi.id", ondelete="CASCADE"), primary_key=True
+    )
+    resposta_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("resposta_bruta.id"), primary_key=True, index=True
+    )
 
 
 # Tabelas do módulo de políticos (pol_*), registradas no mesmo metadata

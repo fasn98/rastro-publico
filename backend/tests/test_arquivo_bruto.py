@@ -3,6 +3,7 @@
 import gzip
 import hashlib
 import json
+from decimal import Decimal
 
 import httpx
 import pytest
@@ -96,7 +97,9 @@ def test_municipio_aponta_para_a_resposta(session, cliente):
 
 
 @respx.mock
-def test_cada_valor_do_demonstrativo_aponta_para_a_pagina_de_origem(session, cliente, monkeypatch):
+def test_cada_valor_do_demonstrativo_aponta_para_a_pagina_de_origem(
+    session, cliente, monkeypatch, mapeamento_total
+):
     """RREO em duas páginas: cada linha aponta para a página exata de onde veio."""
     from rastro.config import get_settings
 
@@ -122,11 +125,19 @@ def test_cada_valor_do_demonstrativo_aponta_para_a_pagina_de_origem(session, cli
     urls = {url for _, url in linhas}
     assert any("offset=0" in u for u in urls) and any("offset=50" in u for u in urls)
 
-    # o valor gravado está, literalmente, na resposta guardada
-    valor, url = linhas[60]
-    r = session.scalars(select(RespostaBruta).where(RespostaBruta.url == url)).first()
-    itens = json.loads(ler_payload(session.get(PayloadBruto, r.sha256)))["items"]
-    assert any(str(i["valor"]) == str(valor) for i in itens)
+    # TODA linha gravada está, com o mesmo valor, na página para a qual aponta
+    gravadas = session.scalars(select(ContaDemonstrativo)).all()
+    paginas = {}
+    for c in gravadas:
+        if c.resposta_id not in paginas:
+            r = session.get(RespostaBruta, c.resposta_id)
+            bruto = ler_payload(session.get(PayloadBruto, r.sha256))
+            paginas[c.resposta_id] = json.loads(bruto, parse_float=Decimal)["items"]
+        chave = (c.anexo, c.rotulo, c.cod_conta, c.conta, c.coluna, c.valor)
+        assert chave in {
+            (i["anexo"], i["rotulo"], i["cod_conta"], i["conta"], i["coluna"], i["valor"])
+            for i in paginas[c.resposta_id]
+        }
 
 
 @respx.mock

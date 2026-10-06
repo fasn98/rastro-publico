@@ -1,0 +1,91 @@
+# Linhas e colunas do RREO/RGF gravadas em `conta_demonstrativo`.
+#
+# O arquivo bruto (resposta_bruta + payload_bruto) guarda 100% das respostas da API.
+# Aqui ficam só as contas que os indicadores usam. Para usar uma conta nova:
+#   1. adicione-a abaixo (e suba a `versao`);
+#   2. rode `rastro aplicar-mapeamento`: as linhas são reconstruídas do arquivo bruto,
+#      sem chamar a API de novo.
+#
+# Cada regra casa uma linha da API quando TODOS os campos informados casam:
+#   anexo      texto exato
+#   cod_conta  lista de códigos
+#   conta      (opcional) lista de textos da conta; terminado em "*" = prefixo
+#   rotulo     (opcional) lista de rótulos
+#   colunas    (opcional) lista de colunas; terminado em "*" = prefixo; omitido = todas
+
+versao: 1
+
+regras:
+  # --- RREO Anexo 1: execução orçamentária, autonomia, investimento
+  - anexo: RREO-Anexo 01
+    cod_conta: [TotalReceitas]
+    colunas: ["Até o Bimestre (c)", "PREVISÃO ATUALIZADA (a)"]
+    usado_por: [execucao, investimento]
+  - anexo: RREO-Anexo 01
+    cod_conta: [TotalDespesas]
+    colunas:
+      - "DOTAÇÃO ATUALIZADA (e)"
+      - "DESPESAS EMPENHADAS ATÉ O BIMESTRE (f)"
+      - "DESPESAS LIQUIDADAS ATÉ O BIMESTRE (h)"
+      - "DESPESAS PAGAS ATÉ O BIMESTRE (j)"
+    usado_por: [execucao]
+  - anexo: RREO-Anexo 01
+    cod_conta: [SuperavitFinanceiro, ReceitaTributaria]
+    colunas: ["Até o Bimestre (c)"]
+    usado_por: [execucao, autonomia]
+  - anexo: RREO-Anexo 01
+    cod_conta: [Investimentos]
+    colunas:
+      - "DESPESAS EMPENHADAS ATÉ O BIMESTRE (f)"
+      - "DESPESAS LIQUIDADAS ATÉ O BIMESTRE (h)"
+      - "INSCRITAS EM RESTOS A PAGAR NÃO PROCESSADOS (k)"
+    usado_por: [investimento]
+
+  # --- RREO Anexo 2: despesa por função (a função vem no texto da conta)
+  - anexo: RREO-Anexo 02
+    cod_conta: [RREO2TotalDespesas]
+    conta: [Administração, Legislativa]
+    rotulo: [Total das Despesas Exceto Intra-Orçamentárias]
+    colunas: ["DESPESAS EMPENHADAS ATÉ O BIMESTRE (b)"]
+    usado_por: [autonomia]
+
+  # --- RREO Anexo 3: cotas-parte (receita ligada à atividade econômica local)
+  - anexo: RREO-Anexo 03
+    cod_conta: [RREO3CotaParteDoICMS, RREO3CotaParteDoIPVA, RREO3CotaParteDoITR]
+    colunas: ["TOTAL (ÚLTIMOS 12 MESES)"]
+    usado_por: [autonomia]
+
+  # --- RGF Anexo 1: despesa com pessoal e limites da LRF
+  - anexo: RGF-Anexo 01
+    cod_conta: [DespesaComPessoalTotal]
+    colunas: [Valor, "% sobre a RCL Ajustada"]
+    usado_por: [pessoal]
+  - anexo: RGF-Anexo 01
+    cod_conta: [ReceitaCorrenteLiquidaAjustada]
+    colunas: [Valor]
+    usado_por: [pessoal]
+  - anexo: RGF-Anexo 01
+    cod_conta:
+      - LimiteDeAlertaDespesaComPessoalTotal
+      - LimitePrudencialDespesaComPessoalTotal
+      - LimiteMaximoDespesaComPessoalTotal
+    colunas: ["% sobre a RCL Ajustada"]
+    usado_por: [pessoal]
+
+  # --- RGF Anexo 2: dívida e RCL (colunas por período: "Até o 3º Quadrimestre"...)
+  - anexo: RGF-Anexo 02
+    cod_conta:
+      - DividaConsolidadaLiquida
+      - PercentualDaDCLSobreARCL
+      - ReceitaCorrenteLiquidaAjustadaParaCalculoDosLimitesDeEndividamento
+      - RGF2ReceitaCorrenteLiquida
+      - LimiteDeAlerta
+      - LimiteDefinidoPorResolucaoDoSenadoFederal
+    colunas: ["Até o *"]
+    usado_por: [divida, liquidez]
+
+  # --- RGF Anexo 5: caixa (a linha vem no texto da conta; o código é a coluna)
+  - anexo: RGF-Anexo 05
+    cod_conta: [DisponibilidadeDeCaixaLiquidaAposRP]
+    conta: ["TOTAL DOS RECURSOS*"]
+    usado_por: [liquidez]

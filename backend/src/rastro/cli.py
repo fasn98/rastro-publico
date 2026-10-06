@@ -27,6 +27,24 @@ def main(argv: list[str] | None = None) -> int:
         "verificar-respostas",
         help="recalcula o SHA-256 de todas as respostas brutas arquivadas",
     )
+    rc = sub.add_parser(
+        "reconstruir",
+        help="reconstrói linhas do RREO/RGF a partir do arquivo bruto (sem chamar a API)",
+    )
+    rc.add_argument("--anexo", help='ex.: "RGF-Anexo 01"')
+    rc.add_argument("--cod-conta", nargs="+")
+    rc.add_argument("--coluna", nargs="+")
+    rc.add_argument("--ente", type=int, nargs="+")
+    rc.add_argument("--exercicio", type=int, nargs="+")
+    rc.add_argument("--demonstrativo", type=int, nargs="+")
+    rc.add_argument("--gravar", action="store_true", help="insere em conta_demonstrativo")
+    am = sub.add_parser(
+        "aplicar-mapeamento",
+        help="alinha conta_demonstrativo ao mapeamento_siconfi.yaml usando o arquivo bruto",
+    )
+    am.add_argument(
+        "--podar", action="store_true", help="apaga linhas fora do mapeamento (ficam no bruto)"
+    )
     r = sub.add_parser("ranking", help="calcula e grava o Ranking Fiscal de uma UF")
     r.add_argument("--uf", required=True)
     sub.add_parser(
@@ -57,6 +75,20 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.comando == "fontes":
         print("\n".join(COLETORES))
+        return 0
+
+    if args.comando == "reconstruir":
+        return _reconstruir(parser, args)
+
+    if args.comando == "aplicar-mapeamento":
+        from rastro import reconstrucao
+
+        with get_sessionmaker()() as session:
+            resumo = reconstrucao.aplicar_mapeamento(session, podar=args.podar)
+        print(
+            f"mapeamento {resumo['mapeamento']}: {resumo['reconstruidas']} linhas reconstruídas "
+            f"do arquivo bruto, {resumo['podadas']} podadas"
+        )
         return 0
 
     if args.comando == "verificar-respostas":
@@ -128,6 +160,37 @@ def _demonstrativos(parser: argparse.ArgumentParser, args) -> int:
     if coleta.erro:
         print(coleta.erro, file=sys.stderr)
     return 0 if coleta.status == "sucesso" else 1
+
+
+def _reconstruir(parser: argparse.ArgumentParser, args) -> int:
+    import csv
+
+    from rastro import reconstrucao
+
+    if not (args.anexo or args.cod_conta or args.demonstrativo):
+        parser.error("informe ao menos --anexo, --cod-conta ou --demonstrativo")
+    filtro = reconstrucao.Filtro(
+        anexo=args.anexo,
+        cod_conta=args.cod_conta,
+        coluna=args.coluna,
+        cod_ibge=args.ente,
+        exercicio=args.exercicio,
+        demonstrativo_id=args.demonstrativo,
+    )
+    with get_sessionmaker()() as session:
+        linhas = list(reconstrucao.reconstruir(session, filtro))
+        if args.gravar:
+            n = reconstrucao.gravar(session, linhas)
+            print(f"{len(linhas)} linhas reconstruídas, {n} novas gravadas", file=sys.stderr)
+            return 0
+    w = csv.writer(sys.stdout, delimiter=";")
+    w.writerow(["demonstrativo_id", "anexo", "rotulo", "cod_conta", "conta", "coluna", "valor",
+                "resposta_id"])  # fmt: skip
+    for li in linhas:
+        w.writerow([li.demonstrativo_id, li.anexo, li.rotulo, li.cod_conta, li.conta, li.coluna,
+                    li.valor, li.resposta_id])  # fmt: skip
+    print(f"{len(linhas)} linhas", file=sys.stderr)
+    return 0
 
 
 def _verificar_respostas() -> int:
