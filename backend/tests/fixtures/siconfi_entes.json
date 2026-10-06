@@ -1,0 +1,74 @@
+{
+ "items": [
+  {
+   "cod_ibge": 3550308,
+   "ente": "São Paulo",
+   "capital": "1  ",
+   "regiao": "SE",
+   "uf": "SP",
+   "esfera": "M",
+   "exercicio": 2026,
+   "populacao": 11904961,
+   "cnpj": "46395000000139"
+  },
+  {
+   "cod_ibge": 3500105,
+   "ente": "Adamantina",
+   "capital": "0  ",
+   "regiao": "SE",
+   "uf": "SP",
+   "esfera": "M",
+   "exercicio": 2026,
+   "populacao": 35673,
+   "cnpj": "43008291000177"
+  },
+  {
+   "cod_ibge": 5300108,
+   "ente": "Brasília",
+   "capital": "1  ",
+   "regiao": "CO",
+   "uf": "DF",
+   "esfera": "M",
+   "exercicio": 2026,
+   "populacao": 2996899,
+   "cnpj": "26994533000120"
+  },
+  {
+   "cod_ibge": 1,
+   "ente": "União",
+   "capital": "0  ",
+   "regiao": "BR",
+   "uf": null,
+   "esfera": "U",
+   "exercicio": 2026,
+   "populacao": 8569324,
+   "cnpj": "00394411000109"
+  },
+  {
+   "cod_ibge": 35,
+   "ente": "São Paulo",
+   "capital": "0  ",
+   "regiao": "SE",
+   "uf": "BR",
+   "esfera": "E",
+   "exercicio": 2026,
+   "populacao": 46024937,
+   "cnpj": "46379400000150"
+  },
+  {
+   "cod_ibge": 53,
+   "ente": "Distrito Federal",
+   "capital": "0  ",
+   "regiao": "CO",
+   "uf": "BR",
+   "esfera": "D",
+   "exercicio": 2026,
+   "populacao": 2923369,
+   "cnpj": "00394601000126"
+  }
+ ],
+ "hasMore": false,
+ "limit": 5000,
+ "offset": 0,
+ "count": 6
+}

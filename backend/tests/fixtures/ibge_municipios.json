@@ -1,0 +1,105 @@
+[
+ {
+  "id": 3500105,
+  "nome": "Adamantina",
+  "microrregiao": {
+   "id": 35035,
+   "nome": "Adamantina",
+   "mesorregiao": {
+    "id": 3508,
+    "nome": "Presidente Prudente",
+    "UF": {
+     "id": 35,
+     "sigla": "SP",
+     "nome": "São Paulo",
+     "regiao": {
+      "id": 3,
+      "sigla": "SE",
+      "nome": "Sudeste"
+     }
+    }
+   }
+  },
+  "regiao-imediata": {
+   "id": 350019,
+   "nome": "Adamantina - Lucélia",
+   "regiao-intermediaria": {
+    "id": 3505,
+    "nome": "Presidente Prudente",
+    "UF": {
+     "id": 35,
+     "sigla": "SP",
+     "nome": "São Paulo",
+     "regiao": {
+      "id": 3,
+      "sigla": "SE",
+      "nome": "Sudeste"
+     }
+    }
+   }
+  }
+ },
+ {
+  "id": 3550308,
+  "nome": "São Paulo",
+  "microrregiao": {
+   "id": 35061,
+   "nome": "São Paulo",
+   "mesorregiao": {
+    "id": 3515,
+    "nome": "Metropolitana de São Paulo",
+    "UF": {
+     "id": 35,
+     "sigla": "SP",
+     "nome": "São Paulo",
+     "regiao": {
+      "id": 3,
+      "sigla": "SE",
+      "nome": "Sudeste"
+     }
+    }
+   }
+  },
+  "regiao-imediata": {
+   "id": 350001,
+   "nome": "São Paulo",
+   "regiao-intermediaria": {
+    "id": 3501,
+    "nome": "São Paulo",
+    "UF": {
+     "id": 35,
+     "sigla": "SP",
+     "nome": "São Paulo",
+     "regiao": {
+      "id": 3,
+      "sigla": "SE",
+      "nome": "Sudeste"
+     }
+    }
+   }
+  }
+ },
+ {
+  "id": 5101837,
+  "nome": "Boa Esperança do Norte",
+  "microrregiao": null,
+  "regiao-imediata": {
+   "id": 510008,
+   "nome": "Sorriso",
+   "regiao-intermediaria": {
+    "id": 5103,
+    "nome": "Sinop",
+    "UF": {
+     "id": 51,
+     "sigla": "MT",
+     "nome": "Mato Grosso",
+     "regiao": {
+      "id": 5,
+      "sigla": "CO",
+      "nome": "Centro-Oeste"
+     }
+    }
+   }
+  }
+ }
+]
