@@ -11,7 +11,6 @@ Documentação: https://apidatalake.tesouro.gov.br/docs/siconfi/
 """
 
 import logging
-import time
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -21,8 +20,7 @@ from sqlalchemy.orm import Session
 
 from rastro.coletores.base import ColetaParcial
 from rastro.coletores.siconfi import paginas
-from rastro.config import get_settings
-from rastro.models import ContaDemonstrativo, DemonstrativoSiconfi, EnteSiconfi
+from rastro.models import ContaDemonstrativo, DemonstrativoSiconfi, EnteSiconfi, EntregaSiconfi
 
 log = logging.getLogger(__name__)
 
@@ -61,17 +59,51 @@ def _data(valor: str | None) -> datetime | None:
     return datetime.fromisoformat(valor) if valor else None
 
 
-def entregas(client: httpx.Client, cod_ibge: int, exercicio: int) -> list[Entrega]:
-    """RREO/RGF entregues pelo ente no exercício, um item por relatório e período.
+def ler_extrato(client: httpx.Client, cod_ibge: int, exercicio: int) -> list[dict]:
+    """Todas as entregas do ente no exercício (RREO, RGF, DCA, MSC...)."""
+    params = {"id_ente": cod_ibge, "an_referencia": exercicio}
+    return [
+        i
+        for i in paginas(client, URL_EXTRATO, params)
+        if i.get("exercicio", exercicio) == exercicio
+    ]
+
+
+def gravar_extrato(session: Session, cod_ibge: int, exercicio: int, itens: list[dict]) -> None:
+    """Guarda o extrato como foi lido (base do indicador de transparência)."""
+    session.execute(
+        delete(EntregaSiconfi).where(
+            EntregaSiconfi.cod_ibge == cod_ibge, EntregaSiconfi.exercicio == exercicio
+        )
+    )
+    session.add_all(
+        EntregaSiconfi(
+            cod_ibge=cod_ibge,
+            exercicio=exercicio,
+            entregavel=i["entregavel"],
+            periodicidade=i.get("periodicidade"),
+            periodo=i.get("periodo"),
+            instituicao=i.get("instituicao"),
+            status_relatorio=i.get("status_relatorio"),
+            tipo_relatorio=i.get("tipo_relatorio"),
+            forma_envio=i.get("forma_envio"),
+            data_status=_data(i.get("data_status")),
+        )
+        for i in itens
+    )
+    session.commit()
+
+
+def entregas_de(itens: list[dict]) -> list[Entrega]:
+    """RREO/RGF do extrato, um item por relatório e período.
 
     O RGF aparece uma vez por instituição (Prefeitura, Câmara...); fica a data de
     status mais recente, para que a retificação de qualquer poder dispare nova coleta.
     """
     mais_recente: dict[tuple[str, str, int], datetime | None] = {}
-    params = {"id_ente": cod_ibge, "an_referencia": exercicio}
-    for item in paginas(client, URL_EXTRATO, params):
+    for item in itens:
         demonstrativo = DEMONSTRATIVO_POR_ENTREGAVEL.get(item["entregavel"])
-        if not demonstrativo or item.get("exercicio", exercicio) != exercicio:
+        if not demonstrativo:
             continue
         chave = (demonstrativo, item["periodicidade"], item["periodo"])
         data = _data(item.get("data_status"))
@@ -79,6 +111,10 @@ def entregas(client: httpx.Client, cod_ibge: int, exercicio: int) -> list[Entreg
         if chave not in mais_recente or (data and (atual is None or data > atual)):
             mais_recente[chave] = data
     return [Entrega(d, pc, p, data) for (d, pc, p), data in sorted(mais_recente.items())]
+
+
+def entregas(client: httpx.Client, cod_ibge: int, exercicio: int) -> list[Entrega]:
+    return entregas_de(ler_extrato(client, cod_ibge, exercicio))
 
 
 def _ja_coletado(session: Session, cod_ibge: int, exercicio: int, e: Entrega) -> bool:
@@ -98,7 +134,6 @@ def baixar(
     client: httpx.Client, cod_ibge: int, exercicio: int, esfera: str, e: Entrega
 ) -> dict[str | None, list[dict]]:
     """Linhas do relatório agrupadas por poder (chave None no RREO)."""
-    intervalo = get_settings().siconfi_intervalo
     if e.demonstrativo.startswith("RREO"):
         params = {
             "an_exercicio": exercicio,
@@ -106,7 +141,6 @@ def baixar(
             "co_tipo_demonstrativo": e.demonstrativo,
             "id_ente": cod_ibge,
         }
-        time.sleep(intervalo)
         return {None: list(paginas(client, URL_RREO, params, decimal=True))}
 
     por_poder: dict[str | None, list[dict]] = {}
@@ -119,7 +153,6 @@ def baixar(
             "co_poder": poder,
             "id_ente": cod_ibge,
         }
-        time.sleep(intervalo)
         linhas = list(paginas(client, URL_RGF, params, decimal=True))
         if linhas:
             por_poder[poder] = linhas
@@ -193,7 +226,9 @@ def coletar_ente(
     forcar: bool = False,
 ) -> int:
     total = 0
-    for e in entregas(client, ente.cod_ibge, exercicio):
+    itens = ler_extrato(client, ente.cod_ibge, exercicio)
+    gravar_extrato(session, ente.cod_ibge, exercicio, itens)
+    for e in entregas_de(itens):
         if not forcar and _ja_coletado(session, ente.cod_ibge, exercicio, e):
             continue
         por_poder = baixar(client, ente.cod_ibge, exercicio, ente.esfera, e)

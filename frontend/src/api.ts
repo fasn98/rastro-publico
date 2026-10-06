@@ -94,3 +94,11 @@ export async function obterIndicadores(cod: number, exercicio?: number) {
   if (!resp.ok) throw new Error(`Erro ${resp.status} ao consultar indicadores`);
   return (await resp.json()) as Indicadores;
 }
+
+export type IndicadoresAno = Omit<Indicadores, "exercicios_disponiveis">;
+
+export async function obterSerie(cod: number) {
+  const resp = await fetch(`/api/entes/${cod}/indicadores/serie`);
+  if (!resp.ok) throw new Error(`Erro ${resp.status} ao consultar a série histórica`);
+  return (await resp.json()) as IndicadoresAno[];
+}

@@ -24,7 +24,7 @@ def configuracao_rapida(monkeypatch):
     """Sem pausas entre requisições nem novas tentativas durante os testes."""
     from rastro.config import get_settings
 
-    monkeypatch.setenv("RASTRO_SICONFI_INTERVALO", "0")
+    monkeypatch.setenv("RASTRO_REQ_POR_SEGUNDO", "0")
     monkeypatch.setenv("RASTRO_HTTP_TENTATIVAS", "1")
     get_settings.cache_clear()
     yield

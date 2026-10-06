@@ -134,3 +134,52 @@ class ContaDemonstrativo(Base):
     valor: Mapped[Decimal | None] = mapped_column(Numeric)
 
     demonstrativo: Mapped[DemonstrativoSiconfi] = relationship(back_populates="contas")
+
+
+class EntregaSiconfi(Base):
+    """Item do extrato de entregas do SICONFI (o que o ente declarou ter entregue)."""
+
+    __tablename__ = "entrega_siconfi"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cod_ibge: Mapped[int] = mapped_column(Integer, index=True)
+    exercicio: Mapped[int]
+    entregavel: Mapped[str] = mapped_column(String(120))
+    periodicidade: Mapped[str | None] = mapped_column(String(1))
+    periodo: Mapped[int | None]
+    instituicao: Mapped[str | None] = mapped_column(String(200))
+    # HO = homologado, RE = retificado (como devolvido pela API)
+    status_relatorio: Mapped[str | None] = mapped_column(String(4))
+    # P = completo, S = simplificado (nos relatórios que têm versão simplificada)
+    tipo_relatorio: Mapped[str | None] = mapped_column(String(4))
+    forma_envio: Mapped[str | None] = mapped_column(String(20))
+    data_status: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class LoteColeta(Base):
+    """Coleta longa e retomável (ex.: todos os municípios de uma UF em vários anos)."""
+
+    __tablename__ = "lote_coleta"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # parâmetros normalizados; um lote não finalizado com a mesma chave é retomado
+    chave: Mapped[str] = mapped_column(String(200), index=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finalizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    itens: Mapped[list["ItemLote"]] = relationship(back_populates="lote")
+
+
+class ItemLote(Base):
+    __tablename__ = "item_lote"
+
+    lote_id: Mapped[int] = mapped_column(ForeignKey("lote_coleta.id"), primary_key=True)
+    cod_ibge: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    exercicio: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    status: Mapped[str] = mapped_column(String(20), default="pendente")  # pendente|sucesso|falha
+    linhas: Mapped[int | None]
+    erro: Mapped[str | None] = mapped_column(Text)
+    tentativas: Mapped[int] = mapped_column(Integer, default=0)
+    atualizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    lote: Mapped[LoteColeta] = relationship(back_populates="itens")

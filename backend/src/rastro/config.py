@@ -9,8 +9,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://rastro:rastro@localhost:5432/rastro"
     http_timeout: float = 60.0
     http_tentativas: int = 4
-    # pausa entre requisições aos endpoints pesados do SICONFI (segundos)
-    siconfi_intervalo: float = 0.2
+    # limite de requisições por segundo a cada API (0 = sem limite)
+    req_por_segundo: float = 1.0
     user_agent: str = "rastro-publico/0.1 (+https://github.com/fasn98/rastro-publico)"
 
 

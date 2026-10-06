@@ -210,13 +210,16 @@ class Execucao(Referencia):
     superavit_financeiro_utilizado: Decimal | None
 
 
-class Indicadores(BaseModel):
+class IndicadoresAno(BaseModel):
     cod_ibge: int
     exercicio: int
-    exercicios_disponiveis: list[int]
     pessoal: list[Pessoal]
     divida: Divida | None
     execucao: Execucao | None
+
+
+class Indicadores(IndicadoresAno):
+    exercicios_disponiveis: list[int]
 
 
 @app.get("/api/entes/{cod_ibge}/indicadores", response_model=Indicadores)
@@ -228,3 +231,9 @@ def obter_indicadores(cod_ibge: int, session: SessionDep, exercicio: int | None 
             raise HTTPException(404, "Nenhum RREO/RGF coletado para este ente")
         exercicio = disponiveis[0]
     return {**ind.indicadores(session, cod_ibge, exercicio), "exercicios_disponiveis": disponiveis}
+
+
+@app.get("/api/entes/{cod_ibge}/indicadores/serie", response_model=list[IndicadoresAno])
+def obter_serie(cod_ibge: int, session: SessionDep):
+    """Indicadores de todos os exercícios coletados, do mais antigo ao mais recente."""
+    return ind.serie(session, cod_ibge)

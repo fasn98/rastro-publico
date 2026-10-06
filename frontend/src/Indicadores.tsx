@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { obterIndicadores, type Indicadores as Dados, type Situacao } from "./api";
+import Evolucao from "./Evolucao";
 
 const num = (v: string | null) => (v === null ? null : Number(v));
 
@@ -270,6 +271,8 @@ export default function Indicadores({ cod }: { cod: number }) {
           ) : null}
         </div>
       )}
+
+      <Evolucao cod={cod} />
     </section>
   );
 }

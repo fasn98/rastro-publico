@@ -192,3 +192,10 @@ def indicadores(session: Session, cod_ibge: int, exercicio: int) -> dict:
         "divida": divida(session, cod_ibge, exercicio),
         "execucao": execucao(session, cod_ibge, exercicio),
     }
+
+
+def serie(session: Session, cod_ibge: int) -> list[dict]:
+    """Indicadores de cada exercício coletado, do mais antigo para o mais recente."""
+    return [
+        indicadores(session, cod_ibge, a) for a in sorted(exercicios_disponiveis(session, cod_ibge))
+    ]

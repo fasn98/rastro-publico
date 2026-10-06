@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -19,12 +20,33 @@ from rastro.models import Coleta
 log = logging.getLogger(__name__)
 
 
-def novo_cliente() -> httpx.Client:
+class LimiteDeTaxa:
+    """Garante um intervalo mínimo entre o início de requisições consecutivas.
+
+    Vale para todas as requisições do cliente, inclusive novas tentativas e páginas.
+    """
+
+    def __init__(self, req_por_segundo: float):
+        self.intervalo = 1 / req_por_segundo if req_por_segundo > 0 else 0.0
+        self._ultima = 0.0
+
+    def __call__(self, _request: httpx.Request) -> None:
+        if not self.intervalo:
+            return
+        espera = self._ultima + self.intervalo - time.monotonic()
+        if espera > 0:
+            time.sleep(espera)
+        self._ultima = time.monotonic()
+
+
+def novo_cliente(req_por_segundo: float | None = None) -> httpx.Client:
     s = get_settings()
+    limite = LimiteDeTaxa(s.req_por_segundo if req_por_segundo is None else req_por_segundo)
     return httpx.Client(
         timeout=s.http_timeout,
         headers={"User-Agent": s.user_agent, "Accept": "application/json"},
         follow_redirects=True,
+        event_hooks={"request": [limite]},
     )
 
 

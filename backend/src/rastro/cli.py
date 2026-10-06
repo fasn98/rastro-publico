@@ -8,11 +8,22 @@ from rastro.db import get_sessionmaker
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["siconfi-lote"]:
+        from rastro.coletores import siconfi_lote
+
+        return siconfi_lote.main(argv[1:])
+
     parser = argparse.ArgumentParser(prog="rastro")
     sub = parser.add_subparsers(dest="comando", required=True)
     p = sub.add_parser("coletar", help="executa coletores")
     p.add_argument("fontes", nargs="*", help="fontes a coletar (padrão: todas)")
     sub.add_parser("fontes", help="lista as fontes disponíveis")
+    sub.add_parser(
+        "siconfi-lote",
+        help="coleta RREO/RGF em lote, retomável (ver `rastro siconfi-lote --help`)",
+        add_help=False,
+    )
 
     d = sub.add_parser(
         "siconfi-demonstrativos",

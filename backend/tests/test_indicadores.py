@@ -9,9 +9,11 @@ from rastro.models import ContaDemonstrativo, DemonstrativoSiconfi
 COD = 3500105  # Adamantina/SP, valores reais do exercício de 2025
 
 
-def _demonstrativo(session, demonstrativo, periodicidade, periodo, poder, instituicao, contas):
+def _demonstrativo(
+    session, demonstrativo, periodicidade, periodo, poder, instituicao, contas, exercicio=2025
+):
     d = DemonstrativoSiconfi(
-        cod_ibge=COD, exercicio=2025, demonstrativo=demonstrativo, periodicidade=periodicidade,
+        cod_ibge=COD, exercicio=exercicio, demonstrativo=demonstrativo, periodicidade=periodicidade,
         periodo=periodo, poder=poder, instituicao=instituicao,
         data_status=datetime(2026, 3, 20, tzinfo=UTC), linhas=len(contas),
         contas=[
@@ -114,3 +116,15 @@ def test_ente_sem_dados(session):
     assert ind.indicadores(session, 1234567, 2025) == {
         "cod_ibge": 1234567, "exercicio": 2025, "pessoal": [], "divida": None, "execucao": None,
     }  # fmt: skip
+
+
+def test_serie_traz_um_item_por_exercicio_em_ordem(session, adamantina):
+    _demonstrativo(
+        session, "RGF Simplificado", "S", 2, "E", "Prefeitura",
+        _pessoal("47.1", "48.6", "51.3", "54"), exercicio=2024,
+    )  # fmt: skip
+    session.commit()
+    serie = ind.serie(session, COD)
+    assert [x["exercicio"] for x in serie] == [2024, 2025]
+    assert serie[0]["pessoal"][0]["percentual"] == D("47.1")
+    assert serie[0]["execucao"] is None  # 2024 sem RREO: ausente, não zero

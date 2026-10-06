@@ -122,3 +122,30 @@ dd { overflow-wrap: anywhere; }
   dl { grid-template-columns: 1fr; gap: 0; }
   dt { margin-top: 8px; }
 }
+
+/* Evolução anual: colunas pequenas lado a lado */
+:root { --barra: #2a78d6; --barra-neg: #e34948; --eixo: #c3c2b7; --grade: #e1e0d9; }
+@media (prefers-color-scheme: dark) {
+  :root { --barra: #3987e5; --barra-neg: #e66767; --eixo: #383835; --grade: #2c2c2a; }
+}
+.evo-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.evo-grafico { margin: 0; }
+.evo-grafico figcaption { font-size: 0.85em; color: var(--suave); margin-bottom: 4px; }
+.evo-grafico svg { width: 100%; height: auto; display: block; overflow: visible; }
+.evo-base { stroke: var(--eixo); stroke-width: 1; }
+.evo-barra { fill: var(--barra); }
+.evo-barra.negativo { fill: var(--barra-neg); }
+.evo-col.foco .evo-barra { opacity: 0.85; }
+.evo-valor { font-size: 11px; font-weight: 600; fill: var(--texto); }
+.evo-ano { font-size: 10px; fill: var(--suave); font-variant-numeric: tabular-nums; }
+.evo-nr { font-size: 10px; fill: var(--suave); }
+.evo-ref line { stroke: var(--tick); stroke-width: 1; stroke-dasharray: 4 3; }
+.evo-ref text { font-size: 9.5px; fill: var(--suave); }
+details { margin-top: 10px; font-size: 0.85em; }
+summary { cursor: pointer; color: var(--destaque); }
+.tabela-rolagem { overflow-x: auto; }
+table { border-collapse: collapse; margin-top: 8px; font-variant-numeric: tabular-nums; }
+th, td { padding: 4px 8px; border-bottom: 1px solid var(--borda); text-align: right; white-space: nowrap; }
+th[scope="row"], thead th:first-child { text-align: left; white-space: normal; }
+/* contorno da cor do fundo: o texto continua legível ao cruzar linhas */
+.evo-valor, .evo-ref text { paint-order: stroke; stroke: var(--cartao); stroke-width: 3px; stroke-linejoin: round; }
