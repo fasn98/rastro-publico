@@ -15,6 +15,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from rastro.politicos import lgpd
 from rastro.politicos.comum import (
     baixar_csv,
     data,
@@ -38,10 +39,10 @@ ARQUIVOS = "https://dadosabertos.camara.leg.br/arquivos"
 LEGISLATURA = 57  # 2023-2027
 
 
-def paginas(client: httpx.Client, url: str, params: dict):
+def paginas(client: httpx.Client, url: str, params: dict, redator=None):
     """Percorre as páginas da API v2 seguindo o link `next`. Gera (itens, resposta_id)."""
     while url:
-        dados, rid = get_json_com_origem(client, url, params)
+        dados, rid = get_json_com_origem(client, url, params, redator=redator)
         yield dados["dados"], rid
         url = next((lk["href"] for lk in dados.get("links", []) if lk["rel"] == "next"), None)
         params = None  # o link `next` já traz os parâmetros
@@ -57,9 +58,14 @@ def coletar_deputados(
     para os demais, guardam-se todos os partidos registrados ("PL / PODE"), na ordem da fonte.
     """
     params = {"siglaUf": uf, "itens": 100, "ordem": "ASC", "ordenarPor": "nome"}
-    atuais = {d["id"]: d for itens, _ in paginas(client, f"{API}/deputados", params) for d in itens}
+    atuais = {
+        d["id"]: d
+        for itens, _ in paginas(client, f"{API}/deputados", params, lgpd.CAMARA_DEPUTADOS)
+        for d in itens
+    }
     registros: dict[int, tuple[dict, list[str], int | None]] = {}
-    for itens, rid in paginas(client, f"{API}/deputados", {**params, "idLegislatura": legislatura}):
+    leg = {**params, "idLegislatura": legislatura}
+    for itens, rid in paginas(client, f"{API}/deputados", leg, lgpd.CAMARA_DEPUTADOS):
         for d in itens:
             _, partidos, _ = registros.setdefault(d["id"], (d, [], rid))
             if d["siglaPartido"] and d["siglaPartido"] not in partidos:

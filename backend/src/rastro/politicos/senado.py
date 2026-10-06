@@ -18,6 +18,7 @@ import httpx
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
+from rastro.politicos import lgpd
 from rastro.politicos.comum import data, get_json_com_origem, gravar, upsert_politico
 from rastro.politicos.modelos import SENADOR, PolComissao, PolProposicao, PolVotacao
 
@@ -41,7 +42,7 @@ def _url(caminho: str, params: dict | None = None) -> str:
 def coletar_senadores(session: Session, client: httpx.Client, uf: str) -> dict[str, int]:
     """Grava os senadores em exercício da UF. Devolve {código no Senado: pol_politico.id}."""
     url = _url("/senador/lista/atual.json")
-    dados, rid = get_json_com_origem(client, url)
+    dados, rid = get_json_com_origem(client, url, redator=lgpd.SENADO_LISTA)
     mapa = {}
     for p in _lista(dados["ListaParlamentarEmExercicio"]["Parlamentares"]["Parlamentar"]):
         ident, mandato = p["IdentificacaoParlamentar"], p.get("Mandato", {})

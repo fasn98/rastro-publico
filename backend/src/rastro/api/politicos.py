@@ -7,12 +7,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import extract, func, or_, select
+from sqlalchemy import extract, func, or_, select, true
 from sqlalchemy.orm import Session
 
 from rastro.db import get_session
 from rastro.models import Coleta, Municipio, RespostaBruta
-from rastro.politicos import transparencia
+from rastro.politicos import publicacao
 from rastro.politicos.modelos import (
     CARGOS_ESTADUAIS,
     CARGOS_MUNICIPAIS,
@@ -34,9 +34,14 @@ router = APIRouter(prefix="/api", tags=["políticos"])
 SessionDep = Annotated[Session, Depends(get_session)]
 
 PENDENTE_TSE = (
-    "Eleitos do TSE ainda não carregados: o Portal de Dados Abertos do TSE não está "
-    "acessível no ambiente de coleta. Ver README, seção Políticos."
+    "Eleitos do TSE ainda não publicados: a carga do Portal de Dados Abertos do TSE está "
+    "pendente ou em validação. Ver README do módulo de políticos."
 )
+
+
+def _visivel():
+    """Filtro dos políticos exibíveis: os do TSE só depois de validados."""
+    return PolPolitico.fonte != "tse" if not publicacao.tse() else true()
 
 
 class Fonte(BaseModel):
@@ -169,10 +174,24 @@ class TotalEmendas(BaseModel):
     valor_pago: Decimal
 
 
+class EmendasPorParlamentar(BaseModel):
+    politico_id: int | None
+    nome_autor: str | None
+    partido: str | None
+    cargo: str | None
+    quantidade: int
+    valor_empenhado: Decimal
+    valor_liquidado: Decimal
+    valor_pago: Decimal
+
+
 class Emendas(BaseModel):
     coletadas: bool  # houve coleta de emendas com sucesso
+    publicadas: bool  # já validadas e liberadas para exibição
     aviso: str | None
     totais: list[TotalEmendas]
+    # só no município: quem destinou emendas a ele (ordem alfabética)
+    por_parlamentar: list[EmendasPorParlamentar] = []
     itens: list[EmendaOut]
 
 
@@ -180,6 +199,12 @@ class GrupoRepresentantes(BaseModel):
     cargo: str
     politicos: list[PoliticoOut]
     pendente: str | None
+
+
+class SecaoRepresentantes(BaseModel):
+    titulo: str
+    nota: str | None
+    grupos: list[GrupoRepresentantes]
 
 
 class MunicipioRef(BaseModel):
@@ -190,7 +215,7 @@ class MunicipioRef(BaseModel):
 
 class Representantes(BaseModel):
     municipio: MunicipioRef
-    grupos: list[GrupoRepresentantes]
+    secoes: list[SecaoRepresentantes]
 
 
 def _ordem_nome():
@@ -199,7 +224,7 @@ def _ordem_nome():
 
 def _politico(session: Session, politico_id: int) -> PolPolitico:
     p = session.get(PolPolitico, politico_id)
-    if p is None:
+    if p is None or (p.fonte == "tse" and not publicacao.tse()):
         raise HTTPException(404, "Político não encontrado")
     return p
 
@@ -248,7 +273,7 @@ def listar_politicos(
     deslocamento: Annotated[int, Query(ge=0)] = 0,
 ):
     """Ordem alfabética por nome. `municipio` traz os cargos do município e os do estado."""
-    q = select(PolPolitico)
+    q = select(PolPolitico).where(_visivel())
     if uf:
         q = q.where(PolPolitico.uf == uf.upper())
     if cargo:
@@ -369,12 +394,39 @@ def presencas(
     return _pagina(session, q, ordem, limite, deslocamento)
 
 
-def _emendas(session: Session, filtro, ano: int | None) -> Emendas:
+def _emendas(session: Session, filtro, ano: int | None, por_parlamentar=False) -> Emendas:
+    coletadas = bool(
+        session.scalar(
+            select(func.count())
+            .select_from(Coleta)
+            .where(Coleta.fonte == "pol-emendas", Coleta.status.in_(["sucesso", "parcial"]))
+        )
+    )
+    publicadas = coletadas and publicacao.emendas()
+    if not coletadas:
+        aviso = "Emendas ainda não coletadas do Portal da Transparência."
+    elif not publicadas:
+        aviso = (
+            "Emendas coletadas e em validação (cruzamento do local do gasto com o código "
+            "IBGE); ainda não publicadas."
+        )
+    else:
+        aviso = None
+    if not publicadas:
+        return Emendas(coletadas=coletadas, publicadas=False, aviso=aviso, totais=[], itens=[])
+
     q = select(PolEmenda).where(filtro)
     if ano:
         q = q.where(PolEmenda.ano == ano)
     itens = session.scalars(q.order_by(PolEmenda.ano.desc(), PolEmenda.codigo_emenda)).all()
     totais: dict[tuple[int, bool], TotalEmendas] = {}
+    autores: dict[tuple, EmendasPorParlamentar] = {}
+    politicos = {
+        p.id: p
+        for p in session.scalars(
+            select(PolPolitico).where(PolPolitico.id.in_({e.politico_id for e in itens}))
+        )
+    }
     for e in itens:
         t = totais.setdefault(
             (e.ano, e.transferencia_especial),
@@ -387,29 +439,33 @@ def _emendas(session: Session, filtro, ano: int | None) -> Emendas:
                 valor_pago=Decimal(0),
             ),
         )
-        t.quantidade += 1
-        t.valor_empenhado += e.valor_empenhado or 0
-        t.valor_liquidado += e.valor_liquidado or 0
-        t.valor_pago += e.valor_pago or 0
-    coletadas = bool(
-        session.scalar(
-            select(func.count())
-            .select_from(Coleta)
-            .where(Coleta.fonte == "pol-emendas", Coleta.status.in_(["sucesso", "parcial"]))
+        pol = politicos.get(e.politico_id)
+        a = autores.setdefault(
+            (e.politico_id, e.nome_autor),
+            EmendasPorParlamentar(
+                politico_id=e.politico_id,
+                nome_autor=pol.nome if pol else e.nome_autor,
+                partido=pol.partido if pol else None,
+                cargo=pol.cargo if pol else None,
+                quantidade=0,
+                valor_empenhado=Decimal(0),
+                valor_liquidado=Decimal(0),
+                valor_pago=Decimal(0),
+            ),
         )
-    )
-    aviso = None
-    if not coletadas:
-        aviso = (
-            "Emendas ainda não coletadas: o coletor do Portal da Transparência está "
-            "desligado até haver chave de API configurada."
-        )
-        if transparencia.chave():
-            aviso = "Emendas ainda não coletadas: rode `rastro politicos --fontes emendas`."
+        for acc in (t, a):
+            acc.quantidade += 1
+            acc.valor_empenhado += e.valor_empenhado or 0
+            acc.valor_liquidado += e.valor_liquidado or 0
+            acc.valor_pago += e.valor_pago or 0
     return Emendas(
-        coletadas=coletadas,
-        aviso=aviso,
+        coletadas=True,
+        publicadas=True,
+        aviso=None,
         totais=sorted(totais.values(), key=lambda t: (-t.ano, t.transferencia_especial)),
+        por_parlamentar=sorted(autores.values(), key=lambda x: (x.nome_autor or "").lower())
+        if por_parlamentar
+        else [],
         itens=itens,
     )
 
@@ -423,25 +479,50 @@ def emendas_do_politico(politico_id: int, session: SessionDep, ano: int | None =
 @router.get("/municipios/{cod_ibge}/emendas", response_model=Emendas)
 def emendas_do_municipio(cod_ibge: int, session: SessionDep, ano: int | None = None):
     _municipio(session, cod_ibge)
-    return _emendas(session, PolEmenda.cod_ibge_destino == cod_ibge, ano)
+    return _emendas(session, PolEmenda.cod_ibge_destino == cod_ibge, ano, por_parlamentar=True)
+
+
+SECOES = (
+    ("municipio", (PREFEITO, VEREADOR)),
+    ("estado", (GOVERNADOR, DEPUTADO_ESTADUAL)),
+    ("federal", (SENADOR, DEPUTADO_FEDERAL)),
+)
 
 
 @router.get("/municipios/{cod_ibge}/representantes", response_model=Representantes)
 def representantes(cod_ibge: int, session: SessionDep):
     """Quem ocupa hoje cada cargo que representa o município, em ordem alfabética."""
     m = _municipio(session, cod_ibge)
-    grupos = []
-    for cargo in (PREFEITO, VEREADOR, GOVERNADOR, SENADOR, DEPUTADO_FEDERAL, DEPUTADO_ESTADUAL):
-        q = select(PolPolitico).where(PolPolitico.cargo == cargo, PolPolitico.uf == m.uf)
-        if cargo in CARGOS_MUNICIPAIS:
-            q = q.where(PolPolitico.cod_ibge == cod_ibge)
-        if cargo in (SENADOR, DEPUTADO_FEDERAL):
-            q = q.where(PolPolitico.em_exercicio.is_(True))
-        politicos = session.scalars(q.order_by(*_ordem_nome())).all()
-        pendente = (
-            PENDENTE_TSE if not politicos and cargo not in (SENADOR, DEPUTADO_FEDERAL) else None
-        )
-        grupos.append(GrupoRepresentantes(cargo=cargo, politicos=politicos, pendente=pendente))
+    titulos = {
+        "municipio": (f"Eleitos em {m.nome}", None),
+        "estado": (
+            f"Governador e deputados estaduais eleitos por {m.uf} — representam todo o estado",
+            None,
+        ),
+        "federal": (
+            f"Senadores e deputados federais eleitos por {m.uf} — representam todo o estado",
+            "Mostra quem está em exercício segundo a Câmara e o Senado, inclusive suplentes "
+            "no exercício do mandato.",
+        ),
+    }
+    secoes = []
+    for chave, cargos in SECOES:
+        grupos = []
+        for cargo in cargos:
+            q = select(PolPolitico).where(
+                PolPolitico.cargo == cargo, PolPolitico.uf == m.uf, _visivel()
+            )
+            if cargo in CARGOS_MUNICIPAIS:
+                q = q.where(PolPolitico.cod_ibge == cod_ibge)
+            if cargo in (SENADOR, DEPUTADO_FEDERAL):
+                q = q.where(PolPolitico.em_exercicio.is_(True))
+            politicos = session.scalars(q.order_by(*_ordem_nome())).all()
+            pendente = None
+            if not politicos and cargo not in (SENADOR, DEPUTADO_FEDERAL):
+                pendente = PENDENTE_TSE
+            grupos.append(GrupoRepresentantes(cargo=cargo, politicos=politicos, pendente=pendente))
+        titulo, nota = titulos[chave]
+        secoes.append(SecaoRepresentantes(titulo=titulo, nota=nota, grupos=grupos))
     return Representantes(
-        municipio=MunicipioRef(cod_ibge=m.cod_ibge, nome=m.nome, uf=m.uf), grupos=grupos
+        municipio=MunicipioRef(cod_ibge=m.cod_ibge, nome=m.nome, uf=m.uf), secoes=secoes
     )

@@ -156,31 +156,69 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
           <h3>
             {rep.municipio.nome} / {rep.municipio.uf}
           </h3>
-          {rep.grupos.map((g) => (
-            <section key={g.cargo} className="grupo-cargo" aria-labelledby={`cargo-${g.cargo}`}>
-              <h4 id={`cargo-${g.cargo}`}>
-                {CARGOS[g.cargo] ?? g.cargo}
-                {g.politicos.length > 0 && <span className="sub"> ({g.politicos.length})</span>}
-              </h4>
-              {g.pendente ? (
-                <p className="pendente">{g.pendente}</p>
-              ) : (
-                <ul className="lista">
-                  {g.politicos.map((p) => (
-                    <li key={p.id}>
-                      <a className="cartao-link" href={`#/politico/${p.id}`}>
-                        {p.nome} <span>{p.partido ?? "sem partido informado"}</span>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              )}
+          {emendas?.publicadas && emendas.por_parlamentar.length > 0 && (
+            <section className="destaque-emendas" aria-labelledby="emendas-destino">
+              <h4 id="emendas-destino">Parlamentares que destinaram emendas a este município</h4>
+              <p className="sub">
+                Emendas com {rep.municipio.nome} como local do gasto, segundo o Portal da
+                Transparência. Ordem alfabética.
+              </p>
+              <div className="tabela-rolagem">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Parlamentar</th>
+                      <th scope="col">Emendas</th>
+                      <th scope="col">Empenhado</th>
+                      <th scope="col">Liquidado</th>
+                      <th scope="col">Pago</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {emendas.por_parlamentar.map((x) => (
+                      <tr key={`${x.politico_id}-${x.nome_autor}`}>
+                        <th scope="row">
+                          {x.politico_id ? <a href={`#/politico/${x.politico_id}`}>{x.nome_autor}</a> : x.nome_autor}
+                          {x.partido && <span className="sub"> {x.partido}</span>}
+                        </th>
+                        <td>{inteiro(x.quantidade)}</td>
+                        <td>{reais(x.valor_empenhado)}</td>
+                        <td>{reais(x.valor_liquidado)}</td>
+                        <td>{reais(x.valor_pago)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+          {rep.secoes.map((sec, i) => (
+            <section key={sec.titulo} className="secao-representantes" aria-labelledby={`secao-${i}`}>
+              <h3 id={`secao-${i}`}>{sec.titulo}</h3>
+              {sec.nota && <p className="nota">{sec.nota}</p>}
+              {sec.grupos.map((g) => (
+                <div key={g.cargo} className="grupo-cargo">
+                  <h4>
+                    {CARGOS[g.cargo] ?? g.cargo}
+                    {g.politicos.length > 0 && <span className="sub"> ({g.politicos.length})</span>}
+                  </h4>
+                  {g.pendente ? (
+                    <p className="pendente">{g.pendente}</p>
+                  ) : (
+                    <ul className="lista">
+                      {g.politicos.map((p) => (
+                        <li key={p.id}>
+                          <a className="cartao-link" href={`#/politico/${p.id}`}>
+                            {p.nome} <span>{p.partido ?? "sem partido informado"}</span>
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
             </section>
           ))}
-          <p className="nota">
-            Deputados federais e senadores representam todo o estado: aparecem os que estão em
-            exercício segundo a Câmara e o Senado.
-          </p>
 
           <h3>Emendas recebidas</h3>
           {emendas && <TabelaEmendas emendas={emendas} mostrarAutor />}

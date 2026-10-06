@@ -27,6 +27,10 @@ def main(argv: list[str] | None = None) -> int:
         "verificar-respostas",
         help="recalcula o SHA-256 de todas as respostas brutas arquivadas",
     )
+    sub.add_parser(
+        "redigir-respostas",
+        help="aplica a redação LGPD a respostas já arquivadas (remove dados pessoais)",
+    )
     rc = sub.add_parser(
         "reconstruir",
         help="reconstrói linhas do RREO/RGF a partir do arquivo bruto (sem chamar a API)",
@@ -93,6 +97,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.comando == "verificar-respostas":
         return _verificar_respostas()
+
+    if args.comando == "redigir-respostas":
+        from rastro.coletores.redacao import redigir_arquivadas
+        from rastro.politicos import lgpd
+
+        with get_sessionmaker()() as session:
+            n = redigir_arquivadas(session, lgpd.REGRAS)
+        print(f"{n} resposta(s) arquivada(s) regravada(s) sem dados pessoais")
+        return 0
 
     if args.comando == "ranking":
         from rastro import ranking

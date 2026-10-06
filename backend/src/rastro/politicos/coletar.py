@@ -93,6 +93,7 @@ def coletor_emendas(uf: str, anos: list[int]):
     """Emendas dos deputados federais e senadores da UF já gravados (rode camara/senado antes)."""
 
     def coletar(session: Session, client: httpx.Client) -> int:
+        transparencia.verificar_acesso(client, anos[0])  # 401 -> falha clara, nada gravado
         erros: list[str] = []
         municipios = transparencia.municipios_por_nome(session)
         politicos = session.execute(
@@ -142,12 +143,7 @@ def main(argv: list[str] | None = None) -> int:
             nome, fabrica = coletores[fonte]
             with novo_cliente() as client:
                 if fonte == "emendas":
-                    k = transparencia.chave()
-                    if not k:
-                        print(transparencia.AVISO_SEM_CHAVE, file=sys.stderr)
-                        status = 1
-                        continue
-                    client.headers["chave-api-dados"] = k
+                    print(f"emendas: acesso por {transparencia.preparar_cliente(client)}")
                 coleta = executar(session, nome, fabrica(uf, anos), client)
             print(f"{nome}: {coleta.status} ({coleta.registros or 0} registros)")
             if coleta.erro:

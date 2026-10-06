@@ -6,8 +6,12 @@ localidadeDoGasto, funcao, subfuncao, valorEmpenhado, valorLiquidado, valorPago,
 valorRestoInscrito, valorRestoCancelado, valorRestoPago (valores como texto).
 
 Exige a chave no cabeçalho `chave-api-dados` (cadastro gratuito em
-https://portaldatransparencia.gov.br/api-de-dados/cadastrar-email). Sem a variável
-`RASTRO_TRANSPARENCIA_CHAVE`, o coletor fica DESLIGADO.
+https://portaldatransparencia.gov.br/api-de-dados/cadastrar-email). Dois modos:
+- com a variável `RASTRO_TRANSPARENCIA_CHAVE` (ex.: Replit), o coletor envia o cabeçalho;
+- sem ela, conta com um proxy que injeta o cabeçalho (credencial de API do ambiente).
+Antes de coletar, uma consulta de teste confirma o acesso; se a API responder 401, a
+coleta falha com aviso claro (nenhum dado é gravado). A chave nunca é gravada: o
+arquivo de respostas guarda só a URL e a resposta, não os cabeçalhos enviados.
 
 ATENÇÃO: até agora nenhuma resposta com dados foi recebida neste projeto (não havia chave).
 O formato dos valores em texto, o formato de `localidadeDoGasto`, os valores de
@@ -31,10 +35,31 @@ from rastro.politicos.modelos import PolEmenda
 API = "https://api.portaldatransparencia.gov.br/api-de-dados"
 VARIAVEL_CHAVE = "RASTRO_TRANSPARENCIA_CHAVE"
 AVISO_SEM_CHAVE = (
-    f"Coletor de emendas DESLIGADO: defina {VARIAVEL_CHAVE} com a chave da API do Portal "
-    "da Transparência (cadastro em https://portaldatransparencia.gov.br/api-de-dados/"
-    "cadastrar-email)."
+    "Portal da Transparência recusou o acesso (401, chave de API não informada). Defina "
+    f"{VARIAVEL_CHAVE} ou configure a credencial no proxy do ambiente (cadastro em "
+    "https://portaldatransparencia.gov.br/api-de-dados/cadastrar-email)."
 )
+
+
+class SemChave(Exception):
+    """A API do Portal da Transparência recusou o acesso (sem chave válida)."""
+
+
+def preparar_cliente(client: httpx.Client) -> str:
+    """Põe a chave no cliente, se houver na variável de ambiente. Devolve o modo usado."""
+    k = chave()
+    if k:
+        client.headers["chave-api-dados"] = k
+        return f"chave da variável {VARIAVEL_CHAVE}"
+    return "credencial injetada pelo proxy do ambiente (sem variável local)"
+
+
+def verificar_acesso(client: httpx.Client, ano: int) -> None:
+    """Consulta de teste (1 página). Levanta SemChave se a API responder 401."""
+    resp = client.get(f"{API}/emendas", params={"ano": ano, "pagina": 1})
+    if resp.status_code == 401:
+        raise SemChave(AVISO_SEM_CHAVE)
+    resp.raise_for_status()
 
 
 def chave() -> str | None:

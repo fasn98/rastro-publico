@@ -105,16 +105,31 @@ export type TotalEmendas = {
   valor_pago: string;
 };
 
+export type EmendasPorParlamentar = {
+  politico_id: number | null;
+  nome_autor: string | null;
+  partido: string | null;
+  cargo: string | null;
+  quantidade: number;
+  valor_empenhado: string;
+  valor_liquidado: string;
+  valor_pago: string;
+};
+
 export type Emendas = {
   coletadas: boolean;
+  publicadas: boolean;
   aviso: string | null;
   totais: TotalEmendas[];
+  por_parlamentar: EmendasPorParlamentar[];
   itens: Emenda[];
 };
 
+export type GrupoRepresentantes = { cargo: string; politicos: Politico[]; pendente: string | null };
+
 export type Representantes = {
   municipio: { cod_ibge: number; nome: string; uf: string };
-  grupos: { cargo: string; politicos: Politico[]; pendente: string | null }[];
+  secoes: { titulo: string; nota: string | null; grupos: GrupoRepresentantes[] }[];
 };
 
 export type Pagina<T> = { total: number; itens: T[] };
