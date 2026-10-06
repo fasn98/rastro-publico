@@ -3,7 +3,7 @@ import {
   buscarRanking,
   INDICADORES_RANKING,
   obterMetodologia,
-  urlCsvRanking,
+  baixarCsvRanking,
   type Metodologia,
   type Ranking,
 } from "./api";
@@ -93,9 +93,14 @@ export default function RankingPagina() {
           ))}
         </select>
         <input placeholder="Buscar município" value={busca} onChange={(e) => setBusca(e.target.value)} />
-        <a className="botao" href={urlCsvRanking({ uf: "SP", faixa, busca: busca.trim() })} download>
+        <button
+          className="botao"
+          onClick={() =>
+            baixarCsvRanking(visiveis, `ranking-fiscal-sp${faixa ? "-" + faixa.replace(/\W+/g, "-") : ""}.csv`)
+          }
+        >
           Exportar CSV
-        </a>
+        </button>
       </div>
 
       <Mapa notas={notas} nomes={nomes} visiveis={visiveis} aoClicar={(c) => (location.hash = `#/municipio/${c}`)} />

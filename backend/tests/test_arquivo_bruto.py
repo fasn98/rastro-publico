@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from conftest import FIXTURES, carregar
+from rastro.api.auditoria import cache_payloads
 from rastro.api.main import app
 from rastro.coletores import ibge
 from rastro.coletores import siconfi_demonstrativos as sd
@@ -160,7 +161,12 @@ def test_api_devolve_bytes_originais_e_detecta_corrupcao(session, cliente):
         p = session.scalars(select(PayloadBruto)).one()
         p.conteudo = gzip.compress(b"adulterado")
         session.commit()
+        # a verificação relê do banco, mesmo com o payload no cache
         assert api.get(f"/api/respostas/{rid}").json()["integra"] is False
+        # o download pode vir do cache: são os bytes já verificados contra o SHA-256
+        assert api.get(f"/api/respostas/{rid}/bruto").content == bruto
+        # sem cache (outro processo), o download também recusa o conteúdo adulterado
+        cache_payloads.limpar()
         assert api.get(f"/api/respostas/{rid}/bruto").status_code == 500
     finally:
         app.dependency_overrides.clear()

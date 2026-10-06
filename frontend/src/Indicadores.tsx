@@ -6,6 +6,7 @@ import {
   type Indicadores as Dados,
   type Situacao,
 } from "./api";
+import { urlAuditoria } from "./dados";
 import { nota10 } from "./Ranking";
 import Evolucao from "./Evolucao";
 
@@ -211,13 +212,13 @@ export default function Indicadores({ cod }: { cod: number }) {
         Fonte: SICONFI/Tesouro Nacional, valores declarados pelo ente
         {(ref || execucao) && " · respostas originais da API: "}
         {ref && (
-          <a href={`/api/demonstrativos/${ref.demonstrativo_id}/respostas`} target="_blank" rel="noreferrer">
+          <a href={urlAuditoria(`/api/demonstrativos/${ref.demonstrativo_id}/respostas`)} target="_blank" rel="noreferrer">
             RGF
           </a>
         )}
         {ref && execucao && " · "}
         {execucao && (
-          <a href={`/api/demonstrativos/${execucao.demonstrativo_id}/respostas`} target="_blank" rel="noreferrer">
+          <a href={urlAuditoria(`/api/demonstrativos/${execucao.demonstrativo_id}/respostas`)} target="_blank" rel="noreferrer">
             RREO
           </a>
         )}

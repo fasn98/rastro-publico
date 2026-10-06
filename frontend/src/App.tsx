@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { obterManifesto, type Manifesto } from "./dados";
 import Metodologia from "./Metodologia";
 import Municipios from "./Municipios";
 import { PaginaPolitico, QuemRepresenta } from "./Politicos";
@@ -31,6 +32,11 @@ const LINKS = [
 
 export default function App() {
   const [rota, setRota] = useState(lerRota);
+  const [manifesto, setManifesto] = useState<Manifesto | null>(null);
+
+  useEffect(() => {
+    obterManifesto().then(setManifesto).catch(() => setManifesto(null));
+  }, []);
 
   useEffect(() => {
     const mudou = () => {
@@ -61,6 +67,23 @@ export default function App() {
       {rota.pagina === "metodologia" && <Metodologia />}
       {rota.pagina === "representantes" && <QuemRepresenta cod={rota.cod} />}
       {rota.pagina === "politico" && rota.cod !== null && <PaginaPolitico id={rota.cod} />}
+      {manifesto && (
+        <footer className="rodape">
+          Dados coletados até{" "}
+          {new Date(manifesto.ultima_coleta ?? manifesto.gerado_em).toLocaleDateString("pt-BR")} ·
+          site gerado em {new Date(manifesto.gerado_em).toLocaleString("pt-BR")} · metodologia v
+          {manifesto.metodologia.versao}
+          {manifesto.codigo && (
+            <>
+              {" "}
+              · código{" "}
+              <a href={`https://github.com/fasn98/rastro-publico/commit/${manifesto.codigo}`}>
+                {manifesto.codigo.slice(0, 7)}
+              </a>
+            </>
+          )}
+        </footer>
+      )}
     </main>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   buscarMunicipios,
+  ufsDisponiveis,
   obterMunicipio,
   type Municipio,
   type MunicipioDetalhe,
@@ -8,16 +9,16 @@ import {
 } from "./api";
 import Indicadores from "./Indicadores";
 
-const UFS = [
-  "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA",
-  "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO",
-];
-
 const formatarCnpj = (c: string) =>
   c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
 
 export default function Municipios({ cod }: { cod: number | null }) {
   const [uf, setUf] = useState("");
+  // só as UFs que o site publicado cobre (nesta fase, SP)
+  const [ufs, setUfs] = useState<string[]>([]);
+  useEffect(() => {
+    ufsDisponiveis().then(setUfs).catch(() => setUfs([]));
+  }, []);
   const [nome, setNome] = useState("");
   const [resultado, setResultado] = useState<Pagina<Municipio> | null>(null);
   const [detalhe, setDetalhe] = useState<MunicipioDetalhe | null>(null);
@@ -60,7 +61,7 @@ export default function Municipios({ cod }: { cod: number | null }) {
       <div className="filtros">
         <select value={uf} onChange={(e) => setUf(e.target.value)} aria-label="UF">
           <option value="">Todas as UFs</option>
-          {UFS.map((u) => (
+          {ufs.map((u) => (
             <option key={u}>{u}</option>
           ))}
         </select>
