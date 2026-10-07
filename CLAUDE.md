@@ -48,6 +48,10 @@ quando o CI estiver verde no último commit e não houver conflito com o `main`.
 - muda o formato dos arquivos exportados ou o pipeline de publicação;
 - mexe em segurança, LGPD ou credenciais.
 
+Na dúvida se um PR se enquadra numa exceção, trate como exceção e pare para a aprovação
+do Fabio. Se o `main` mudar antes do merge, traga o `main` para o branch e espere o CI
+verde de novo antes de mesclar.
+
 ## Onde ler mais
 
 - `README.md`: visão geral, arquitetura e como rodar.
