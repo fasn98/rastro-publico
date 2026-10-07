@@ -57,5 +57,7 @@ def cota(ano: int, uf: str):
 
 REGRAS = [
     (r"^https://dadosabertos\.camara\.leg\.br/api/v2/deputados(\?|$)", CAMARA_DEPUTADOS),
+    # histórico do deputado: traz o e-mail de gabinete em cada evento
+    (r"^https://dadosabertos\.camara\.leg\.br/api/v2/deputados/\d+/historico", CAMARA_DEPUTADOS),
     (r"^https://legis\.senado\.leg\.br/dadosabertos/senador/lista/", SENADO_LISTA),
 ]

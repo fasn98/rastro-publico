@@ -13,10 +13,15 @@ página de um político quando, sem ambiguidade:
 4. todas as emendas ligadas a ele têm o mesmo "Código do Autor".
 
 Nos demais casos a emenda aparece com o autor exatamente como está na fonte, sem link.
+
+Exceções aprovadas uma a uma pelo mantenedor ficam em `excecoes_emendas.toml` (versionado,
+com justificativa); a emenda é ligada ao político indicado e exibida com um rótulo.
 """
 
+import tomllib
 from collections import defaultdict
 from dataclasses import dataclass
+from pathlib import Path
 
 import httpx
 from sqlalchemy import select
@@ -85,3 +90,26 @@ def autores_confirmaveis(
             inicio, fim = ANOS_LEGISLATURA[p.legislatura or LEGISLATURA]
         autores[chave] = Autor(p.id, p.nome, inicio + 1, fim + 1)
     return autores, recusados
+
+
+ARQUIVO_EXCECOES = Path(__file__).with_name("excecoes_emendas.toml")
+
+
+def carregar_excecoes(caminho: Path = ARQUIVO_EXCECOES) -> list[dict]:
+    with caminho.open("rb") as f:
+        return tomllib.load(f).get("excecao", [])
+
+
+def excecoes_por_texto(session: Session) -> dict[str, tuple[int, str]]:
+    """Texto exato do autor na fonte -> (pol_politico.id, rótulo), para as exceções."""
+    ids = dict(
+        session.execute(
+            select(PolPolitico.id_fonte, PolPolitico.id).where(PolPolitico.fonte == "camara")
+        ).all()
+    )
+    saida = {}
+    for e in carregar_excecoes():
+        pid = ids.get(str(e["camara_id"]))
+        if pid is not None:
+            saida[e["texto_fonte"]] = (pid, e["rotulo"])
+    return saida

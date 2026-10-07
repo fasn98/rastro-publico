@@ -1,0 +1,44 @@
+# Exceções aprovadas ao vínculo automático entre autor de emenda e parlamentar.
+#
+# Regra geral (politicos/vinculo.py): uma emenda só é ligada à página de um político
+# quando o nome do autor é único entre os parlamentares federais da legislatura, da UF,
+# dentro do mandato e com um único "Código do Autor". Os casos abaixo não passam nessa
+# regra (o nome na fonte difere do nome na Câmara) e foram aprovados um a um.
+#
+# TODA linha nova exige aprovação explícita do mantenedor do projeto, registrada em
+# `aprovado_em` e `aprovado_por`, com justificativa. Sem isso, o teste
+# `test_excecoes_emendas_tem_aprovacao_e_justificativa` falha.
+#
+# Campos:
+#   texto_fonte    nome do autor EXATAMENTE como está no arquivo do Portal da Transparência
+#   camara_id      id na Câmara do parlamentar a quem a emenda passa a ser ligada
+#   ex_parlamentar nome (como na Câmara) de quem a emenda foi herdada
+#   ex_camara_id   id na Câmara do ex-parlamentar
+#   rotulo         texto exibido na tela junto da emenda
+
+[[excecao]]
+texto_fonte = "JOAO CURY NETO (EX-PARLAMENTAR ALBERTO MOURAO, NOS TERMOS ART. 78 LDO 2025 E DA MENSAGEM 95-CN, DE 06.11.25)"
+camara_id = 230957  # João Cury (MDB-SP)
+ex_parlamentar = "Alberto Mourão"
+ex_camara_id = 74696
+rotulo = "Emenda herdada do ex-parlamentar Alberto Mourão, nos termos do art. 78 da LDO 2025"
+justificativa = """O arquivo de emendas atribui a emenda a "JOAO CURY NETO", acrescentando que ela foi \
+herdada do ex-parlamentar Alberto Mourão nos termos do art. 78 da LDO 2025. Na Câmara, o \
+deputado de SP em exercício é "João Cury" (id 230957); o nome difere só pelo "NETO". As \
+emendas trazem o Código do Autor 3597 (o do ex-parlamentar), e não o 4551 usado pelas \
+emendas próprias de João Cury."""
+aprovado_por = "mantenedor do projeto"
+aprovado_em = 2026-10-06
+
+[[excecao]]
+texto_fonte = "RIBAMAR ANTONIO DA SILVA (EX-PARLAMENTAR RICARDO SILVA, NOS TERMOS ART. 78 LDO 2025 E DA MENSAGEM 95-CN, DE 06.11.25)"
+camara_id = 175765  # Ribamar Silva (PODE-SP)
+ex_parlamentar = "Ricardo Silva"
+ex_camara_id = 213274
+rotulo = "Emenda herdada do ex-parlamentar Ricardo Silva, nos termos do art. 78 da LDO 2025"
+justificativa = """O arquivo de emendas atribui a emenda a "RIBAMAR ANTONIO DA SILVA", herdada do \
+ex-parlamentar Ricardo Silva nos termos do art. 78 da LDO 2025. Na Câmara, o deputado de SP \
+em exercício é "Ribamar Silva" (id 175765). As emendas trazem o Código do Autor 4200 (o do \
+ex-parlamentar), e não o 4545 usado pelas emendas próprias de Ribamar Silva."""
+aprovado_por = "mantenedor do projeto"
+aprovado_em = 2026-10-06

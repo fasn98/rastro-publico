@@ -4,12 +4,14 @@ import { AUDITORIA_ATIVA, urlAuditoria } from "./dados";
 import {
   CARGOS,
   FONTES,
+  hrefPolitico,
   listarPresencas,
   listarProposicoes,
   listarVotacoes,
   obterEmendas,
   obterCota,
   obterEmendasMunicipio,
+  obterEleito,
   obterPolitico,
   obterRepresentantes,
   type Contagem,
@@ -17,7 +19,7 @@ import {
   type Cota,
   type Emendas,
   type Fonte,
-  type Pagina,
+  type Lista,
   type PoliticoDetalhe,
   type Presenca,
   type Proposicao,
@@ -36,31 +38,33 @@ const reais = (v: string | null) =>
   v === null ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const inteiro = (n: number) => n.toLocaleString("pt-BR");
 
-/** Ícone de fonte: link para a fonte oficial + cópia arquivada da resposta e data da coleta. */
-export function LinkFonte({ url, respostaId, recebidoEm }: {
+/** Ícone de fonte: link para a fonte oficial + cópia arquivada (pelo SHA-256 do conteúdo)
+ * e a data em que esse conteúdo foi recebido pela primeira vez. */
+export function LinkFonte({ url, sha256, recebidoEm }: {
   url: string;
-  respostaId?: number | null;
-  recebidoEm?: string;
+  sha256?: string | null;
+  recebidoEm?: string | null;
 }) {
   return (
     <span className="fonte">
       <a href={url} target="_blank" rel="noreferrer" title={url} aria-label={`Fonte oficial: ${url}`}>
         <span aria-hidden="true">↗</span> fonte
       </a>
-      {respostaId && AUDITORIA_ATIVA ? (
+      {sha256 && AUDITORIA_ATIVA ? (
         <>
           {" · "}
           <a
-            href={urlAuditoria(`/api/respostas/${respostaId}/bruto`)}
+            href={urlAuditoria(`/api/bruto/${sha256}`)}
             target="_blank"
             rel="noreferrer"
-            aria-label={`Cópia arquivada da resposta ${respostaId}`}
+            title={`SHA-256 ${sha256}`}
+            aria-label={`Cópia arquivada (SHA-256 ${sha256.slice(0, 12)}…)`}
           >
             cópia arquivada
           </a>
         </>
       ) : null}
-      {recebidoEm && <span className="coleta"> · coletado em {dataHora(recebidoEm)}</span>}
+      {recebidoEm && <span className="coleta"> · recebido em {dataHora(recebidoEm)}</span>}
     </span>
   );
 }
@@ -70,7 +74,7 @@ function Fontes({ fontes }: { fontes: Fonte[] }) {
   return (
     <span className="fontes">
       {fontes.map((f) => (
-        <LinkFonte key={f.resposta_id} url={f.url} respostaId={f.resposta_id} recebidoEm={f.recebido_em} />
+        <LinkFonte key={`${f.url}-${f.sha256}`} url={f.url} sha256={f.sha256} recebidoEm={f.recebido_em} />
       ))}
     </span>
   );
@@ -184,6 +188,11 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
                         <th scope="row">
                           {x.politico_id ? <a href={`#/politico/${x.politico_id}`}>{x.nome_autor}</a> : x.nome_autor}
                           {x.partido && <span className="sub"> {x.partido}</span>}
+                          {x.nota_vinculo && (
+                            <div className="rotulo-vinculo">
+                              {x.nota_vinculo}. Na fonte: “{x.nome_fonte}”
+                            </div>
+                          )}
                         </th>
                         <td>{inteiro(x.quantidade)}</td>
                         <td>{reais(x.valor_empenhado)}</td>
@@ -222,7 +231,7 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
                     <ul className="lista">
                       {g.politicos.map((p) => (
                         <li key={p.id}>
-                          <a className="cartao-link" href={`#/politico/${p.id}`}>
+                          <a className="cartao-link" href={hrefPolitico(p)}>
                             {p.nome} <span>{p.partido ?? "sem partido informado"}</span>
                           </a>
                         </li>
@@ -265,7 +274,7 @@ function Tile({ rotulo, lista, ano }: { rotulo: string; lista: Contagem[]; ano: 
   );
 }
 
-export function PaginaPolitico({ id }: { id: number }) {
+export function PaginaPolitico({ id, eleito }: { id: number; eleito?: string }) {
   const [p, setP] = useState<PoliticoDetalhe | null>(null);
   const [ano, setAno] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -273,8 +282,8 @@ export function PaginaPolitico({ id }: { id: number }) {
   useEffect(() => {
     setP(null);
     setAno(null);
-    obterPolitico(id).then(setP).catch((e: Error) => setErro(e.message));
-  }, [id]);
+    (eleito ? obterEleito(eleito, id) : obterPolitico(id)).then(setP).catch((e: Error) => setErro(e.message));
+  }, [id, eleito]);
 
   if (erro) return <p className="erro">{erro}</p>;
   if (!p) return <p className="sub">Carregando…</p>;
@@ -343,7 +352,7 @@ export function PaginaPolitico({ id }: { id: number }) {
           {FONTES[p.fonte]}:{" "}
           <LinkFonte
             url={p.fonte_registro?.url ?? p.url_fonte}
-            respostaId={p.resposta_id}
+            sha256={p.fonte_registro?.sha256 ?? p.sha256}
             recebidoEm={p.fonte_registro?.recebido_em}
           />
           {p.url_pagina && (
@@ -357,6 +366,8 @@ export function PaginaPolitico({ id }: { id: number }) {
         </dd>
       </dl>
       <Contestar titulo={`${p.nome} (${CARGOS[p.cargo] ?? p.cargo}, id ${p.id})`} />
+
+      {p.linha_do_tempo.length > 0 && <LinhaDoTempo periodos={p.linha_do_tempo} />}
 
       {federal && (
         <>
@@ -414,7 +425,7 @@ export function PaginaPolitico({ id }: { id: number }) {
               </table>
             </div>
           )}
-          <Listas id={p.id} ano={ano} camara={p.fonte === "camara"} />
+          <Listas p={p} ano={ano} camara={p.fonte === "camara"} />
           {p.comissoes.length > 0 && (
             <details>
               <summary>Comissões ({p.comissoes.length})</summary>
@@ -423,22 +434,58 @@ export function PaginaPolitico({ id }: { id: number }) {
                   <li key={`${c.sigla}-${c.data_inicio}`}>
                     {c.sigla} — {c.nome} ({c.casa}) · {c.participacao} · {data(c.data_inicio)} a{" "}
                     {c.data_fim ? data(c.data_fim) : "atual"}{" "}
-                    <LinkFonte url={c.url_fonte} respostaId={c.resposta_id} />
+                    <LinkFonte url={c.url_fonte} sha256={c.sha256} />
                   </li>
                 ))}
               </ul>
             </details>
           )}
-          {p.fonte === "camara" && p.cota.length > 0 && <CotaDetalhe id={p.id} ano={ano} />}
+          {p.fonte === "camara" && p.cota.length > 0 && <CotaDetalhe p={p} ano={ano} />}
           <h3>Emendas parlamentares</h3>
-          <EmendasDoPolitico id={p.id} ano={ano} />
+          <EmendasDoPolitico p={p} ano={ano} />
         </>
       )}
-      <p className="nota">
-        Somente fatos registrados nas fontes oficiais, sem notas nem classificações. Atualizado
-        no portal em {dataHora(p.atualizado_em)}.
-      </p>
+      <p className="nota">Somente fatos registrados nas fontes oficiais, sem notas nem classificações.</p>
     </article>
+  );
+}
+
+function LinhaDoTempo({ periodos }: { periodos: PoliticoDetalhe["linha_do_tempo"] }) {
+  return (
+    <section className="linha-do-tempo" aria-labelledby="titulo-mandato">
+      <h3 id="titulo-mandato">Linha do tempo do mandato (legislatura 2023–2027)</h3>
+      <p className="nota">
+        Exercício, licença, suplência e afastamentos segundo o histórico oficial da Câmara, com o
+        motivo exatamente como está na fonte. Leia proposições, votos, presenças e emendas com
+        este contexto: fora do exercício, o parlamentar não vota nem registra presença.
+      </p>
+      <div className="tabela-rolagem">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">De</th>
+              <th scope="col">Até</th>
+              <th scope="col">Situação</th>
+              <th scope="col">Motivo (como na fonte)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {periodos.map((x) => (
+              <tr key={x.inicio + (x.descricao_status ?? "")}>
+                <td>{data(x.inicio)}</td>
+                <td>{x.fim ? data(x.fim) : "atual"}</td>
+                <td className="esq">
+                  {x.situacao}
+                  {x.condicao_eleitoral && <span className="sub"> ({x.condicao_eleitoral})</span>}
+                </td>
+                <td className="esq">{x.descricao_status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {periodos[0] && <LinkFonte url={periodos[0].url_fonte} sha256={periodos[0].sha256} />}
+    </section>
   );
 }
 
@@ -455,13 +502,35 @@ function TileCota({ lista, ano }: { lista: ContagemValor[]; ano: number | null }
   );
 }
 
-function CotaDetalhe({ id, ano }: { id: number; ano: number | null }) {
+function Mais({ lista, carregar }: { lista: Lista<unknown> | null; carregar: () => void }) {
+  if (!lista) return null;
+  return (
+    <p className="nota">
+      Mostrando {inteiro(lista.itens.length)} de {inteiro(lista.total)}.
+      {lista.mais && (
+        <>
+          {" "}
+          <button type="button" onClick={carregar}>
+            Carregar mais
+          </button>
+        </>
+      )}
+    </p>
+  );
+}
+
+function CotaDetalhe({ p, ano }: { p: PoliticoDetalhe; ano: number | null }) {
   const [aberto, setAberto] = useState(false);
+  const [paginas, setPaginas] = useState(1);
   const [c, setC] = useState<Cota | null>(null);
-  useEffect(() => setC(null), [id, ano]);
   useEffect(() => {
-    if (aberto && !c) obterCota(id, ano).then(setC);
-  }, [aberto, c, id, ano]);
+    setC(null);
+    setPaginas(1);
+  }, [p.id, ano]);
+  useEffect(() => {
+    if (aberto) obterCota(p, ano, paginas).then(setC);
+  }, [aberto, p, ano, paginas]);
+  const resumidos = c?.anos.filter((a) => !a.detalhada) ?? [];
   return (
     <details onToggle={(e) => e.currentTarget.open && setAberto(true)}>
       <summary>Cota parlamentar por categoria e lançamentos</summary>
@@ -487,28 +556,41 @@ function CotaDetalhe({ id, ano }: { id: number; ano: number | null }) {
               </tbody>
             </table>
           </div>
-          <ul>
-            {c.despesas.itens.map((x) => (
-              <li key={`${x.ano}-${x.linha}`}>
-                {String(x.mes).padStart(2, "0")}/{x.ano} · {x.categoria} ·{" "}
-                {x.pessoa_fisica ? "fornecedor pessoa física (nome não exibido)" : (x.fornecedor ?? "—")}
-                {x.cnpj && ` (CNPJ ${x.cnpj})`} · líquido {reais(x.valor_liquido)}
-                {x.url_documento && (
-                  <>
-                    {" "}
-                    <a href={x.url_documento} target="_blank" rel="noreferrer">
-                      documento
-                    </a>
-                  </>
-                )}{" "}
-                <LinkFonte url={x.url_fonte} respostaId={x.resposta_id} />
-              </li>
-            ))}
-          </ul>
-          {c.despesas.total > c.despesas.itens.length && (
-            <p className="nota">
-              Mostrando {c.despesas.itens.length} de {inteiro(c.despesas.total)}. Filtre por ano.
+          {resumidos.map((a) => (
+            <p key={a.ano} className="nota aviso-cota">
+              {a.ano}: {a.aviso}:{" "}
+              <a href={a.url_oficial} target="_blank" rel="noreferrer">
+                gastos do(a) deputado(a) em {a.ano}
+              </a>{" "}
+              ·{" "}
+              <a href={a.url_busca_detalhada} target="_blank" rel="noreferrer">
+                busca detalhada da cota
+              </a>
+              .
             </p>
+          ))}
+          {c.despesas.total > 0 && (
+            <>
+              <ul>
+                {c.despesas.itens.map((x) => (
+                  <li key={`${x.ano}-${x.linha}`}>
+                    {String(x.mes).padStart(2, "0")}/{x.ano} · {x.categoria} ·{" "}
+                    {x.pessoa_fisica ? "fornecedor pessoa física (nome não exibido)" : (x.fornecedor ?? "—")}
+                    {x.cnpj && ` (CNPJ ${x.cnpj})`} · líquido {reais(x.valor_liquido)}
+                    {x.url_documento && (
+                      <>
+                        {" "}
+                        <a href={x.url_documento} target="_blank" rel="noreferrer">
+                          documento
+                        </a>
+                      </>
+                    )}{" "}
+                    <LinkFonte url={x.url_fonte} sha256={x.sha256} />
+                  </li>
+                ))}
+              </ul>
+              <Mais lista={c.despesas} carregar={() => setPaginas((n) => n + 1)} />
+            </>
           )}
         </>
       )}
@@ -516,30 +598,33 @@ function CotaDetalhe({ id, ano }: { id: number; ano: number | null }) {
   );
 }
 
-function Listas({ id, ano, camara }: { id: number; ano: number | null; camara: boolean }) {
-  const [aberto, setAberto] = useState<string | null>(null);
-  const [props, setProps] = useState<Pagina<Proposicao> | null>(null);
-  const [vots, setVots] = useState<Pagina<Votacao> | null>(null);
-  const [pres, setPres] = useState<Pagina<Presenca> | null>(null);
+function Listas({ p, ano, camara }: { p: PoliticoDetalhe; ano: number | null; camara: boolean }) {
+  const [abertos, setAbertos] = useState<Set<string>>(new Set());
+  const [paginas, setPaginas] = useState({ props: 1, vots: 1, pres: 1 });
+  const [props, setProps] = useState<Lista<Proposicao> | null>(null);
+  const [vots, setVots] = useState<Lista<Votacao> | null>(null);
+  const [pres, setPres] = useState<Lista<Presenca> | null>(null);
 
   useEffect(() => {
     setProps(null);
     setVots(null);
     setPres(null);
-  }, [id, ano]);
+    setPaginas({ props: 1, vots: 1, pres: 1 });
+  }, [p.id, ano]);
   useEffect(() => {
-    if (aberto === "props" && !props) listarProposicoes(id, ano).then(setProps);
-    if (aberto === "vots" && !vots) listarVotacoes(id, ano).then(setVots);
-    if (aberto === "pres" && !pres) listarPresencas(id, ano).then(setPres);
-  }, [aberto, id, ano, props, vots, pres]);
+    if (abertos.has("props")) listarProposicoes(p, ano, paginas.props).then(setProps);
+  }, [abertos, p, ano, paginas.props]);
+  useEffect(() => {
+    if (abertos.has("vots")) listarVotacoes(p, ano, paginas.vots).then(setVots);
+  }, [abertos, p, ano, paginas.vots]);
+  useEffect(() => {
+    if (abertos.has("pres")) listarPresencas(p, ano, paginas.pres).then(setPres);
+  }, [abertos, p, ano, paginas.pres]);
 
   const alternar = (k: string) => (e: React.SyntheticEvent<HTMLDetailsElement>) => {
-    if (e.currentTarget.open) setAberto(k);
+    if (e.currentTarget.open) setAbertos((a) => new Set(a).add(k));
   };
-  const mais = (pg: Pagina<unknown> | null) =>
-    pg && pg.total > pg.itens.length ? (
-      <p className="nota">Mostrando {pg.itens.length} de {inteiro(pg.total)}. Filtre por ano.</p>
-    ) : null;
+  const mais = (k: keyof typeof paginas) => () => setPaginas((x) => ({ ...x, [k]: x[k] + 1 }));
 
   return (
     <>
@@ -553,12 +638,12 @@ function Listas({ id, ano, camara }: { id: number; ano: number | null; camara: b
                   {x.sigla_tipo} {x.numero}/{x.ano}
                 </strong>{" "}
                 ({data(x.data_apresentacao)}) — {x.ementa}{" "}
-                <LinkFonte url={x.url_pagina ?? x.url_fonte} respostaId={x.resposta_id} />
+                <LinkFonte url={x.url_pagina ?? x.url_fonte} sha256={x.sha256} />
               </li>
             ))}
           </ul>
         )}
-        {mais(props)}
+        <Mais lista={props} carregar={mais("props")} />
       </details>
       <details onToggle={alternar("vots")}>
         <summary>Lista de votos</summary>
@@ -569,12 +654,12 @@ function Listas({ id, ano, camara }: { id: number; ano: number | null; camara: b
                 {data(x.data)} · {x.orgao ?? ""} {x.materia ?? ""} — voto: <strong>{x.voto || "(sem valor na fonte)"}</strong>
                 {x.voto_descricao && ` (${x.voto_descricao})`}
                 {x.descricao && <div className="sub">{x.descricao}</div>}
-                <LinkFonte url={x.url_fonte} respostaId={x.resposta_id} />
+                <LinkFonte url={x.url_fonte} sha256={x.sha256} />
               </li>
             ))}
           </ul>
         )}
-        {mais(vots)}
+        <Mais lista={vots} carregar={mais("vots")} />
       </details>
       {camara && (
         <details onToggle={alternar("pres")}>
@@ -584,23 +669,23 @@ function Listas({ id, ano, camara }: { id: number; ano: number | null; camara: b
               {pres.itens.map((x) => (
                 <li key={x.id_evento}>
                   {dataHora(x.data_hora_inicio)} · evento {x.id_evento}{" "}
-                  <LinkFonte url={x.url_fonte} respostaId={x.resposta_id} />
+                  <LinkFonte url={x.url_fonte} sha256={x.sha256} />
                 </li>
               ))}
             </ul>
           )}
-          {mais(pres)}
+          <Mais lista={pres} carregar={mais("pres")} />
         </details>
       )}
     </>
   );
 }
 
-function EmendasDoPolitico({ id, ano }: { id: number; ano: number | null }) {
+function EmendasDoPolitico({ p, ano }: { p: PoliticoDetalhe; ano: number | null }) {
   const [e, setE] = useState<Emendas | null>(null);
   useEffect(() => {
-    obterEmendas(id, ano).then(setE);
-  }, [id, ano]);
+    obterEmendas(p, ano).then(setE);
+  }, [p, ano]);
   return e ? <TabelaEmendas emendas={e} /> : null;
 }
 
@@ -641,9 +726,11 @@ function TabelaEmendas({ emendas, mostrarAutor = false }: { emendas: Emendas; mo
           {emendas.itens.map((x) => (
             <li key={x.codigo_emenda}>
               {x.ano} · {x.numero_emenda} · {x.tipo_emenda}
-              {mostrarAutor && ` · ${x.nome_autor}`} · {x.localidade_gasto} · empenhado{" "}
+              {(mostrarAutor || x.nota_vinculo) && ` · autor na fonte: “${x.nome_autor}”`}
+              {x.nota_vinculo && <div className="rotulo-vinculo">{x.nota_vinculo}</div>} ·{" "}
+              {x.localidade_gasto} · empenhado{" "}
               {reais(x.valor_empenhado)} → liquidado {reais(x.valor_liquidado)} → pago{" "}
-              {reais(x.valor_pago)} <LinkFonte url={x.url_fonte} respostaId={x.resposta_id} />
+              {reais(x.valor_pago)} <LinkFonte url={x.url_fonte} sha256={x.sha256} />
             </li>
           ))}
         </ul>

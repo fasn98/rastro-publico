@@ -25,6 +25,7 @@ from rastro.politicos.modelos import (
     PolComissao,
     PolDespesaCota,
     PolEmenda,
+    PolEventoMandato,
     PolPendencia,
     PolPolitico,
     PolPresenca,
@@ -123,6 +124,19 @@ class ContagemValor(Contagem):
     valor_liquido: Decimal
 
 
+class PeriodoMandato(BaseModel):
+    """Do evento do histórico oficial até o evento seguinte (fim nulo = situação atual)."""
+
+    inicio: datetime
+    fim: datetime | None
+    situacao: str | None
+    condicao_eleitoral: str | None
+    descricao_status: str | None  # exatamente como está na fonte
+    partido: str | None
+    url_fonte: str
+    resposta_id: int | None
+
+
 class PoliticoDetalhe(PoliticoOut):
     fonte_registro: Fonte | None
     proposicoes: list[Contagem]
@@ -132,6 +146,8 @@ class PoliticoDetalhe(PoliticoOut):
     comissoes: list[ComissaoOut]
     # descrição de cada código de voto, quando a fonte a fornece (ex.: Senado "AP")
     descricao_votos: dict[str, str]
+    # Câmara: exercício, licença, suplência e afastamentos na legislatura (histórico oficial)
+    linha_do_tempo: list[PeriodoMandato]
 
 
 class ProposicaoOut(BaseModel):
@@ -184,6 +200,9 @@ class EmendaOut(BaseModel):
     valor_empenhado: Decimal | None
     valor_liquidado: Decimal | None
     valor_pago: Decimal | None
+    politico_id: int | None
+    vinculo: str | None  # "nome" | "excecao" | nulo (autor só como na fonte)
+    nota_vinculo: str | None  # rótulo das exceções aprovadas (ex.: emenda herdada)
     url_fonte: str
     resposta_id: int | None
 
@@ -199,7 +218,9 @@ class TotalEmendas(BaseModel):
 
 class EmendasPorParlamentar(BaseModel):
     politico_id: int | None
-    nome_autor: str | None
+    nome_autor: str | None  # nome do político (se ligado) ou do autor como na fonte
+    nome_fonte: str | None  # nome do autor exatamente como está na fonte
+    nota_vinculo: str | None  # rótulo das exceções aprovadas (ex.: emenda herdada)
     partido: str | None
     cargo: str | None
     quantidade: int
@@ -346,6 +367,7 @@ def detalhe_politico(politico_id: int, session: SessionDep):
         **PoliticoOut.model_validate(p).model_dump(),
         fonte_registro=registro[0] if registro else None,
         descricao_votos=descricoes,
+        linha_do_tempo=_linha_do_tempo(session, p.id),
         proposicoes=_contagens(session, PolProposicao, PolProposicao.ano, p.id),
         votacoes=votacoes,
         presencas=_contagens(
@@ -370,6 +392,27 @@ def detalhe_politico(politico_id: int, session: SessionDep):
             .order_by(PolComissao.data_inicio.desc().nulls_last(), PolComissao.sigla)
         ).all(),
     )
+
+
+def _linha_do_tempo(session: Session, politico_id: int) -> list[PeriodoMandato]:
+    eventos = session.scalars(
+        select(PolEventoMandato)
+        .where(PolEventoMandato.politico_id == politico_id, PolEventoMandato.situacao.is_not(None))
+        .order_by(PolEventoMandato.data_hora, PolEventoMandato.id)
+    ).all()
+    return [
+        PeriodoMandato(
+            inicio=e.data_hora,
+            fim=eventos[i + 1].data_hora if i + 1 < len(eventos) else None,
+            situacao=e.situacao,
+            condicao_eleitoral=e.condicao_eleitoral,
+            descricao_status=e.descricao_status,
+            partido=e.partido,
+            url_fonte=e.url_fonte,
+            resposta_id=e.resposta_id,
+        )
+        for i, e in enumerate(eventos)
+    ]
 
 
 def _pagina(session: Session, q, ordem, limite: int, deslocamento: int):
@@ -552,6 +595,8 @@ def _emendas(session: Session, filtro, ano: int | None, por_parlamentar=False) -
             EmendasPorParlamentar(
                 politico_id=e.politico_id,
                 nome_autor=pol.nome if pol else e.nome_autor,
+                nome_fonte=e.nome_autor,
+                nota_vinculo=e.nota_vinculo,
                 partido=pol.partido if pol else None,
                 cargo=pol.cargo if pol else None,
                 quantidade=0,
@@ -655,16 +700,29 @@ def representantes(cod_ibge: int, session: SessionDep):
             )
         titulo, nota = titulos[chave]
         secoes.append(SecaoRepresentantes(titulo=titulo, nota=nota, grupos=grupos))
-    if publicacao.tse_2026():
-        secoes.append(_secao_2026(session, m.uf))
+    if publicacao.tse_2026() and (secao := _secao_2026(session, m.uf)):
+        secoes.append(secao)
     return Representantes(
         municipio=MunicipioRef(cod_ibge=m.cod_ibge, nome=m.nome, uf=m.uf), secoes=secoes
     )
 
 
-def _secao_2026(session: Session, uf: str) -> SecaoRepresentantes:
+def _secao_2026(session: Session, uf: str) -> SecaoRepresentantes | None:
+    """Eleitos 2026 da UF, sem os cargos com 2º turno pendente (ficam ocultos)."""
+    pendentes = set(
+        session.scalars(
+            select(PolPendencia.cargo).where(
+                PolPendencia.fonte == "tse",
+                PolPendencia.eleicao_ano == 2026,
+                PolPendencia.uf == uf,
+                PolPendencia.tipo == "segundo_turno",
+            )
+        )
+    )
     grupos, datas = [], set()
     for cargo in CARGOS_2026:
+        if cargo in pendentes:
+            continue
         politicos = session.scalars(
             select(PolPolitico)
             .where(
@@ -675,12 +733,19 @@ def _secao_2026(session: Session, uf: str) -> SecaoRepresentantes:
             )
             .order_by(*_ordem_nome())
         ).all()
+        if not politicos:
+            continue
         datas |= {p.data_divulgacao for p in politicos if p.data_divulgacao}
         grupos.append(GrupoRepresentantes(cargo=cargo, politicos=politicos, pendente=None))
+    if not grupos:
+        return None
     quando = ", ".join(f"{d:%d/%m/%Y}" for d in sorted(datas)) or "—"
+    nota = "Situação de cada candidatura exatamente como está no arquivo do TSE."
+    if pendentes:
+        nota += " Cargos com 2º turno pendente não aparecem até o resultado final."
     return SecaoRepresentantes(
         titulo=f"Eleitos em 2026 por {uf} — resultado divulgado pelo TSE em {quando}, "
-        "mandato a partir de 2027",
-        nota="Situação de cada candidatura exatamente como está no arquivo do TSE.",
+        "mandato a partir de 2027, sujeito a alterações até a diplomação",
+        nota=nota,
         grupos=grupos,
     )
