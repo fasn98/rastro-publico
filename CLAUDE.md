@@ -36,6 +36,18 @@ descrições de PR, comentários no GitHub e comentários no código.
 - Cada sessão trabalha no próprio branch.
 - Migrações do Alembic são numeradas a partir da **última que está no `main`**.
 
+### Merge dos próprios PRs
+
+A sessão pode fazer o merge do PR que ela mesma abriu, **sem pedir autorização ao Fabio**,
+quando o CI estiver verde no último commit e não houver conflito com o `main`.
+
+**Exceções: pare e mostre ao Fabio antes do merge** quando o PR:
+- muda dados que aparecem no site: publicar fonte nova, ligar trava, mudar regra de
+  vínculo ou de cruzamento;
+- muda a metodologia, as fórmulas ou os pesos do ranking;
+- muda o formato dos arquivos exportados ou o pipeline de publicação;
+- mexe em segurança, LGPD ou credenciais.
+
 ## Onde ler mais
 
 - `README.md`: visão geral, arquitetura e como rodar.
