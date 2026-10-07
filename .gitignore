@@ -10,3 +10,4 @@ dist/
 .DS_Store
 *.tsbuildinfo
 frontend/public/dados/
+site-dados/

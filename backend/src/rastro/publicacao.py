@@ -15,6 +15,7 @@ import logging
 import os
 import shutil
 import subprocess
+import tarfile
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -130,6 +131,41 @@ def publicar(
             git("push", "-q", "origin", "--delete", *[f"refs/tags/{t}" for t in antigas])
         log.info("Publicado %s (%d snapshots antigos removidos)", tag, len(antigas))
         return tag
+    finally:
+        git.fechar()
+
+
+def baixar_publicado(repo: str, destino: Path, token: str | None = None) -> dict | None:
+    """Copia o `dados/` da publicação no ar para `destino` e devolve o manifesto dela.
+
+    É o ponto de partida da exportação incremental: com o `indice.json` anterior na pasta,
+    `rastro exportar-site` reaproveita os grupos sem mudança. Sem publicação (ou sem
+    `dados/` nela), devolve None e deixa `destino` vazio: a exportação será completa.
+    """
+    destino.mkdir(parents=True, exist_ok=True)
+    if any(destino.iterdir()):
+        raise ErroPublicacao(f"{destino} não está vazia")
+    git = Git(repo, token)
+    try:
+        if not git.sha_do_ramo():
+            return None
+        git("fetch", "-q", "--depth=1", "origin", RAMO)
+        if not git("ls-tree", "-d", "FETCH_HEAD", "dados").strip():
+            return None
+        pacote = git.dir / "dados.tar"
+        git("archive", "--format=tar", "-o", str(pacote), "FETCH_HEAD", "dados")
+        with tarfile.open(pacote) as tar:
+            membros = []
+            for m in tar.getmembers():
+                nome = m.name.removeprefix("dados/")
+                if nome in ("", "dados"):
+                    continue
+                m.name = nome
+                membros.append(m)
+            # filtro "data": recusa caminhos absolutos, "..", links e arquivos especiais
+            tar.extractall(destino, members=membros, filter="data")
+        manifesto = destino / "manifesto.json"
+        return json.loads(manifesto.read_text()) if manifesto.exists() else None
     finally:
         git.fechar()
 

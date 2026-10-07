@@ -45,6 +45,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     pb.add_argument("--dist", required=True, help="frontend compilado, com dados/ dentro")
     pb.add_argument("--repo", default="https://github.com/fasn98/rastro-publico.git")
+    bx = sub.add_parser(
+        "baixar-site",
+        help="copia o dados/ publicado no gh-pages (ponto de partida da exportação incremental)",
+    )
+    bx.add_argument("--saida", required=True, help="pasta vazia de destino")
+    bx.add_argument("--repo", default="https://github.com/fasn98/rastro-publico.git")
     lp = sub.add_parser("listar-publicacoes", help="lista as publicações guardadas (snapshots)")
     lp.add_argument("--repo", default="https://github.com/fasn98/rastro-publico.git")
     rv = sub.add_parser("reverter-site", help="volta o site para a publicação anterior")
@@ -159,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    if args.comando in ("publicar-site", "listar-publicacoes", "reverter-site"):
+    if args.comando in ("publicar-site", "baixar-site", "listar-publicacoes", "reverter-site"):
         return _publicacao(args)
 
     if args.comando == "redigir-respostas":
@@ -281,6 +287,15 @@ def _publicacao(args) -> int:
         if args.comando == "publicar-site":
             tag = publicacao.publicar(Path(args.dist), args.repo, token)
             print(f"Site publicado: {tag}")
+        elif args.comando == "baixar-site":
+            m = publicacao.baixar_publicado(args.repo, Path(args.saida), token)
+            if m:
+                print(
+                    f"Base publicada copiada: gerada em {m.get('gerado_em')}, "
+                    f"formato {m.get('formato')}"
+                )
+            else:
+                print("Nenhuma publicação anterior: a exportação será completa.")
         elif args.comando == "listar-publicacoes":
             for p in publicacao.listar(args.repo, token):
                 print(f"{p['tag']}  {p['sha'][:10]}{'  <- no ar' if p['no_ar'] else ''}")
