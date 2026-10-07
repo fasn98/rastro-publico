@@ -368,8 +368,9 @@ class _CatPresenca(BaseModel):
 
 def _catalogos(
     session: Session, federais: dict[int, str], arquivados: _Arquivados
-) -> dict[tuple[str, str, int], dict[str, dict]]:
-    """(lista, casa, ano) -> {id: campos iguais em todas as linhas daquele id}.
+) -> tuple[dict[tuple[str, str, int], dict[str, dict]], dict[int, set[tuple]]]:
+    """(lista, casa, ano) -> {id: campos iguais em todas as linhas daquele id}, e as
+    entradas que cada político usa: politico_id -> {(lista, casa, ano, id)}.
 
     Campo que difere entre parlamentares (ex.: a URL de votação do Senado, que é por
     senador) fica fora do catálogo e continua no arquivo de cada político.
@@ -388,6 +389,7 @@ def _catalogos(
         ),
     }  # fmt: skip
     saida: dict[tuple[str, str, int], dict[str, dict]] = {}
+    usadas: dict[int, set[tuple]] = defaultdict(set)
     ids = list(federais)
     for lista, (modelo, chave, colunas, esquema) in consultas.items():
         rows = session.execute(
@@ -403,12 +405,20 @@ def _catalogos(
             item["sha256"] = arquivados.mapa.get(r.resposta_id, (None,))[0]
             data_item = item["data"] if lista == "votacoes" else item["data_hora_inicio"]
             k = (federais[r.politico_id], int(data_item[:4]), getattr(r, chave.key))
+            usadas[r.politico_id].add((lista, *k))
             for campo, v in item.items():
                 valores[k][campo].add(json.dumps(v))
         for (casa, ano, id_item), campos in valores.items():
             entrada = {c: json.loads(next(iter(vs))) for c, vs in campos.items() if len(vs) == 1}
             saida.setdefault((lista, casa, ano), {})[id_item] = entrada
-    return saida
+    return saida, usadas
+
+
+def _impressao_catalogo(catalogos: dict, usadas: set[tuple]) -> str:
+    """Impressão das entradas de catálogo que um político usa: o arquivo dele só depende
+    delas (uma votação nova de que ele não participou não refaz a página dele)."""
+    entradas = [[*k, catalogos[k[:3]][k[3]]] for k in sorted(usadas)]
+    return _sha(_bytes(entradas))
 
 
 # --------------------------------------------------------------------------- gravação
@@ -630,13 +640,11 @@ def exportar(
         tse = {i: p for i, p in conhecidos.items() if p["fonte"] == "tse"}
 
         # catálogos de votações e presenças (sempre recalculados; gravados se mudarem)
-        catalogos = _catalogos(s, federais, arquivados)
-        resumo_catalogos = hashlib.sha256()
+        catalogos, usadas = _catalogos(s, federais, arquivados)
         for (lista_nome, casa, ano), entradas in sorted(catalogos.items()):
             itens = [{CATALOGOS[lista_nome][0]: i, **e} for i, e in sorted(entradas.items())]
             caminho = f"catalogos/{lista_nome}/{casa}/{ano}.json"
             out.json(caminho, {"ano": ano, "casa": casa, **compactar(itens)})
-            resumo_catalogos.update(f"{caminho}:{out.arquivos[caminho]}".encode())
 
         coletadas = bool(
             s.scalar(
@@ -652,8 +660,10 @@ def exportar(
             is not None
         )
         sal = _sal(uf, anos_cota, {"coletadas": coletadas, "arquivo": tem_arquivo})
-        sal_federais = _sha(f"{sal}|{resumo_catalogos.hexdigest()}".encode())
-        impressoes = _impressoes_politicos(s, sorted(federais), sal_federais)
+        impressoes = {
+            pid: _sha(f"{imp}|{_impressao_catalogo(catalogos, usadas[pid])}".encode())
+            for pid, imp in _impressoes_politicos(s, sorted(federais), sal).items()
+        }
 
         for pid in sorted(federais):
             nome = f"politico:{pid}"
