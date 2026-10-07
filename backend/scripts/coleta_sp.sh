@@ -28,16 +28,22 @@ echo "== ranking e verificação do arquivo bruto"
 uv run rastro ranking --uf SP
 uv run rastro verificar-respostas --amostra 50
 
-echo "== site estático"
+echo "== site estático (incremental: parte do que está publicado no gh-pages)"
 DIST="$RAIZ/frontend/dist"
-rm -rf "$DIST"
+# os dados ficam fora do dist: o build do frontend apaga a pasta de saída dele
+DADOS="$RAIZ/site-dados"
+rm -rf "$DIST" "$DADOS"
+# com o indice.json da publicação anterior, a exportação reaproveita os grupos sem
+# mudança; sem publicação anterior (ou noutro formato), ela é completa
+uv run rastro baixar-site --saida "$DADOS"
+RASTRO_COMMIT="$(git -C "$RAIZ" rev-parse HEAD 2>/dev/null || true)" \
+  uv run rastro exportar-site --uf SP --saida "$DADOS"
 (
   cd "$RAIZ/frontend"
   npm ci --no-audit --no-fund
   VITE_BASE=/rastro-publico/ VITE_API_AUDITORIA="${RASTRO_URL_AUDITORIA:?defina RASTRO_URL_AUDITORIA}" npm run build
 )
-RASTRO_COMMIT="$(git -C "$RAIZ" rev-parse HEAD 2>/dev/null || true)" \
-  uv run rastro exportar-site --uf SP --saida "$DIST/dados"
+cp -a "$DADOS" "$DIST/dados"
 
 echo "== publicação (verifica antes; tudo ou nada)"
 uv run rastro publicar-site --dist "$DIST"

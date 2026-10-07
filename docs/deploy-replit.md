@@ -149,6 +149,7 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 | Uma fonte fora do ar | nada a fazer: a próxima execução retoma; o site não perde dados |
 | Código novo no `main` | nos dois apps: Git → **Pull**, depois **Publish** |
 | Token vencendo | passo 1.4 |
+| Forçar exportação do zero | a coleta parte do `dados/` publicado e só regrava o que mudou; para refazer tudo, rode `uv run rastro exportar-site --uf SP --saida <pasta> --completa` |
 
 São guardadas as **5 últimas publicações** (tags `site-*` no GitHub). Uma publicação nova
 apaga a mais antiga.

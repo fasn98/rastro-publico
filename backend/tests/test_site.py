@@ -543,3 +543,40 @@ def test_previa_sem_ranking_nao_exporta_ranking_nem_notas(banco, tmp_path):
         assert json.loads(arq.read_text())["nota"] is None
     assert manifesto["contagens"]["municipios_com_nota"] == 0
     assert site.verificar(dados) == []
+
+
+# --- exportação incremental a partir do que está publicado (coleta agendada) ---------------
+
+
+def test_baixar_publicado_sem_publicacao(remoto, tmp_path):
+    destino = tmp_path / "base"
+    assert publicacao.baixar_publicado(remoto, destino) is None
+    assert destino.is_dir() and not any(destino.iterdir())
+
+
+def test_baixar_publicado_recusa_pasta_com_arquivos(remoto, tmp_path):
+    destino = tmp_path / "base"
+    destino.mkdir()
+    (destino / "velho.json").write_text("{}")
+    with pytest.raises(publicacao.ErroPublicacao, match="não está vazia"):
+        publicacao.baixar_publicado(remoto, destino)
+
+
+def test_coleta_parte_do_publicado_e_reaproveita(com_listas, remoto, tmp_path):
+    # 1ª coleta: exporta do zero e publica (frontend compilado + dados/)
+    dist = tmp_path / "dist"
+    site.exportar(dist / "dados", "SP", com_listas, hoje=HOJE)
+    (dist / "index.html").write_text("<!doctype html><title>Rastro</title>")
+    publicacao.publicar(dist, remoto, agora=datetime(2026, 10, 1, tzinfo=UTC))
+
+    # 2ª coleta, noutra máquina (pasta vazia): baixa o dados/ publicado e exporta por cima
+    base = tmp_path / "site-dados"
+    manifesto = publicacao.baixar_publicado(remoto, base)
+    assert manifesto is not None and (base / "indice.json").exists()
+    assert not (base / "index.html").exists() and not (base / ".nojekyll").exists()
+    assert site.verificar(base) == []
+    exp = site.exportar(base, "SP", com_listas, hoje=HOJE)["exportacao"]
+    # nada mudou na fonte: todos os grupos reaproveitados, só o manifesto regravado
+    assert exp["grupos_reaproveitados"] == exp["grupos"] > 0
+    assert exp["escritos"] == 1
+    assert site.verificar(base) == []
