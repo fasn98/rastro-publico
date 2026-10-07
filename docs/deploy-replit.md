@@ -14,6 +14,9 @@ contar a primeira coleta (~11 h, rodando sozinha).
 
 O mesmo repositório vira os dois apps do Replit, porque cada app publica um único tipo de
 deployment. O Secret `RASTRO_PAPEL` diz a cada um o que fazer: `coleta` ou `auditoria`.
+O valor não diferencia maiúsculas e ignora espaços nas pontas (`AUDITORIA` vale). Com
+qualquer outro valor, ou sem o Secret, o app termina logo ao iniciar, com a mensagem
+`ERRO: RASTRO_PAPEL=... não é um papel válido. Valores aceitos: coleta, auditoria` no log.
 
 ---
 
@@ -149,6 +152,7 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 | Uma fonte fora do ar | nada a fazer: a próxima execução retoma; o site não perde dados |
 | Código novo no `main` | nos dois apps: Git → **Pull**, depois **Publish** |
 | Token vencendo | passo 1.4 |
+| App reiniciando sem parar (*crash loop*) | Publishing → **Logs**. Se aparecer `ERRO: RASTRO_PAPEL` ou `ERRO: o Secret RASTRO_PAPEL não está definido`, corrija o Secret em Publishing → Production app secrets (`coleta` ou `auditoria`) e publique de novo. Os Secrets de produção não aparecem no Shell do editor: para testar um valor lá, rode `RASTRO_PAPEL=<valor> bash backend/scripts/replit.sh --validar-papel` |
 | Forçar exportação do zero | a coleta parte do `dados/` publicado e só regrava o que mudou; para refazer tudo, rode `uv run rastro exportar-site --uf SP --saida <pasta> --completa` |
 
 São guardadas as **5 últimas publicações** (tags `site-*` no GitHub). Uma publicação nova
