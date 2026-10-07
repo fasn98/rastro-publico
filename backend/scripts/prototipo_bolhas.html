@@ -1,0 +1,585 @@
+<title>Mapa de bolhas (protótipo)</title>
+<style>
+/* Layout: uma coluna de leitura; o gráfico ocupa a largura toda e o detalhamento abre num
+   painel lateral (tela cheia no celular). Tokens iguais aos do site (frontend/src/estilo.css). */
+:root {
+  --fundo: #f7f7f5; --texto: #1d1d1b; --suave: #6b6b66; --borda: #d9d9d4;
+  --destaque: #0b5ed7; --cartao: #ffffff; --grade: #e6e5df; --eixo: #b9b8b0;
+  --bolha: #2a78d6; --bolha-apagada: #b7b6ae; --anel: #ffffff;
+  --sit-regular: #9a9992; --sit-alerta: #fab219; --sit-prudencial: #ec835a; --sit-maximo: #d03b3b;
+  --sit-alerta-texto: #8a5a00; --sit-prudencial-texto: #a8441c; --sit-maximo-texto: #b02828;
+  --aviso-fundo: #fff7e0; --aviso-borda: #e9c46a;
+  --fonte: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --fundo: #161615; --texto: #ececea; --suave: #a3a39e; --borda: #3a3a37;
+    --destaque: #6ea8fe; --cartao: #20201f; --grade: #2c2c2a; --eixo: #4a4a46;
+    --bolha: #3987e5; --bolha-apagada: #55554f; --anel: #20201f; --sit-regular: #7d7c75;
+    --sit-alerta-texto: #fab219; --sit-prudencial-texto: #ec835a; --sit-maximo-texto: #ef7b7b;
+    --aviso-fundo: #2a2416; --aviso-borda: #7a6326; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --fundo: #161615; --texto: #ececea; --suave: #a3a39e; --borda: #3a3a37;
+  --destaque: #6ea8fe; --cartao: #20201f; --grade: #2c2c2a; --eixo: #4a4a46;
+  --bolha: #3987e5; --bolha-apagada: #55554f; --anel: #20201f; --sit-regular: #7d7c75;
+  --sit-alerta-texto: #fab219; --sit-prudencial-texto: #ec835a; --sit-maximo-texto: #ef7b7b;
+  --aviso-fundo: #2a2416; --aviso-borda: #7a6326; color-scheme: dark;
+}
+body { background: var(--fundo); color: var(--texto); font-family: var(--fonte); font-size: 15px; line-height: 1.5; }
+main { max-width: 1040px; margin: 0 auto; padding-inline: 16px; padding-block: 24px 64px; display: grid; gap: 20px; }
+h1 { margin: 0; font-size: 1.6rem; text-wrap: balance; }
+h2 { margin: 0 0 8px; font-size: 1.15rem; text-wrap: balance; }
+h3 { margin: 0 0 6px; font-size: 1rem; }
+p { margin: 0; }
+a { color: var(--destaque); }
+.sub { color: var(--suave); font-size: .9rem; }
+.selo { display: inline-block; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--suave); border: 1px solid var(--borda); border-radius: 4px; padding: 1px 6px; }
+.aviso { background: var(--aviso-fundo); border: 1px solid var(--aviso-borda); border-radius: 8px; padding: 10px 14px; }
+.modos { display: flex; flex-wrap: wrap; gap: 6px; }
+.modos button { font: inherit; padding: 8px 12px; border: 1px solid var(--borda); border-radius: 999px; background: var(--cartao); color: var(--texto); cursor: pointer; }
+.modos button[aria-pressed="true"] { border-color: var(--destaque); box-shadow: inset 0 0 0 1px var(--destaque); font-weight: 600; }
+.explica { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.explica > div { min-width: 0; }
+.explica dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 4px 0 0; }
+.explica dt { color: var(--suave); }
+.explica dd { margin: 0; }
+.nao-mede { border-left: 3px solid var(--borda); padding-left: 10px; }
+.filtros { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.filtros label { display: flex; gap: 6px; align-items: center; font-size: .9rem; color: var(--suave); }
+select, .filtros button { font: inherit; color: var(--texto); background: var(--cartao); border: 1px solid var(--borda); border-radius: 6px; padding: 6px 8px; }
+.grafico { background: var(--cartao); border: 1px solid var(--borda); border-radius: 10px; padding: 12px; min-width: 0; }
+.grafico svg { display: block; width: 100%; height: auto; overflow: visible; }
+.grafico text { fill: var(--suave); font-size: 11px; font-family: var(--fonte); }
+.grafico .titulo-eixo { fill: var(--texto); font-size: 12px; }
+.bolha { cursor: pointer; stroke: var(--anel); stroke-width: 1.5; }
+.bolha:focus { outline: none; stroke: var(--texto); stroke-width: 2.5; }
+.bolha.primeiro { stroke: var(--texto); stroke-dasharray: 3 2; stroke-width: 1.5; }
+.legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: .85rem; }
+.legenda span { display: inline-flex; align-items: center; gap: 6px; }
+.ponto { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex: none; }
+.icone { font-weight: 700; }
+.fora { margin-top: 8px; font-size: .85rem; }
+.fora summary { cursor: pointer; color: var(--suave); }
+.fora ul { margin: 6px 0 0; padding-left: 18px; }
+.dica { position: fixed; pointer-events: none; z-index: 30; background: var(--cartao); color: var(--texto); border: 1px solid var(--borda); border-radius: 8px; padding: 8px 10px; font-size: .82rem; box-shadow: 0 6px 20px rgb(0 0 0 / .18); max-width: 300px; }
+.dica b { display: block; margin-bottom: 2px; }
+.dica dl { display: grid; grid-template-columns: max-content 1fr; gap: 0 8px; margin: 0; }
+.dica dt { color: var(--suave); }
+.dica dd { margin: 0; font-variant-numeric: tabular-nums; }
+.tabela-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--borda); vertical-align: top; }
+th { color: var(--suave); font-weight: 600; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.clicavel { cursor: pointer; }
+tr.clicavel:hover td, tr.clicavel:focus td { background: var(--fundo); }
+tr.grupo td { font-weight: 600; background: var(--fundo); }
+.painel { position: fixed; z-index: 20; top: env(safe-area-inset-top, 0px); right: 0; bottom: 0; width: min(560px, 100%); background: var(--cartao); border-left: 1px solid var(--borda); box-shadow: -10px 0 30px rgb(0 0 0 / .15); display: flex; flex-direction: column; }
+.painel header { display: grid; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--borda); }
+.painel .acoes { display: flex; justify-content: space-between; gap: 8px; }
+.painel .acoes button { font: inherit; border: 1px solid var(--borda); background: var(--cartao); color: var(--texto); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+.trilha { display: flex; flex-wrap: wrap; gap: 4px; font-size: .82rem; list-style: none; margin: 0; padding: 0; }
+.trilha li + li::before { content: "›"; color: var(--suave); margin-right: 4px; }
+.trilha button { font: inherit; background: none; border: 0; padding: 0; color: var(--destaque); cursor: pointer; text-decoration: underline; }
+.trilha li:last-child button { color: var(--texto); text-decoration: none; font-weight: 600; cursor: default; }
+.painel .conteudo { overflow-y: auto; padding: 14px 16px 28px; display: grid; gap: 14px; }
+.painel dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
+.painel dt { color: var(--suave); }
+.painel dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.carregando { color: var(--suave); }
+.mono { font-family: var(--mono); font-size: .78rem; overflow-wrap: anywhere; }
+pre.json { font-family: var(--mono); font-size: .75rem; background: var(--fundo); border: 1px solid var(--borda); border-radius: 6px; padding: 8px; overflow-x: auto; margin: 0; max-height: 280px; }
+.estagios { display: grid; gap: 6px; }
+.estagio { display: grid; grid-template-columns: 90px 1fr max-content; gap: 8px; align-items: center; font-size: .85rem; }
+.barra { height: 10px; background: var(--grade); border-radius: 5px; overflow: hidden; }
+.barra i { display: block; height: 100%; background: var(--bolha); border-radius: 5px; }
+.situacao { font-weight: 600; }
+.situacao.regular { color: var(--suave); }
+.situacao.acima_alerta { color: var(--sit-alerta-texto); }
+.situacao.acima_prudencial { color: var(--sit-prudencial-texto); }
+.situacao.acima_maximo { color: var(--sit-maximo-texto); }
+.doc section { display: grid; gap: 8px; }
+.doc ol, .doc ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.formula { font-family: var(--mono); font-size: .82rem; background: var(--cartao); border: 1px solid var(--borda); border-radius: 6px; padding: 6px 10px; overflow-x: auto; }
+button:focus-visible, select:focus-visible, a:focus-visible, tr:focus-visible { outline: 2px solid var(--destaque); outline-offset: 2px; }
+[hidden] { display: none !important; }
+@media (max-width: 640px) { .painel { width: 100%; border-left: 0; } }
+@media (prefers-reduced-motion: no-preference) { .bolha { transition: opacity .15s; } }
+</style>
+
+<main>
+  <header style="display:grid;gap:8px">
+    <span class="selo">Protótipo para aprovação · etapa 1</span>
+    <h1>Mapa de bolhas</h1>
+    <p class="sub" id="cabecalho"></p>
+    <p class="aviso">Dados reais da amostra: 10 municípios de SP, o Estado de SP e os parlamentares federais de SP. Nada aqui é estimado. Um ponto sem algum valor não é desenhado e aparece em "Fora do gráfico", com o motivo. As decisões que dependem de aprovação estão no fim da página.</p>
+  </header>
+
+  <nav class="modos" aria-label="Modo do gráfico" id="modos"></nav>
+
+  <section class="explica" id="explica" aria-live="polite"></section>
+
+  <div class="filtros" id="filtros"></div>
+
+  <section class="grafico" aria-label="Gráfico">
+    <svg id="svg" role="img" aria-labelledby="svg-titulo"><title id="svg-titulo">Gráfico de bolhas</title></svg>
+    <div class="legenda" id="legenda"></div>
+    <details class="fora" id="fora"></details>
+  </section>
+
+  <details id="tabela-equivalente">
+    <summary>Tabela com os mesmos dados do gráfico</summary>
+    <div class="tabela-wrap" id="tabela"></div>
+  </details>
+
+  <article class="doc" id="doc" style="display:grid;gap:22px"></article>
+</main>
+
+<aside class="painel" id="painel" hidden aria-labelledby="painel-titulo">
+  <header>
+    <div class="acoes"><button id="voltar" type="button">← Voltar</button><button id="fechar" type="button">Fechar</button></div>
+    <ol class="trilha" id="trilha" aria-label="Trilha de navegação"></ol>
+    <h2 id="painel-titulo"></h2>
+  </header>
+  <div class="conteudo" id="painel-conteudo"></div>
+</aside>
+<div class="dica" id="dica" hidden></div>
+
+<script id="dados" type="application/json">/*DADOS*/</script>
+<script>
+"use strict";
+const D = JSON.parse(document.getElementById("dados").textContent);
+const R = D.respostas;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const brl = (v, d = 2) => v == null ? "—" : v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: d, maximumFractionDigits: d });
+const mi = (v) => v == null ? "—" : "R$ " + (v / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + " mi";
+const pct = (v, d = 1) => v == null ? "—" : (v * 100).toLocaleString("pt-BR", { maximumFractionDigits: d, minimumFractionDigits: d }) + "%";
+const int = (v) => v == null ? "—" : v.toLocaleString("pt-BR");
+const MESES = ["", "jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const CARGOS = { prefeito: "Prefeito(a)", governador: "Governador(a)", deputado_federal: "Deputado(a) federal", senador: "Senador(a)" };
+const SITUACAO = {
+  regular: { rotulo: "Abaixo do limite de alerta", icone: "○", cor: "var(--sit-regular)" },
+  acima_alerta: { rotulo: "Acima do limite de alerta", icone: "▲", cor: "var(--sit-alerta)" },
+  acima_prudencial: { rotulo: "Acima do limite prudencial", icone: "◆", cor: "var(--sit-prudencial)" },
+  acima_maximo: { rotulo: "Acima do limite máximo", icone: "■", cor: "var(--sit-maximo)" },
+};
+
+// --------------------------------------------------------------------------- modos
+const MODOS = {
+  entes: {
+    rotulo: "Entes",
+    pontos: () => D.entes.pontos, fora: () => D.entes.fora,
+    x: { campo: "x", rotulo: "Receita realizada por habitante (R$, escala log)", log: true, fmt: (v) => brl(v, 0) },
+    y: () => ({ campo: "y", rotulo: "Despesa empenhada ÷ receita realizada", fmt: (v) => pct(v) }),
+    tamanho: { campo: "tamanho", rotulo: "População (IBGE)" },
+    mede: [["X", "receita realizada no exercício ÷ população do IBGE do mesmo ano"], ["Y", "despesa empenhada ÷ receita realizada"], ["Tamanho", "população"], ["Cor", "situação da despesa com pessoal do Poder Executivo frente aos limites de alerta, prudencial e máximo declarados pelo próprio ente no RGF"]],
+    naoMede: "Não avalia gestão nem desempenho. Receita por habitante depende do tamanho e da base econômica do município; empenho acima da receita pode vir de superávit de anos anteriores. A cor só repete o que o ente declarou ao Tesouro.",
+    cor: (p) => SITUACAO[p.lrf.situacao].cor,
+    nome: (p) => `${p.nome}${p.esfera === "E" ? " (Estado)" : ""} · ${p.ano}`,
+  },
+  executivo: {
+    rotulo: "Executivo",
+    pontos: () => D.executivo.pontos, fora: () => D.executivo.fora,
+    x: { campo: "x", rotulo: "Receita realizada por habitante do ente (R$, escala log)", log: true, fmt: (v) => brl(v, 0) },
+    y: () => ({ campo: "y", rotulo: "Despesa empenhada ÷ receita realizada do ente", fmt: (v) => pct(v) }),
+    tamanho: { campo: "tamanho", rotulo: "População do ente (IBGE)" },
+    mede: [["Quem", "prefeitos eleitos em 2024 e o governador eleito em 2022 (TSE)"], ["Pontos", "só os exercícios dentro do mandato; o 1º exercício tem contorno tracejado: o orçamento foi aprovado na gestão anterior"], ["X, Y, tamanho, cor", "os mesmos do modo Entes, do ente que a pessoa governa"]],
+    naoMede: "Não atribui o resultado fiscal à pessoa: mostra o ente no período em que ela estava no cargo. Sem dados de substituições (vice que assumiu, afastamentos).",
+    cor: (p) => SITUACAO[p.lrf.situacao].cor,
+    nome: (p) => `${p.nome} (${p.partido}) · ${p.ente_nome} · ${p.ano}`,
+  },
+  emendas: {
+    rotulo: "Legislativo: emendas",
+    pontos: () => D.emendas.pontos, fora: () => D.emendas.fora,
+    x: { campo: "empenhado", rotulo: "Valor empenhado das emendas (R$, escala log)", log: true, fmt: (v) => mi(v) },
+    y: () => estado.yEmendas === "pago"
+      ? { campo: "pct_pago", rotulo: "Valor pago ÷ empenhado (caixa)", fmt: (v) => pct(v) }
+      : { campo: "pct_liquidado", rotulo: "Valor liquidado ÷ empenhado (competência)", fmt: (v) => pct(v) },
+    tamanho: { campo: "municipios", rotulo: "Municípios atendidos" },
+    mede: [["X", "soma do valor empenhado das emendas do ano de que o parlamentar é autor"], ["Y", "liquidado ÷ empenhado, ou pago ÷ empenhado"], ["Tamanho", "municípios de destino distintos (destino \"múltiplo\" ou estadual não conta)"], ["Cor", "neutra; você pode destacar um partido"]],
+    naoMede: "Não mede qualidade nem resultado das emendas, e não compara parlamentares. A execução depende do órgão executor e do ente que recebe, não só do autor. Receita e despesa de entes nunca são atribuídas a legisladores.",
+    cor: (p) => corNeutra(p),
+    nome: (p) => `${p.nome} (${p.partido}) · ${p.ano}`,
+  },
+  cota: {
+    rotulo: "Legislativo: cota parlamentar",
+    pontos: () => D.cota.pontos, fora: () => D.cota.fora,
+    x: { campo: "gasto", rotulo: "Gasto da cota no ano (R$)", log: false, fmt: (v) => brl(v, 0) },
+    y: () => ({ campo: "razao", rotulo: "Gasto ÷ limite aplicável no período em exercício", fmt: (v) => pct(v) }),
+    tamanho: { campo: "lancamentos", rotulo: "Número de lançamentos" },
+    mede: [["X", "soma do valor líquido dos lançamentos da CEAP no ano, como a Câmara publica (inclui restituições negativas)"], ["Y", "gasto ÷ soma dos limites mensais da UF, proporcional aos dias com situação \"Exercício\" na linha do tempo"], ["Tamanho", "número de lançamentos"], ["Cor", "neutra; você pode destacar um partido"]],
+    naoMede: "Não indica irregularidade. Acima de 100% pode refletir adicionais por cargo (Mesa, liderança, comissão; Ato da Mesa 43/2009, art. 1º, § 1º) que ainda não coletamos, ou valor descontado da remuneração (art. 13, § 2º). Senadores ficam fora até a CEAPS ser coletada.",
+    cor: (p) => corNeutra(p),
+    nome: (p) => `${p.nome} (${p.partido}) · ${p.ano}`,
+  },
+};
+
+const estado = { modo: "entes", nivel: "M", ano: 2025, faixa: "", cargo: "", partido: "", destaque: "", yEmendas: "liquidado", pilha: [] };
+const FAIXAS = [["", "Todas as faixas"], ["0-20000", "até 20 mil hab."], ["20000-100000", "20 a 100 mil"], ["100000-1000000", "100 mil a 1 milhão"], ["1000000-", "mais de 1 milhão"]];
+const corNeutra = (p) => !estado.destaque ? "var(--bolha)" : (p.partido === estado.destaque ? "var(--bolha)" : "var(--bolha-apagada)");
+
+function filtrados() {
+  const m = MODOS[estado.modo];
+  return m.pontos().filter((p) => {
+    if (estado.modo === "entes") {
+      if (p.esfera !== estado.nivel || p.ano !== estado.ano) return false;
+      if (estado.faixa && p.esfera === "M") {
+        const [a, b] = estado.faixa.split("-").map((v) => (v ? Number(v) : Infinity));
+        if (p.tamanho < a || p.tamanho >= b) return false;
+      }
+    }
+    if (estado.modo === "executivo" && estado.cargo && p.cargo !== estado.cargo) return false;
+    if ((estado.modo === "emendas" || estado.modo === "cota") && estado.partido && p.partido !== estado.partido) return false;
+    const y = m.y();
+    return p[m.x.campo] != null && p[y.campo] != null && (!m.x.log || p[m.x.campo] > 0);
+  });
+}
+
+// --------------------------------------------------------------------------- interface
+function desenharModos() {
+  $("modos").innerHTML = Object.entries(MODOS).map(([k, m]) => `<button type="button" data-modo="${k}" aria-pressed="${k === estado.modo}">${m.rotulo}</button>`).join("");
+  $("modos").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { estado.modo = b.dataset.modo; estado.partido = ""; estado.destaque = ""; tudo(); }));
+}
+
+function desenharExplica() {
+  const m = MODOS[estado.modo];
+  $("explica").innerHTML = `<div><h3>O que cada eixo mede</h3><dl>${m.mede.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl></div><div class="nao-mede"><h3>O que o gráfico não mede</h3><p>${m.naoMede}</p></div>`;
+}
+
+function opcoes(lista, valor) { return lista.map(([v, r]) => `<option value="${esc(v)}"${String(v) === String(valor) ? " selected" : ""}>${esc(r)}</option>`).join(""); }
+
+function desenharFiltros() {
+  const m = estado.modo, f = [];
+  if (m === "entes") {
+    f.push(`<label for="f-nivel">Nível <select id="f-nivel">${opcoes([["M", "Municipal"], ["E", "Estadual"]], estado.nivel)}</select></label>`);
+    const anos = [...new Set(D.entes.pontos.map((p) => p.ano))].sort();
+    f.push(`<label for="f-ano">Ano <select id="f-ano">${opcoes(anos.map((a) => [a, a]), estado.ano)}</select></label>`);
+    if (estado.nivel === "M") f.push(`<label for="f-faixa">Faixa populacional <select id="f-faixa">${opcoes(FAIXAS, estado.faixa)}</select></label>`);
+  }
+  if (m === "executivo") f.push(`<label for="f-cargo">Cargo <select id="f-cargo">${opcoes([["", "Todos"], ["prefeito", "Prefeitos"], ["governador", "Governador"]], estado.cargo)}</select></label>`);
+  if (m === "emendas" || m === "cota") {
+    const partidos = [...new Set(MODOS[m].pontos().map((p) => p.partido))].sort();
+    f.push(`<label for="f-partido">Partido <select id="f-partido">${opcoes([["", "Todos"], ...partidos.map((p) => [p, p])], estado.partido)}</select></label>`);
+    f.push(`<label for="f-destaque">Destacar <select id="f-destaque">${opcoes([["", "Nenhum (cor única)"], ...partidos.map((p) => [p, p])], estado.destaque)}</select></label>`);
+    f.push(`<span class="sub">Ano: ${D.amostra.ano_legislativo}</span>`);
+  }
+  if (m === "emendas") f.push(`<label for="f-y">Eixo Y <select id="f-y">${opcoes([["liquidado", "% liquidado (competência)"], ["pago", "% pago (caixa)"]], estado.yEmendas)}</select></label>`);
+  $("filtros").innerHTML = f.join("");
+  const liga = (id, chave, num = false) => $(id)?.addEventListener("change", (e) => { estado[chave] = num ? Number(e.target.value) : e.target.value; tudo(false); });
+  liga("f-nivel", "nivel"); liga("f-ano", "ano", true); liga("f-faixa", "faixa"); liga("f-cargo", "cargo");
+  liga("f-partido", "partido"); liga("f-destaque", "destaque"); liga("f-y", "yEmendas");
+}
+
+// --------------------------------------------------------------------------- gráfico
+const W = 960, H = 470, M = { e: 76, d: 24, t: 16, b: 52 };
+function escala(min, max, a, b, log) {
+  if (log) { const l0 = Math.log10(min), l1 = Math.log10(max); return (v) => a + (Math.log10(v) - l0) / (l1 - l0 || 1) * (b - a); }
+  return (v) => a + (v - min) / (max - min || 1) * (b - a);
+}
+function ticksLog(min, max) {
+  const t = []; for (let e = Math.floor(Math.log10(min)); e <= Math.ceil(Math.log10(max)); e++) for (const m of [1, 2, 5]) { const v = m * 10 ** e; if (v >= min && v <= max) t.push(v); }
+  return t.length >= 2 ? t : [min, max];
+}
+function ticksLin(min, max, n = 5) {
+  const passo0 = (max - min) / n, mag = 10 ** Math.floor(Math.log10(passo0 || 1)), passo = [1, 2, 2.5, 5, 10].map((k) => k * mag).find((s) => s >= passo0) || mag;
+  const t = []; for (let v = Math.ceil(min / passo) * passo; v <= max + 1e-9; v += passo) t.push(+v.toFixed(10)); return t;
+}
+
+function desenharGrafico() {
+  const m = MODOS[estado.modo], y = m.y(), pts = filtrados(), svg = $("svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  if (!pts.length) { svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">Nenhum ponto com todos os valores neste recorte.</text>`; return; }
+  const xs = pts.map((p) => p[m.x.campo]), ys = pts.map((p) => p[y.campo]);
+  let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  if (m.x.log) { x0 /= 1.25; x1 *= 1.25; } else { const f = (x1 - x0) * 0.08 || x1 * 0.1 || 1; x0 = Math.max(0, x0 - f); x1 += f; }
+  const fy = (y1 - y0) * 0.12 || 0.05; y0 = Math.max(0, y0 - fy); y1 += fy;
+  if (estado.modo === "cota" || estado.modo === "emendas") { y0 = 0; y1 = Math.max(1.05, y1); }
+  const sx = escala(x0, x1, M.e, W - M.d, m.x.log), sy = escala(y0, y1, H - M.b, M.t, false);
+  const tmax = Math.max(...pts.map((p) => p[m.tamanho.campo] || 0)), RMAX = 34, RMIN = 4;
+  const raio = (v) => Math.max(RMIN, RMAX * Math.sqrt((v || 0) / (tmax || 1)));
+  const tx = m.x.log ? ticksLog(x0, x1) : ticksLin(x0, x1), ty = ticksLin(y0, y1);
+  let h = "";
+  ty.forEach((v) => { h += `<line x1="${M.e}" x2="${W - M.d}" y1="${sy(v)}" y2="${sy(v)}" stroke="var(--grade)"/><text x="${M.e - 8}" y="${sy(v) + 4}" text-anchor="end">${y.fmt(v)}</text>`; });
+  tx.forEach((v) => { h += `<line y1="${M.t}" y2="${H - M.b}" x1="${sx(v)}" x2="${sx(v)}" stroke="var(--grade)"/><text x="${sx(v)}" y="${H - M.b + 18}" text-anchor="middle">${m.x.fmt(v)}</text>`; });
+  if ((estado.modo === "cota" || estado.modo === "emendas") && y1 >= 1) h += `<line x1="${M.e}" x2="${W - M.d}" y1="${sy(1)}" y2="${sy(1)}" stroke="var(--eixo)" stroke-dasharray="5 4"/><text x="${W - M.d}" y="${sy(1) - 6}" text-anchor="end">100%</text>`;
+  h += `<line x1="${M.e}" x2="${W - M.d}" y1="${H - M.b}" y2="${H - M.b}" stroke="var(--eixo)"/>`;
+  h += `<text class="titulo-eixo" x="${(M.e + W - M.d) / 2}" y="${H - 10}" text-anchor="middle">${esc(m.x.rotulo)}</text>`;
+  h += `<text class="titulo-eixo" transform="translate(16 ${(M.t + H - M.b) / 2}) rotate(-90)" text-anchor="middle">${esc(y.rotulo)}</text>`;
+  // maiores atrás, menores na frente
+  [...pts].sort((a, b) => (b[m.tamanho.campo] || 0) - (a[m.tamanho.campo] || 0)).forEach((p) => {
+    const cls = "bolha" + (p.primeiro_exercicio ? " primeiro" : "");
+    h += `<circle class="${cls}" tabindex="0" role="button" aria-label="${esc(m.nome(p))}" data-id="${esc(p.id)}" cx="${sx(p[m.x.campo]).toFixed(1)}" cy="${sy(p[y.campo]).toFixed(1)}" r="${raio(p[m.tamanho.campo]).toFixed(1)}" fill="${m.cor(p)}" fill-opacity="0.85"/>`;
+  });
+  svg.innerHTML = `<title id="svg-titulo">${esc(m.rotulo)}: ${pts.length} bolhas</title>` + h;
+  const porId = Object.fromEntries(pts.map((p) => [p.id, p]));
+  svg.querySelectorAll(".bolha").forEach((c) => {
+    const p = porId[c.dataset.id];
+    c.addEventListener("pointerenter", (e) => dica(p, e));
+    c.addEventListener("pointermove", (e) => moverDica(e));
+    c.addEventListener("pointerleave", () => ($("dica").hidden = true));
+    c.addEventListener("focus", () => { const r = c.getBoundingClientRect(); dica(p, { clientX: r.right, clientY: r.top }); });
+    c.addEventListener("blur", () => ($("dica").hidden = true));
+    c.addEventListener("click", () => abrirDetalhe(p));
+    c.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); abrirDetalhe(p); } });
+  });
+  desenharLegenda(pts, tmax, raio);
+  desenharTabela(pts);
+}
+
+function linhasDica(p) {
+  const m = estado.modo;
+  if (m === "entes" || m === "executivo") return [["Receita realizada", mi(p.receita_realizada)], ["Por habitante", brl(p.x, 0)], ["Empenhada ÷ receita", pct(p.y)], ["População", `${int(p.populacao.valor)} (${p.populacao.fonte.includes("Censo") ? "Censo 2022" : "estimativa " + p.ano})`], ["Pessoal / RCL (Exec.)", `${p.lrf.percentual.toLocaleString("pt-BR")}% · ${SITUACAO[p.lrf.situacao].icone} ${SITUACAO[p.lrf.situacao].rotulo.toLowerCase()}`], ...(p.primeiro_exercicio ? [["1º exercício", "orçamento aprovado na gestão anterior"]] : [])];
+  if (m === "emendas") return [["Empenhado", mi(p.empenhado)], ["Liquidado", `${mi(p.liquidado)} (${pct(p.pct_liquidado)})`], ["Pago", `${mi(p.pago)} (${pct(p.pct_pago)})`], ["Restos a pagar", `inscritos ${mi(p.rp_inscrito)} · pagos ${mi(p.rp_pago)} · cancelados ${mi(p.rp_cancelado)}`], ["Emendas", int(p.n_emendas)], ["Municípios", `${int(p.municipios)}${p.sem_municipio ? ` (+${p.sem_municipio} sem município)` : ""}`]];
+  return [["Gasto no ano", brl(p.gasto, 0)], ["Limite aplicável", brl(p.limite, 0)], ["Gasto ÷ limite", pct(p.razao)], ["Dias em exercício", `${int(p.dias_exercicio)}${p.dias_licenca ? ` (${p.dias_licenca} de licença)` : ""}`], ["Lançamentos", int(p.lancamentos)]];
+}
+function dica(p, e) {
+  const el = $("dica");
+  el.innerHTML = `<b>${esc(MODOS[estado.modo].nome(p))}</b><dl>${linhasDica(p).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl><span class="sub">Clique para detalhar</span>`;
+  el.hidden = false; moverDica(e);
+}
+function moverDica(e) {
+  const el = $("dica"), w = el.offsetWidth, h = el.offsetHeight;
+  el.style.left = Math.min(e.clientX + 14, innerWidth - w - 8) + "px";
+  el.style.top = Math.max(8, Math.min(e.clientY + 14, innerHeight - h - 8)) + "px";
+}
+
+function desenharLegenda(pts, tmax, raio) {
+  const m = MODOS[estado.modo], partes = [];
+  if (estado.modo === "entes" || estado.modo === "executivo") {
+    const usadas = new Set(pts.map((p) => p.lrf.situacao));
+    Object.entries(SITUACAO).forEach(([k, s]) => partes.push(`<span${usadas.has(k) ? "" : ' style="opacity:.55"'}><i class="ponto" style="background:${s.cor}"></i><span class="icone">${s.icone}</span> ${s.rotulo} (${pts.filter((p) => p.lrf.situacao === k).length})</span>`));
+    if (estado.modo === "executivo") partes.push(`<span><svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-dasharray="3 2"/></svg> 1º exercício do mandato</span>`);
+  } else {
+    partes.push(estado.destaque ? `<span><i class="ponto" style="background:var(--bolha)"></i> ${esc(estado.destaque)}</span><span><i class="ponto" style="background:var(--bolha-apagada)"></i> demais partidos</span>` : `<span><i class="ponto" style="background:var(--bolha)"></i> Cada bolha é um parlamentar (cor neutra)</span>`);
+  }
+  const ref = [tmax, tmax / 4].map((v) => Math.round(v)).filter((v) => v > 0);
+  partes.push(`<span>Tamanho = ${esc(m.tamanho.rotulo.toLowerCase())}: ${ref.map((v) => `<svg width="${2 * raio(v) + 2}" height="${2 * raio(v) + 2}" aria-hidden="true" style="vertical-align:middle"><circle cx="${raio(v) + 1}" cy="${raio(v) + 1}" r="${raio(v)}" fill="none" stroke="var(--suave)"/></svg> ${int(v)}`).join(" ")}</span>`);
+  $("legenda").innerHTML = partes.join("");
+  const fora = m.fora().filter((f) => estado.modo !== "entes" || (f.ano === estado.ano && (f.esfera || "M") === estado.nivel));
+  $("fora").innerHTML = fora.length
+    ? `<summary>Fora do gráfico neste recorte: ${fora.length}</summary><ul>${fora.map((f) => `<li>${esc(f.nome)}${f.ano ? " · " + f.ano : ""}: ${esc(f.motivo)}</li>`).join("")}</ul>`
+    : `<summary>Fora do gráfico neste recorte: 0</summary>`;
+}
+
+function desenharTabela(pts) {
+  const m = MODOS[estado.modo], y = m.y();
+  const linhas = [...pts].sort((a, b) => b[m.x.campo] - a[m.x.campo]);
+  const extra = estado.modo === "entes" || estado.modo === "executivo" ? "<th>Situação LRF (Executivo)</th>" : "<th>Partido</th>";
+  $("tabela").innerHTML = `<table><thead><tr><th>Nome</th><th class="n">${esc(m.x.rotulo)}</th><th class="n">${esc(y.rotulo)}</th><th class="n">${esc(m.tamanho.rotulo)}</th>${extra}</tr></thead><tbody>${linhas.map((p) => `<tr class="clicavel" tabindex="0" data-id="${esc(p.id)}"><td>${esc(m.nome(p))}</td><td class="n">${m.x.fmt(p[m.x.campo])}</td><td class="n">${y.fmt(p[y.campo])}</td><td class="n">${int(p[m.tamanho.campo])}</td><td>${estado.modo === "entes" || estado.modo === "executivo" ? `<span class="situacao ${p.lrf.situacao}">${SITUACAO[p.lrf.situacao].icone} ${SITUACAO[p.lrf.situacao].rotulo}</span>` : esc(p.partido)}</td></tr>`).join("")}</tbody></table>`;
+  const porId = Object.fromEntries(pts.map((p) => [p.id, p]));
+  $("tabela").querySelectorAll("tr.clicavel").forEach((tr) => {
+    tr.addEventListener("click", () => abrirDetalhe(porId[tr.dataset.id]));
+    tr.addEventListener("keydown", (e) => { if (e.key === "Enter") abrirDetalhe(porId[tr.dataset.id]); });
+  });
+}
+
+// --------------------------------------------------------------------------- detalhamento
+function abrirDetalhe(p) {
+  $("dica").hidden = true;
+  const m = estado.modo;
+  estado.pilha = [];
+  if (m === "entes") empilhar(`${p.nome} ${p.ano}`, () => nivelEnte(p, D.trilhas.entes[p.id]));
+  if (m === "executivo") empilhar(`${p.nome} ${p.ano}`, () => nivelExecutivo(p));
+  if (m === "emendas") empilhar(p.nome, () => nivelEmendas(p));
+  if (m === "cota") empilhar(p.nome, () => nivelCotaMeses(p));
+}
+function empilhar(rotulo, render) { estado.pilha.push({ rotulo, render }); mostrarNivel(); }
+function irPara(i) { estado.pilha = estado.pilha.slice(0, i + 1); mostrarNivel(); }
+function mostrarNivel() {
+  const painel = $("painel"), topo = estado.pilha[estado.pilha.length - 1];
+  if (!topo) { painel.hidden = true; return; }
+  painel.hidden = false;
+  $("trilha").innerHTML = estado.pilha.map((n, i) => `<li><button type="button" data-i="${i}" ${i === estado.pilha.length - 1 ? 'aria-current="page"' : ""}>${esc(n.rotulo)}</button></li>`).join("");
+  $("trilha").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => irPara(Number(b.dataset.i))));
+  $("painel-titulo").textContent = topo.rotulo;
+  const c = $("painel-conteudo");
+  c.innerHTML = `<p class="carregando">Carregando…</p>`;
+  // na implementação, cada nível é um arquivo estático lido sob demanda; aqui já está na página
+  requestAnimationFrame(() => { c.innerHTML = topo.render(); ligarAcoes(c); c.scrollTop = 0; $("painel-titulo").focus?.(); });
+  $("voltar").textContent = estado.pilha.length > 1 ? "← Voltar" : "← Voltar ao gráfico";
+}
+const acoes = {};
+let nAcao = 0;
+function acao(fn) { const id = "a" + nAcao++; acoes[id] = fn; return id; }
+function ligarAcoes(c) { c.querySelectorAll("[data-acao]").forEach((el) => { const f = () => acoes[el.dataset.acao](); el.addEventListener("click", f); el.addEventListener("keydown", (e) => { if (e.key === "Enter") f(); }); }); }
+$("voltar").addEventListener("click", () => { estado.pilha.pop(); mostrarNivel(); });
+$("fechar").addEventListener("click", () => { estado.pilha = []; mostrarNivel(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("painel").hidden) { estado.pilha = []; mostrarNivel(); } });
+
+function blocoResposta(chave, extra = "") {
+  const r = R[chave];
+  if (!r) return `<p class="sub">Resposta bruta não registrada.</p>`;
+  return `<section><h3>Resposta bruta (auditoria)</h3><dl>
+    <dt>Fonte oficial</dt><dd><a href="${esc(r.url)}" target="_blank" rel="noreferrer">${esc(r.url)}</a></dd>
+    <dt>Recebida em</dt><dd>${new Date(r.recebido_em).toLocaleString("pt-BR")}</dd>
+    <dt>SHA-256 gravado</dt><dd class="mono">${esc(r.sha256)}</dd>
+    ${r.sha256_original ? `<dt>SHA-256 original</dt><dd class="mono">${esc(r.sha256_original)}</dd><dt>Redação LGPD</dt><dd>campos removidos: ${esc((r.campos_removidos || []).join(", "))}</dd>` : ""}
+    <dt>Tamanho</dt><dd>${int(r.tamanho)} bytes</dd>
+    ${extra}
+    <dt>Link de auditoria</dt><dd class="mono">GET /api/bruto/${esc(r.sha256)}</dd>
+  </dl><p class="sub">Na prévia a API de auditoria ainda não está no ar; no site publicado este endereço vira link e devolve os bytes, conferíveis com <code>sha256sum</code>.</p></section>`;
+}
+
+// entes / executivo -------------------------------------------------------------------
+function nivelEnte(p, t) {
+  const s = SITUACAO[p.lrf.situacao];
+  const linhas = [...t.rreo, ...t.rgf];
+  return `<section><h3>Painel fiscal do ente no ano</h3><dl>
+    <dt>Ente</dt><dd>${esc(p.nome)}${p.esfera === "E" ? " (Estado)" : ""} · ${p.ano}</dd>
+    <dt>Receita realizada</dt><dd>${brl(p.receita_realizada)} <span class="sub">RREO, ${p.periodo_rreo.periodo}º bimestre${p.periodo_rreo.final ? " (ano completo)" : ""}</span></dd>
+    <dt>Despesa empenhada</dt><dd>${brl(p.despesa_empenhada)}</dd>
+    <dt>População</dt><dd>${int(p.populacao.valor)} <span class="sub">${esc(p.populacao.fonte)}</span></dd>
+    <dt>X: receita por habitante</dt><dd>${brl(p.x)}</dd>
+    <dt>Y: empenhada ÷ receita</dt><dd>${pct(p.y, 2)}</dd>
+    <dt>Pessoal do Executivo</dt><dd>${p.lrf.percentual.toLocaleString("pt-BR")}% da RCL ajustada <span class="sub">${esc(p.lrf.instituicao)}, RGF ${esc(p.lrf.periodo)}</span></dd>
+    <dt>Limites declarados</dt><dd>alerta ${p.lrf.alerta}% · prudencial ${p.lrf.prudencial}% · máximo ${p.lrf.maximo}%</dd>
+    <dt>Situação</dt><dd class="situacao ${p.lrf.situacao}">${s.icone} ${s.rotulo}</dd>
+  </dl></section>
+  <section><h3>Linhas do demonstrativo usadas no cálculo</h3><div class="tabela-wrap"><table><thead><tr><th>Relatório · anexo</th><th>Conta · coluna</th><th class="n">Valor</th></tr></thead><tbody>
+    ${linhas.map((l) => `<tr class="clicavel" tabindex="0" data-acao="${acao(() => empilhar(l.cod_conta, () => nivelLinha(l)))}"><td>${esc(l.demonstrativo)} ${l.periodo}º ${l.periodicidade === "B" ? "bim." : l.periodicidade === "S" ? "sem." : "quad."} · ${esc(l.anexo)}</td><td>${esc(l.conta)}<br><span class="sub">${esc(l.coluna)}</span></td><td class="n">${esc(Number(l.valor).toLocaleString("pt-BR"))}</td></tr>`).join("")}
+  </tbody></table></div></section>
+  <section><h3>População</h3><p><button type="button" class="link" data-acao="${acao(() => empilhar("População " + p.ano, () => `<section><dl><dt>Valor</dt><dd>${int(p.populacao.valor)}</dd><dt>Fonte</dt><dd>${esc(p.populacao.fonte)}</dd></dl></section>` + blocoResposta(p.populacao.resposta)))}">Ver a resposta do IBGE</button></p></section>`;
+}
+function nivelLinha(l) {
+  return `<section><dl>
+    <dt>Relatório</dt><dd>${esc(l.demonstrativo)}, exercício ${l.exercicio}, ${l.periodo}º período (${esc(l.periodicidade)})</dd>
+    <dt>Instituição</dt><dd>${esc(l.instituicao)}</dd>
+    <dt>Anexo</dt><dd>${esc(l.anexo)} · rótulo ${esc(l.rotulo)}</dd>
+    <dt>Conta</dt><dd>${esc(l.conta)} <span class="mono">(${esc(l.cod_conta)})</span></dd>
+    <dt>Coluna</dt><dd>${esc(l.coluna)}</dd>
+    <dt>Valor</dt><dd>${esc(Number(l.valor).toLocaleString("pt-BR"))}</dd>
+  </dl></section>
+  <section><h3>Item exatamente como veio da API do Tesouro</h3><pre class="json">${esc(JSON.stringify(l.item_original, null, 2))}</pre></section>` + blocoResposta(l.resposta);
+}
+function nivelExecutivo(p) {
+  const r = R[p.fonte_eleicao.resposta];
+  return `<section><h3>${esc(p.nome)}</h3><dl>
+    <dt>Cargo</dt><dd>${esc(CARGOS[p.cargo] || p.cargo)} · ${esc(p.partido)}</dd>
+    <dt>Mandato</dt><dd>${esc(p.mandato)} <span class="sub">período pela Constituição (art. ${p.cargo === "prefeito" ? "29" : "28"}); o TSE não publica as datas</span></dd>
+    <dt>Exercício</dt><dd>${p.ano}${p.primeiro_exercicio ? " · 1º do mandato: orçamento aprovado na gestão anterior" : ""}</dd>
+    <dt>Eleição</dt><dd><a href="${esc(p.fonte_eleicao.url)}" target="_blank" rel="noreferrer">arquivo de candidatos do TSE</a>${r ? ` <span class="mono">SHA-256 ${esc(r.sha256.slice(0, 16))}…</span>` : ""}</dd>
+  </dl></section>
+  <section><p><button type="button" data-acao="${acao(() => empilhar(`${p.ente_nome} ${p.ano}`, () => nivelEnte(p, D.trilhas.entes[p.trilha])))}">Ver o painel fiscal do ente (${esc(p.ente_nome)}, ${p.ano})</button></p></section>`;
+}
+
+// emendas ------------------------------------------------------------------------------
+function nivelEmendas(p) {
+  const es = D.trilhas.emendas[String(p.politico_id)] || [];
+  const grupos = {};
+  es.forEach((e) => { const k = `${e.localidade || "—"}|${e.funcao || "—"}`; (grupos[k] ||= []).push(e); });
+  return `<section><dl><dt>Partido</dt><dd>${esc(p.partido)}</dd><dt>Ano</dt><dd>${p.ano}</dd><dt>Empenhado</dt><dd>${brl(p.empenhado)}</dd><dt>Liquidado</dt><dd>${brl(p.liquidado)} (${pct(p.pct_liquidado)})</dd><dt>Pago</dt><dd>${brl(p.pago)} (${pct(p.pct_pago)})</dd></dl></section>
+  <section><h3>Emendas por município de destino e função</h3><div class="tabela-wrap"><table><thead><tr><th>Emenda</th><th class="n">Empenhado</th><th class="n">Liquidado</th><th class="n">Pago</th></tr></thead><tbody>
+  ${Object.entries(grupos).map(([k, lista]) => { const [loc, fun] = k.split("|"); const s = (c) => lista.reduce((a, e) => a + (e[c] || 0), 0);
+    return `<tr class="grupo"><td>${esc(loc)} · ${esc(fun)}</td><td class="n">${brl(s("empenhado"), 0)}</td><td class="n">${brl(s("liquidado"), 0)}</td><td class="n">${brl(s("pago"), 0)}</td></tr>` +
+      lista.map((e) => `<tr class="clicavel" tabindex="0" data-acao="${acao(() => empilhar("Emenda " + e.codigo, () => nivelEmenda(e)))}"><td>${esc(e.codigo)}<br><span class="sub">${esc(e.acao || e.subfuncao || "")}</span></td><td class="n">${brl(e.empenhado, 0)}</td><td class="n">${brl(e.liquidado, 0)}</td><td class="n">${brl(e.pago, 0)}</td></tr>`).join(""); }).join("")}
+  </tbody></table></div></section>`;
+}
+function nivelEmenda(e) {
+  const base = e.empenhado || 1, barra = (v) => `<div class="barra"><i style="width:${Math.min(100, (v || 0) / base * 100)}%"></i></div>`;
+  return `<section><dl>
+    <dt>Código</dt><dd>${esc(e.codigo)} (nº ${esc(e.numero)})</dd>
+    <dt>Tipo</dt><dd>${esc(e.tipo)}</dd>
+    <dt>Autor no arquivo</dt><dd>${esc(e.autor_no_arquivo)} <span class="sub">vínculo: ${esc(e.vinculo || "nome único")}</span></dd>
+    <dt>Destino</dt><dd>${esc(e.localidade)}${e.cod_ibge ? ` <span class="mono">IBGE ${e.cod_ibge}</span>` : ""}</dd>
+    <dt>Função</dt><dd>${esc(e.funcao)} · ${esc(e.subfuncao)}</dd>
+    <dt>Ação</dt><dd>${esc(e.acao)}</dd>
+  </dl></section>
+  <section><h3>Estágios da despesa</h3><div class="estagios">
+    <div class="estagio"><span>Empenhado</span>${barra(e.empenhado)}<span class="n">${brl(e.empenhado)}</span></div>
+    <div class="estagio"><span>Liquidado</span>${barra(e.liquidado)}<span class="n">${brl(e.liquidado)}</span></div>
+    <div class="estagio"><span>Pago</span>${barra(e.pago)}<span class="n">${brl(e.pago)}</span></div>
+  </div><dl style="margin-top:8px"><dt>Restos a pagar inscritos</dt><dd>${brl(e.rp_inscrito)}</dd><dt>Restos a pagar pagos</dt><dd>${brl(e.rp_pago)}</dd><dt>Restos a pagar cancelados</dt><dd>${brl(e.rp_cancelado)}</dd></dl></section>
+  <section><h3>Plano de trabalho e documentos de execução</h3><p class="sub">${e.transferencia_especial ? "Transferência especial: o plano de trabalho fica no Transferegov, mas o arquivo de emendas não traz o identificador do plano; a ligação precisa de coleta própria (decisão pendente)." : "Não é transferência especial: não há plano de trabalho no Transferegov para este tipo."} Os documentos de execução (empenhos, liquidações, pagamentos) existem na API do Portal da Transparência por código de emenda e ainda não foram coletados.</p></section>` +
+    blocoResposta(e.resposta, `<dt>Linha no arquivo</dt><dd>${int(e.linha_arquivo)} de EmendasParlamentares.csv (dentro do .zip)</dd>`);
+}
+
+// cota ---------------------------------------------------------------------------------
+function nivelCotaMeses(p) {
+  const t = D.trilhas.cota[String(p.politico_id)];
+  const ano = p.ano;
+  const linhas = Object.entries(t.meses).map(([m, cats]) => {
+    const total = Object.values(cats).reduce((a, c) => a + c.valor, 0), n = Object.values(cats).reduce((a, c) => a + c.n, 0);
+    const d = t.dias?.[m]; const dm = new Date(ano, Number(m), 0).getDate();
+    const lim = d ? t.limite_mensal * d.exercicio / dm : null;
+    return `<tr class="clicavel" tabindex="0" data-acao="${acao(() => empilhar(`${MESES[m]}/${ano}`, () => nivelCotaCategorias(p, t, m)))}"><td>${MESES[m]}/${ano}</td><td class="n">${d ? d.exercicio : "—"}</td><td class="n">${brl(lim, 0)}</td><td class="n">${brl(total, 0)}</td><td class="n">${int(n)}</td></tr>`;
+  }).join("");
+  return `<section><dl><dt>Partido · UF</dt><dd>${esc(p.partido)} · ${esc(p.uf)}</dd><dt>Gasto no ano</dt><dd>${brl(p.gasto)}</dd><dt>Limite aplicável</dt><dd>${brl(p.limite)} <span class="sub">${brl(t.limite_mensal)} por mês (${esc(D.limites_cota.ato)}) × dias em exercício ÷ dias do mês</span></dd><dt>Gasto ÷ limite</dt><dd>${pct(p.razao)}</dd><dt>Dias em exercício</dt><dd>${int(p.dias_exercicio)}${p.dias_licenca ? ` · ${p.dias_licenca} dias de licença (afastamento com suplente)` : ""}</dd></dl>
+  <p class="sub">O saldo não usado se acumula dentro do ano (Ato da Mesa 43/2009, art. 13), por isso a comparação é do ano inteiro e não mês a mês.</p></section>
+  <section><h3>Meses</h3><div class="tabela-wrap"><table><thead><tr><th>Mês</th><th class="n">Dias em exercício</th><th class="n">Limite do mês</th><th class="n">Gasto</th><th class="n">Lançamentos</th></tr></thead><tbody>${linhas}</tbody></table></div></section>`;
+}
+function nivelCotaCategorias(p, t, m) {
+  const cats = t.meses[m];
+  return `<section><h3>Categorias de gasto</h3><div class="tabela-wrap"><table><thead><tr><th>Categoria</th><th class="n">Lançamentos</th><th class="n">Valor líquido</th></tr></thead><tbody>${Object.entries(cats).map(([cat, c]) => `<tr class="clicavel" tabindex="0" data-acao="${acao(() => empilhar(cat.toLowerCase().slice(0, 32), () => nivelCotaLancamentos(p, t, m, cat)))}"><td>${esc(cat)}</td><td class="n">${int(c.n)}</td><td class="n">${brl(c.valor)}</td></tr>`).join("")}</tbody></table></div></section>`;
+}
+function nivelCotaLancamentos(p, t, m, cat) {
+  if (!t.lancamentos) return `<p class="sub">No protótipo, os lançamentos item a item foram incluídos só para os 3 deputados com mais lançamentos no ano (${esc(Object.entries(D.trilhas.cota).filter(([, v]) => v.lancamentos).map(([k]) => D.cota.pontos.find((x) => String(x.politico_id) === k)?.nome).join(", "))}). Na implementação, todos ficam em arquivos estáticos lidos sob demanda.</p>` + blocoResposta(t.resposta);
+  const itens = t.lancamentos.filter((l) => String(l.mes) === String(m) && l.categoria === cat);
+  return `<section><div class="tabela-wrap"><table><thead><tr><th>Data</th><th>Fornecedor</th><th class="n">Valor líquido</th></tr></thead><tbody>${itens.map((l) => `<tr class="clicavel" tabindex="0" data-acao="${acao(() => empilhar("Lançamento " + (l.numero_documento || l.linha), () => nivelLancamento(l)))}"><td>${l.data_emissao ? new Date(l.data_emissao + "T12:00").toLocaleDateString("pt-BR") : "—"}</td><td>${esc(l.fornecedor || (l.pessoa_fisica ? "Pessoa física (nome não publicado no portal)" : "—"))}${l.cnpj ? `<br><span class="mono">${esc(l.cnpj)}</span>` : ""}</td><td class="n">${brl(Number(l.valor_liquido))}</td></tr>`).join("")}</tbody></table></div></section>`;
+}
+function nivelLancamento(l) {
+  return `<section><dl>
+    <dt>Categoria</dt><dd>${esc(l.categoria)}</dd>
+    <dt>Fornecedor</dt><dd>${esc(l.fornecedor || (l.pessoa_fisica ? "Pessoa física (nome não publicado: LGPD)" : "—"))}</dd>
+    <dt>CNPJ</dt><dd class="mono">${esc(l.cnpj || "—")}</dd>
+    <dt>Documento</dt><dd>${esc(l.numero_documento || "—")}${l.url_documento ? ` · <a href="${esc(l.url_documento)}" target="_blank" rel="noreferrer">documento fiscal publicado pela Câmara</a>` : ""}</dd>
+    <dt>Data de emissão</dt><dd>${l.data_emissao ? new Date(l.data_emissao + "T12:00").toLocaleDateString("pt-BR") : "—"}</dd>
+    <dt>Valor do documento</dt><dd>${brl(Number(l.valor_documento))}</dd>
+    <dt>Glosa</dt><dd>${brl(Number(l.valor_glosa))}</dd>
+    <dt>Valor líquido</dt><dd>${brl(Number(l.valor_liquido))}</dd>
+  </dl></section>` + blocoResposta(l.resposta, `<dt>Linha no arquivo</dt><dd>${int(l.linha)} do CSV anual da cota (dentro do .zip)</dd>`);
+}
+
+// --------------------------------------------------------------------------- documentação
+function desenharDoc() {
+  const L = D.limites_cota;
+  $("doc").innerHTML = `
+  <section><h2>Fórmulas</h2>
+    <h3>Entes e Executivo</h3>
+    <div class="formula">X = RREO Anexo 01, TotalReceitas, coluna "Até o Bimestre (c)", 6º bimestre ÷ população IBGE do ano</div>
+    <div class="formula">Y = RREO Anexo 01, TotalDespesas, "DESPESAS EMPENHADAS ATÉ O BIMESTRE (f)" ÷ X·população</div>
+    <div class="formula">Cor = RGF Anexo 01 do Executivo: DespesaComPessoalTotal "% sobre a RCL Ajustada" comparado aos limites de alerta, prudencial e máximo da mesma tabela</div>
+    <p class="sub">População: 2024 a 2026 pelas Estimativas (SIDRA 6579); 2022 pelo Censo (SIDRA 4709); 2023 não tem número oficial do IBGE.</p>
+    <h3>Legislativo: emendas</h3>
+    <div class="formula">X = Σ Valor Empenhado das emendas do ano em que o parlamentar é o autor vinculado</div>
+    <div class="formula">Y = Σ Valor Liquidado ÷ Σ Valor Empenhado   ou   Σ Valor Pago ÷ Σ Valor Empenhado</div>
+    <div class="formula">Tamanho = nº de códigos IBGE de destino distintos</div>
+    <p class="sub">Fonte: arquivo EmendasParlamentares.csv do Portal da Transparência (CGU), campos como publicados.</p>
+    <h3>Legislativo: cota parlamentar (Câmara)</h3>
+    <div class="formula">X = Σ valor líquido dos lançamentos do ano (arquivo anual da Câmara)</div>
+    <div class="formula">limite = Σ<sub>mês</sub> limite mensal da UF × dias com situação "Exercício" no mês ÷ dias do mês</div>
+    <div class="formula">Y = X ÷ limite</div>
+  </section>
+  <section><h2>Limites mensais da cota usados</h2>
+    <p>${esc(L.ato)}, em vigor de ${new Date(L.vigencia.inicio + "T12:00").toLocaleDateString("pt-BR")} a ${new Date(L.vigencia.fim + "T12:00").toLocaleDateString("pt-BR")}. Fontes: <a href="${esc(L.url)}" target="_blank" rel="noreferrer">norma consolidada do Ato 43/2009</a>, <a href="${esc(L.url_ato_270)}" target="_blank" rel="noreferrer">Ato 270/2023</a>, <a href="${esc(L.url_ato_244)}" target="_blank" rel="noreferrer">Ato 244/2026</a>.</p>
+    <div class="tabela-wrap"><table><thead><tr>${Object.keys(L.valores).map((uf) => `<th class="n">${uf}</th>`).join("")}</tr></thead><tbody><tr>${Object.values(L.valores).map((v) => `<td class="n">${Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>`).join("")}</tr></tbody></table></div>
+    <p class="sub">O Ato 244/2026 (a partir de 20/2/2026) atualiza os limites pelo IPCA de fev/2023 a dez/2025, mas não publica a tabela. Os valores atualizados aparecem só no "Guia para jornalistas" da Câmara, sem data. Por isso o protótipo usa 2025, que fica inteiro sob o Ato 270/2023.</p>
+  </section>
+  <section><h2>Decisões para aprovação</h2><ol>
+    <li><b>População de 2023.</b> O IBGE não publicou estimativa para 2023. Hoje os pontos de 2023 ficam fora. Alternativa: usar o Censo 2022, com o ano de referência exibido.</li>
+    <li><b>Período do mandato.</b> O TSE não publica datas de posse; o período vem da Constituição (prefeito eleito em 2024: 2025–2028; governador eleito em 2022: 2023–2026). Substituições (vice que assume, afastamento) não aparecem.</li>
+    <li><b>Receita e despesa com intraorçamentárias.</b> X e Y usam os totais do Anexo 01 (TOTAL DAS RECEITAS e TOTAL DAS DESPESAS), que incluem as intraorçamentárias nos dois lados. Alternativa: usar só as linhas "exceto intraorçamentárias".</li>
+    <li><b>Cor do ente.</b> Usa a situação do Poder Executivo (limites de 48,6% / 51,3% / 54% nos municípios). O Legislativo tem limites próprios e fica no painel, sem cor.</li>
+    <li><b>Limites da cota a partir de 20/2/2026.</b> Aplicar os valores do guia da Câmara (sem data) ou esperar uma tabela oficial com vigência. Também: como tratar o mês da troca (dias antes e depois de 20/2).</li>
+    <li><b>Dias em exercício.</b> Só contam os dias com situação "Exercício" na linha do tempo da Câmara. As licenças registradas (Ministro, Secretário, afastamento consecutivo) têm suplente convocado e ficam fora, como manda o art. 12 do Ato 43/2009.</li>
+    <li><b>Adicionais de cargo da cota.</b> Mesa, liderança e presidência de comissão aumentam o limite (art. 1º, § 1º). Coletar esses cargos com datas, ou manter a nota de que o limite exibido é o da UF.</li>
+    <li><b>Senado.</b> Sem fonte oficial estruturada dos limites da CEAPS com vigência: o eixo de limite fica de fora, como você definiu; falta ainda coletar o gasto da CEAPS.</li>
+    <li><b>Emendas sem município.</b> Destino "múltiplo" ou estadual não conta no tamanho da bolha; aparece no detalhamento.</li>
+    <li><b>Partidos.</b> Em gráfico de bolhas só 3 cores de categoria continuam distinguíveis para quem tem daltonismo. Proposta: cor única e a opção de destacar um partido (ou uma UF), em vez de uma cor por partido.</li>
+    <li><b>Escala nacional.</b> Com mais de 600 bolhas, abrir já filtrado pela UF de quem visita (ou pela primeira da lista), com a opção "Brasil" agrupando por faixa populacional.</li>
+    <li><b>Endereço compartilhável.</b> No site, o modo, os filtros e o nível do detalhamento vão na rota (ex.: <span class="mono">#/bolhas/cota/2025/SP/deputado/17/mes/3</span>). Neste protótipo publicado como página avulsa isso não é possível.</li>
+  </ol></section>
+  <section><h2>Como foi gerado</h2><p class="sub">backend/scripts/prototipo_bolhas.py, a partir do banco local e da própria API, em ${new Date(D.gerado_em).toLocaleString("pt-BR")}. ${Object.keys(R).length} respostas brutas referenciadas, cada uma com URL, data e SHA-256.</p></section>`;
+}
+
+function tudo(recomeçar = true) {
+  if (recomeçar) { estado.pilha = []; mostrarNivel(); }
+  desenharModos(); desenharExplica(); desenharFiltros(); desenharGrafico();
+}
+$("cabecalho").textContent = `Gerado em ${new Date(D.gerado_em).toLocaleDateString("pt-BR")} · ${D.entes.pontos.length} pontos de entes, ${D.executivo.pontos.length} do Executivo, ${D.emendas.pontos.length} parlamentares com emendas e ${D.cota.pontos.length} com cota em ${D.amostra.ano_legislativo}`;
+desenharDoc();
+tudo();
+</script>
