@@ -32,6 +32,7 @@ fi
 # nunca subir em produção com a credencial de desenvolvimento (rastro:rastro) ou sem senha
 uv run rastro conferir-producao
 case "$PAPEL" in
-  coleta) exec bash scripts/coleta_sp.sh ;;
+  # uma coleta por vez: se outra estiver em andamento, esta sai com aviso (trava no banco)
+  coleta) exec uv run rastro coleta-exclusiva bash scripts/coleta_sp.sh ;;
   auditoria) exec uv run uvicorn rastro.api.auditoria:app --host 0.0.0.0 --port "${PORT:-8000}" ;;
 esac

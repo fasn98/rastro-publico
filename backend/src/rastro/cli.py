@@ -56,6 +56,11 @@ def main(argv: list[str] | None = None) -> int:
     rv = sub.add_parser("reverter-site", help="volta o site para a publicação anterior")
     rv.add_argument("--repo", default="https://github.com/fasn98/rastro-publico.git")
     rv.add_argument("--para", help="tag de destino (padrão: a anterior à que está no ar)")
+    ce = sub.add_parser(
+        "coleta-exclusiva",
+        help="roda o comando só se nenhuma outra coleta estiver em andamento (trava no banco)",
+    )
+    ce.add_argument("argv", nargs=argparse.REMAINDER, help="ex.: bash scripts/coleta_sp.sh")
     rs = sub.add_parser(
         "resumo-coleta",
         help="situação de cada fonte nesta coleta (linha 'Fontes com falha: ...')",
@@ -142,6 +147,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.comando == "verificar-respostas":
         return _verificar_respostas(args.amostra)
+
+    if args.comando == "coleta-exclusiva":
+        from rastro.db import get_engine
+        from rastro.trava import executar_exclusivo
+
+        if not args.argv:
+            parser.error(
+                "informe o comando, ex.: rastro coleta-exclusiva bash scripts/coleta_sp.sh"
+            )
+        return executar_exclusivo(get_engine(), args.argv)
 
     if args.comando == "resumo-coleta":
         from datetime import datetime
