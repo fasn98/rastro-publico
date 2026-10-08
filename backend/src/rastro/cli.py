@@ -45,6 +45,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     pb.add_argument("--dist", required=True, help="frontend compilado, com dados/ dentro")
     pb.add_argument("--repo", default="https://github.com/fasn98/rastro-publico.git")
+    pb.add_argument(
+        "--simular",
+        action="store_true",
+        help="só verifica contra o site publicado; não envia nada",
+    )
     bx = sub.add_parser(
         "baixar-site",
         help="copia o dados/ publicado no gh-pages (ponto de partida da exportação incremental)",
@@ -332,8 +337,11 @@ def _publicacao(args) -> int:
     token = os.environ.get("RASTRO_GITHUB_TOKEN")
     try:
         if args.comando == "publicar-site":
-            tag = publicacao.publicar(Path(args.dist), args.repo, token)
-            print(f"Site publicado: {tag}")
+            tag = publicacao.publicar(Path(args.dist), args.repo, token, simular=args.simular)
+            if args.simular:
+                print(f"Simulação: verificação ok; nada foi publicado (seria {tag})")
+            else:
+                print(f"Site publicado: {tag}")
         elif args.comando == "baixar-site":
             m = publicacao.baixar_publicado(args.repo, Path(args.saida), token)
             if m:

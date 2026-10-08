@@ -96,10 +96,13 @@ def publicar(
     token: str | None = None,
     manter: int = MANTER,
     agora: datetime | None = None,
+    simular: bool = False,
 ) -> str:
     """Publica `dist` (frontend compilado + `dados/`) no gh-pages. Devolve a tag criada.
 
     Tudo ou nada: se a verificação falhar, nada é enviado e o site continua como está.
+    Com `simular`, faz a mesma verificação contra o site publicado e para antes de enviar:
+    devolve a tag que seria criada.
     """
     agora = agora or datetime.now(UTC)
     tag = f"{PREFIXO_TAG}{agora:%Y%m%d-%H%M%S}"
@@ -109,6 +112,9 @@ def publicar(
         problemas = site.verificar(dist / "dados", anterior)
         if problemas:
             raise ErroPublicacao("publicação cancelada:\n- " + "\n- ".join(problemas))
+        if simular:
+            log.info("Simulação: verificação ok; nada foi enviado (seria %s)", tag)
+            return tag
 
         git("checkout", "-q", "--orphan", RAMO)
         shutil.copytree(dist, git.dir, dirs_exist_ok=True)
