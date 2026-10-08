@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://rastro:rastro@localhost:5432/rastro"
     http_timeout: float = 60.0
     http_tentativas: int = 4
+    # esperas (segundos) entre rodadas de uma fonte que falhou com erro transitório (5xx,
+    # 429, rede): a API da Câmara já ficou minutos respondendo 504
+    fonte_esperas: str = "60,120,240"
     # limite de requisições por segundo a cada API (0 = sem limite)
     req_por_segundo: float = 1.0
     # itens por página nas APIs ORDS do Tesouro (máximo aceito pela API: 5000)

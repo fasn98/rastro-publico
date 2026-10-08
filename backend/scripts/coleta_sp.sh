@@ -5,6 +5,13 @@
 # ranking -> verificação de amostra do arquivo bruto -> frontend + JSON -> publicação no
 # GitHub Pages. Se qualquer verificação falhar, nada é publicado e o site continua como está.
 #
+# A falha de UMA fonte não impede a publicação: cada fonte tenta de novo com espera
+# progressiva (RASTRO_FONTE_ESPERAS) e, se continuar falhando, o site sai com os dados
+# anteriores dela (ou com a seção "fonte indisponível nesta coleta", se nunca houve dado),
+# e a execução termina com AVISO (código 0). Termina com ERRO só quando algo crítico
+# falha: banco, migrações, verificação do arquivo bruto, exportação/verificação do site ou
+# o envio ao GitHub.
+#
 # Variáveis (Secrets do Replit):
 #   DATABASE_URL           banco de produção (criado pelo Replit)
 #   RASTRO_GITHUB_TOKEN    token fine-grained, só este repositório, Contents: read and write
@@ -13,16 +20,21 @@ set -euo pipefail
 RAIZ="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$RAIZ/backend"
 ANO_ATUAL="$(date +%Y)"
+# início desta coleta: a exportação compara a última atualização de cada fonte com ele
+RASTRO_INICIO_COLETA="$(date -u +%Y-%m-%dT%H:%M:%S+00:00)"
+export RASTRO_INICIO_COLETA
 
 echo "== migrações e cadastros"
 uv run alembic upgrade head
-uv run rastro coletar ibge-municipios ibge-populacao siconfi-entes
+uv run rastro coletar ibge-municipios ibge-populacao siconfi-entes \
+  || echo "AVISO: cadastros com falha; seguem os dados anteriores (resumo no fim)"
 
 echo "== RREO/RGF (código 1 = algum item falhou; fica para a próxima execução)"
 uv run python -m rastro.coletores.siconfi_lote --uf SP --anos "2022-$ANO_ATUAL" || [ $? -eq 1 ]
 
 echo "== políticos (falha de uma fonte não apaga dados já coletados)"
-uv run rastro politicos --uf SP --anos "2023-$ANO_ATUAL" || echo "aviso: coleta de políticos com falhas"
+uv run rastro politicos --uf SP --anos "2023-$ANO_ATUAL" \
+  || echo "AVISO: coleta de políticos com falhas; seguem os dados anteriores (resumo no fim)"
 
 echo "== ranking e verificação do arquivo bruto"
 uv run rastro ranking --uf SP
@@ -45,5 +57,12 @@ RASTRO_COMMIT="$(git -C "$RAIZ" rev-parse HEAD 2>/dev/null || true)" \
 )
 cp -a "$DADOS" "$DIST/dados"
 
+echo "== situação das fontes nesta coleta"
+RESUMO="$(uv run rastro resumo-coleta --desde "$RASTRO_INICIO_COLETA")"
+echo "$RESUMO"
+
 echo "== publicação (verifica antes; tudo ou nada)"
 uv run rastro publicar-site --dist "$DIST"
+if ! grep -q "^Fontes com falha: nenhuma$" <<<"$RESUMO"; then
+  echo "AVISO: site publicado com fontes desatualizadas: $(grep '^Fontes com falha:' <<<"$RESUMO")"
+fi

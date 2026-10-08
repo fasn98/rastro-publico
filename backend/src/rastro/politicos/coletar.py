@@ -16,9 +16,10 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from rastro.coletores.base import ColetaParcial, executar, novo_cliente
+from rastro.coletores.base import ColetaParcial, novo_cliente
 from rastro.coletores.siconfi_lote import interpretar_anos
 from rastro.db import get_sessionmaker
+from rastro.fontes import executar_com_esperas
 from rastro.politicos import camara, senado, transparencia, tse
 from rastro.politicos.modelos import DEPUTADO_FEDERAL, SENADOR, PolPolitico
 
@@ -200,10 +201,10 @@ def main(argv: list[str] | None = None) -> int:
     with get_sessionmaker()() as session:
         for fonte in args.fontes:
             nome, fabrica = coletores[fonte]
-            with novo_cliente() as client:
-                if fonte == "emendas-api":
+            if fonte == "emendas-api":
+                with novo_cliente() as client:
                     print(f"emendas: acesso por {transparencia.preparar_cliente(client)}")
-                coleta = executar(session, nome, fabrica(uf, anos), client)
+            coleta = executar_com_esperas(session, nome, fabrica(uf, anos), novo_cliente)
             print(f"{nome}: {coleta.status} ({coleta.registros or 0} registros)")
             if coleta.erro:
                 print(coleta.erro, file=sys.stderr)

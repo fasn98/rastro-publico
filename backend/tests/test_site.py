@@ -26,7 +26,7 @@ from rastro.coletores import ibge
 from rastro.coletores.arquivo import ArquivoBruto
 from rastro.coletores.base import executar, novo_cliente
 from rastro.db import get_session
-from rastro.models import Municipio
+from rastro.models import Coleta, Municipio
 from rastro.politicos import camara, transparencia, tse
 from rastro.politicos.modelos import (
     PolDespesaCota,
@@ -640,3 +640,127 @@ def test_coleta_parte_do_publicado_e_reaproveita(coletado, remoto, tmp_path):
     assert exp["grupos_reaproveitados"] == exp["grupos"] > 0
     assert exp["escritos"] == 1
     assert site.verificar(base) == []
+
+
+# --- falha de uma fonte não impede a publicação das demais -------------------------------
+
+
+def _sem_camara(banco) -> int:
+    """Banco como o de uma produção nova em que a Câmara nunca respondeu."""
+    from sqlalchemy import text
+
+    ids = list(_ids(banco, PolPolitico.fonte == "camara"))
+    for tabela in (
+        "pol_comissao", "pol_presenca", "pol_proposicao", "pol_votacao",
+        "pol_despesa_cota", "pol_evento_mandato",
+    ):  # fmt: skip
+        banco.execute(text(f"DELETE FROM {tabela} WHERE politico_id = ANY(:ids)"), {"ids": ids})
+    banco.execute(
+        text("UPDATE pol_emenda SET politico_id = NULL WHERE politico_id = ANY(:ids)"), {"ids": ids}
+    )
+    banco.execute(text("DELETE FROM pol_politico WHERE id = ANY(:ids)"), {"ids": ids})
+    banco.commit()
+    return len(ids)
+
+
+def _camara_fora_do_ar(banco, monkeypatch) -> object:
+    """A coleta real da Câmara (`rastro politicos`) com a API respondendo 504 sempre."""
+    from rastro import fontes
+    from rastro.politicos.coletar import coletor_camara
+
+    monkeypatch.setenv("RASTRO_HTTP_TENTATIVAS", "1")
+    from rastro.config import get_settings
+
+    get_settings.cache_clear()
+    with respx.mock:
+        respx.get(url__startswith=f"{camara.API}/deputados").respond(504)
+        coleta = fontes.executar_com_esperas(
+            banco,
+            "pol-camara",
+            coletor_camara("SP", [2025]),
+            lambda: novo_cliente(req_por_segundo=0, arquivo=False),
+            esperas=[60, 120],
+            dormir=lambda s: None,
+        )
+    get_settings.cache_clear()
+    return coleta
+
+
+def test_fonte_sem_dado_anterior_falha_e_o_site_e_publicado_com_aviso(
+    coletado, remoto, tmp_path, monkeypatch
+):
+    from rastro import fontes
+
+    # publicação anterior (como a prévia), com os deputados da Câmara
+    dist = tmp_path / "dist"
+    anterior = site.exportar(dist / "dados", "SP", coletado, hoje=HOJE)
+    (dist / "index.html").write_text("<!doctype html><title>Rastro</title>")
+    publicacao.publicar(dist, remoto, agora=datetime(2026, 10, 7, tzinfo=UTC))
+    no_ar = _ramo(remoto)
+
+    # produção nova: a Câmara nunca respondeu e responde 504 nesta coleta também
+    deputados = _sem_camara(coletado)
+    assert deputados > 0
+    inicio = datetime.now(UTC)
+    monkeypatch.setenv("RASTRO_INICIO_COLETA", inicio.isoformat())
+    coleta = _camara_fora_do_ar(coletado, monkeypatch)
+    assert coleta.status == "falha" and coleta.erro.startswith("HTTP 504 após 3 tentativas")
+
+    situacao = fontes.status(coletado, inicio)
+    assert fontes.resumo(situacao) == (
+        "Fontes com falha: pol-camara (HTTP 504 após 3 tentativas; sem dado anterior: "
+        "fonte indisponível nesta coleta)"
+    )
+
+    # a coleta segue: baixa o publicado, exporta e publica (sem recusar)
+    nova = tmp_path / "dist2"
+    publicacao.baixar_publicado(remoto, nova / "dados")
+    manifesto = site.exportar(nova / "dados", "SP", coletado, hoje=HOJE)
+    assert manifesto["contagens"]["politicos"] < anterior["contagens"]["politicos"]
+    camara_ = next(f for f in manifesto["fontes"] if f["fonte"] == "pol-camara")
+    assert camara_ == {
+        "fonte": "pol-camara",
+        "nome": "Câmara dos Deputados",
+        "ultima_atualizacao": None,
+        "tentada_nesta_coleta": True,
+        "atualizada_nesta_coleta": False,
+        "disponivel": False,
+        "falha": "HTTP 504 após 3 tentativas",
+    }
+    assert site.verificar(nova / "dados", anterior) == []
+    (nova / "index.html").write_text("<!doctype html><title>Rastro</title>")
+    publicacao.publicar(nova, remoto, agora=datetime(2026, 10, 8, 4, 50, tzinfo=UTC))
+    assert _ramo(remoto) != no_ar  # publicado
+
+
+def test_fonte_com_dado_anterior_falha_e_o_site_sai_com_os_dados_anteriores(
+    coletado, tmp_path, monkeypatch
+):
+    anterior = site.exportar(tmp_path / "antes", "SP", coletado, hoje=HOJE)
+    # a Câmara já tinha sido coletada com sucesso numa execução anterior
+    coletado.add(
+        Coleta(
+            fonte="pol-camara",
+            status="sucesso",
+            iniciada_em=datetime(2026, 10, 1, 4, 20, tzinfo=UTC),
+            finalizada_em=datetime(2026, 10, 1, 5, 0, tzinfo=UTC),
+        )
+    )
+    coletado.commit()
+    monkeypatch.setenv("RASTRO_INICIO_COLETA", datetime.now(UTC).isoformat())
+    assert _camara_fora_do_ar(coletado, monkeypatch).status == "falha"
+
+    manifesto = site.exportar(tmp_path / "depois", "SP", coletado, hoje=HOJE)
+    # os deputados continuam no banco e no site
+    assert manifesto["contagens"]["politicos"] == anterior["contagens"]["politicos"]
+    camara_ = next(f for f in manifesto["fontes"] if f["fonte"] == "pol-camara")
+    assert camara_["disponivel"] and not camara_["atualizada_nesta_coleta"]
+    assert camara_["ultima_atualizacao"].startswith("2026-10-01")
+    assert site.verificar(tmp_path / "depois", anterior) == []
+
+
+def test_queda_de_politicos_sem_fonte_indisponivel_continua_bloqueando(coletado, tmp_path):
+    dados = tmp_path / "dados"
+    manifesto = site.exportar(dados, "SP", coletado, hoje=HOJE)
+    anterior = {**manifesto, "contagens": {**manifesto["contagens"], "politicos": 99999}}
+    assert any("politicos:" in p for p in site.verificar(dados, anterior))

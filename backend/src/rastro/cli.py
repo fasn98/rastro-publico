@@ -56,6 +56,11 @@ def main(argv: list[str] | None = None) -> int:
     rv = sub.add_parser("reverter-site", help="volta o site para a publicação anterior")
     rv.add_argument("--repo", default="https://github.com/fasn98/rastro-publico.git")
     rv.add_argument("--para", help="tag de destino (padrão: a anterior à que está no ar)")
+    rs = sub.add_parser(
+        "resumo-coleta",
+        help="situação de cada fonte nesta coleta (linha 'Fontes com falha: ...')",
+    )
+    rs.add_argument("--desde", help="início da coleta (ISO 8601); padrão: última tentativa")
     sub.add_parser(
         "conferir-producao",
         help="recusa a credencial de desenvolvimento (rastro:rastro) no banco de produção",
@@ -135,6 +140,28 @@ def main(argv: list[str] | None = None) -> int:
     if args.comando == "verificar-respostas":
         return _verificar_respostas(args.amostra)
 
+    if args.comando == "resumo-coleta":
+        from datetime import datetime
+
+        from rastro import fontes
+
+        desde = datetime.fromisoformat(args.desde) if args.desde else None
+        with get_sessionmaker()() as session:
+            situacao = fontes.status(session, desde)
+        for f in situacao:
+            marca = (
+                "ok   "
+                if f["atualizada_nesta_coleta"]
+                else "FALHA"
+                if f["tentada_nesta_coleta"]
+                else "-    "
+            )
+            print(
+                f"{marca} {f['fonte']:<16} última atualização: {f['ultima_atualizacao'] or 'nunca'}"
+            )
+        print(fontes.resumo(situacao))
+        return 0
+
     if args.comando in ("conferir-producao", "criar-usuario-auditoria"):
         return _seguranca(args.comando)
 
@@ -210,10 +237,12 @@ def main(argv: list[str] | None = None) -> int:
     if desconhecidas:
         parser.error(f"fonte(s) desconhecida(s): {', '.join(sorted(desconhecidas))}")
 
+    from rastro.fontes import executar_com_esperas
+
     falhas = 0
-    with novo_cliente() as client, get_sessionmaker()() as session:
+    with get_sessionmaker()() as session:
         for fonte in args.fontes or list(COLETORES):
-            coleta = executar(session, fonte, COLETORES[fonte], client)
+            coleta = executar_com_esperas(session, fonte, COLETORES[fonte], novo_cliente)
             print(f"{fonte}: {coleta.status} ({coleta.registros or 0} registros)")
             if coleta.erro:
                 print(f"  erro: {coleta.erro}", file=sys.stderr)

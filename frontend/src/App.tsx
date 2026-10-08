@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { obterManifesto, PREVIA, type Manifesto } from "./dados";
+import StatusFontes, { AvisoFontes } from "./Fontes";
 import Metodologia from "./Metodologia";
 import Municipios from "./Municipios";
 import { PaginaPolitico, QuemRepresenta } from "./Politicos";
 import RankingPagina from "./Ranking";
 
 type Rota = {
-  pagina: "municipios" | "ranking" | "metodologia" | "representantes" | "politico";
+  pagina: "municipios" | "ranking" | "metodologia" | "representantes" | "politico" | "fontes";
   cod: number | null;
   eleito?: string; // eleito do TSE: arquivo do município (m-{cod}) ou da UF (uf-{UF}-{ano})
 };
@@ -23,6 +24,7 @@ function lerRota(): Rota {
   if (e) return { pagina: "politico", cod: Number(e[2]), eleito: e[1] };
   if (h.startsWith("#/ranking")) return { pagina: "ranking", cod: null };
   if (h.startsWith("#/metodologia")) return { pagina: "metodologia", cod: null };
+  if (h.startsWith("#/fontes")) return { pagina: "fontes", cod: null };
   return { pagina: "municipios", cod: null };
 }
 
@@ -74,6 +76,7 @@ export default function App() {
           ))}
         </nav>
       </header>
+      <AvisoFontes manifesto={manifesto} />
       {rota.pagina === "municipios" && <Municipios cod={rota.cod} />}
       {rota.pagina === "ranking" &&
         (PREVIA ? (
@@ -82,6 +85,7 @@ export default function App() {
           <RankingPagina />
         ))}
       {rota.pagina === "metodologia" && <Metodologia />}
+      {rota.pagina === "fontes" && <StatusFontes manifesto={manifesto} />}
       {rota.pagina === "representantes" && <QuemRepresenta cod={rota.cod} />}
       {rota.pagina === "politico" && rota.cod !== null && <PaginaPolitico id={rota.cod} eleito={rota.eleito} />}
       {manifesto && (
@@ -90,6 +94,8 @@ export default function App() {
           {new Date(manifesto.ultima_coleta ?? manifesto.gerado_em).toLocaleDateString("pt-BR")} ·
           site gerado em {new Date(manifesto.gerado_em).toLocaleString("pt-BR")} · metodologia v
           {manifesto.metodologia.versao}
+          {" · "}
+          <a href="#/fontes">Status das fontes</a>
           {manifesto.codigo && (
             <>
               {" "}
