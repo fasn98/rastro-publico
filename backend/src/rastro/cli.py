@@ -118,6 +118,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    # uma linha por requisição lota o log (a exportação faz milhares, internas); erros e
+    # avisos do httpx continuam aparecendo
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
     if args.comando == "fontes":
         print("\n".join(COLETORES))
@@ -188,7 +191,7 @@ def main(argv: list[str] | None = None) -> int:
             f"{m['contagens']['municipios']} municípios, {m['contagens']['politicos']} políticos; "
             f"{e['escritos']} arquivos gravados ({e['bytes_escritos'] / 1e6:.1f} MB), "
             f"{e['removidos']} removidos, {e['grupos_reaproveitados']}/{e['grupos']} grupos "
-            f"reaproveitados, {e['segundos']} s"
+            f"reaproveitados, {e['segundos']} s, pico de memória {e['memoria_pico_mb']} MB"
         )
         return 0
 
