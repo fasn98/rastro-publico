@@ -56,6 +56,7 @@ import json
 import logging
 import math
 import os
+import resource
 import shutil
 import subprocess
 import time
@@ -759,6 +760,8 @@ def exportar(
         "grupos": len(grupos),
         "grupos_reaproveitados": reaproveitados,
         "segundos": round(time.monotonic() - inicio, 1),
+        # pico de memória do processo (Linux: KiB), para diagnosticar falta de memória
+        "memoria_pico_mb": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024),
     }
     log.info("Site exportado em %s: %s", saida, estatisticas)
     return {**manifesto, "exportacao": estatisticas}

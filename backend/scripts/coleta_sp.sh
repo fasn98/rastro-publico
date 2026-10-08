@@ -17,6 +17,9 @@
 #   RASTRO_GITHUB_TOKEN    token fine-grained, só este repositório, Contents: read and write
 #   RASTRO_URL_AUDITORIA   URL pública da API de auditoria (ex.: https://rastro-auditoria.replit.app)
 set -euo pipefail
+# qualquer etapa que falhar diz qual foi e com que código (137 = processo morto pelo
+# sistema, em geral por falta de memória; 143 = encerrado pelo agendador)
+trap 'codigo=$?; echo "ERRO: a etapa \"${BASH_COMMAND}\" terminou com código ${codigo}$( [ "$codigo" -eq 137 ] && echo " (processo morto pelo sistema: provável falta de memória)")" >&2' ERR
 RAIZ="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$RAIZ/backend"
 ANO_ATUAL="$(date +%Y)"
