@@ -69,7 +69,8 @@ def verificar_acesso(client: httpx.Client, ano: int) -> None:
 
 
 def chave() -> str | None:
-    return os.environ.get(VARIAVEL_CHAVE) or None
+    # espaço ou quebra de linha colados junto com a chave fazem a API responder 401
+    return (os.environ.get(VARIAVEL_CHAVE) or "").strip() or None
 
 
 def valor(texto: str | None) -> Decimal | None:

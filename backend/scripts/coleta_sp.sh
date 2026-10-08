@@ -53,9 +53,10 @@ rm -rf "$DIST" "$DADOS"
 uv run rastro baixar-site --saida "$DADOS"
 RASTRO_COMMIT="$(git -C "$RAIZ" rev-parse HEAD 2>/dev/null || true)" \
   uv run rastro exportar-site --uf SP --saida "$DADOS"
+# as dependências vêm do build do deployment; só reinstala se faltar alguma coisa
+bash scripts/frontend_deps.sh
 (
   cd "$RAIZ/frontend"
-  npm ci --no-audit --no-fund
   VITE_BASE=/rastro-publico/ VITE_API_AUDITORIA="${RASTRO_URL_AUDITORIA:?defina RASTRO_URL_AUDITORIA}" npm run build
 )
 cp -a "$DADOS" "$DIST/dados"
