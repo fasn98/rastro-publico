@@ -58,7 +58,9 @@ RASTRO_COMMIT="$(git -C "$RAIZ" rev-parse HEAD 2>/dev/null || true)" \
 bash scripts/frontend_deps.sh
 (
   cd "$RAIZ/frontend"
-  VITE_BASE=/rastro-publico/ VITE_API_AUDITORIA="${RASTRO_URL_AUDITORIA:?defina RASTRO_URL_AUDITORIA}" npm run build
+  # prévia (faixa + noindex) ligada até o lançamento ser aprovado: o lançamento é um PR
+  # que troca o padrão para 0 (ou RASTRO_PREVIA=0 no ambiente)
+  VITE_PREVIA="${RASTRO_PREVIA:-1}" VITE_BASE=/rastro-publico/ VITE_API_AUDITORIA="${RASTRO_URL_AUDITORIA:?defina RASTRO_URL_AUDITORIA}" npm run build
 )
 cp -a "$DADOS" "$DIST/dados"
 

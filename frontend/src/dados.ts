@@ -9,10 +9,13 @@ export const API_AUDITORIA = ((import.meta.env.VITE_API_AUDITORIA as string | un
   "",
 );
 
-/** Prévia pública (VITE_PREVIA=1): dados parciais, sem ranking e sem a API de auditoria. */
+/**
+ * Prévia (VITE_PREVIA=1): faixa "Prévia — dados em validação" em todas as páginas e
+ * `noindex` (fora dos buscadores) até o lançamento ser aprovado. Não esconde nenhum dado.
+ */
 export const PREVIA = import.meta.env.VITE_PREVIA === "1";
-/** Links de "resposta original"/"cópia arquivada" só quando a API de auditoria está no ar. */
-export const AUDITORIA_ATIVA = !PREVIA;
+/** Links de "resposta original"/"cópia arquivada" só quando há API de auditoria configurada. */
+export const AUDITORIA_ATIVA = API_AUDITORIA !== "";
 
 /** URL de um endpoint da API de auditoria (ex.: "/api/respostas/12/bruto"). */
 export const urlAuditoria = (caminho: string) => `${API_AUDITORIA}${caminho}`;

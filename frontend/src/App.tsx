@@ -60,7 +60,7 @@ export default function App() {
     <main>
       {PREVIA && (
         <div className="faixa-previa" role="note">
-          Prévia — dados parciais em validação. Coleta completa em andamento.
+          Prévia — dados em validação.
         </div>
       )}
       <header className="topo">
@@ -78,12 +78,7 @@ export default function App() {
       </header>
       <AvisoFontes manifesto={manifesto} />
       {rota.pagina === "municipios" && <Municipios cod={rota.cod} />}
-      {rota.pagina === "ranking" &&
-        (PREVIA ? (
-          <p className="aviso-previa-ranking">Ranking disponível após a coleta completa dos 645 municípios</p>
-        ) : (
-          <RankingPagina />
-        ))}
+      {rota.pagina === "ranking" && <RankingPagina />}
       {rota.pagina === "metodologia" && <Metodologia />}
       {rota.pagina === "fontes" && <StatusFontes manifesto={manifesto} />}
       {rota.pagina === "representantes" && <QuemRepresenta cod={rota.cod} />}
