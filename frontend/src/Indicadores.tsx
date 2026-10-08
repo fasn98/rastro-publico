@@ -6,7 +6,7 @@ import {
   type Indicadores as Dados,
   type Situacao,
 } from "./api";
-import { AUDITORIA_ATIVA, PREVIA, urlAuditoria } from "./dados";
+import { AUDITORIA_ATIVA, urlAuditoria } from "./dados";
 import { nota10 } from "./Ranking";
 import Evolucao from "./Evolucao";
 
@@ -224,7 +224,7 @@ export default function Indicadores({ cod }: { cod: number }) {
         )}
       </p>
 
-      {!PREVIA && <NotaRanking cod={cod} />}
+      <NotaRanking cod={cod} />
 
       {pessoal.length > 0 && (
         <div className="bloco">
