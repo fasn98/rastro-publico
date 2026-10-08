@@ -92,7 +92,8 @@ class Coleta(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     fonte: Mapped[str] = mapped_column(String(60), index=True)
-    status: Mapped[str] = mapped_column(String(20))  # executando | sucesso | parcial | falha
+    # executando | sucesso | parcial | falha | interrompida
+    status: Mapped[str] = mapped_column(String(20))
     registros: Mapped[int | None]
     erro: Mapped[str | None] = mapped_column(Text)
     iniciada_em: Mapped[datetime] = mapped_column(
