@@ -249,3 +249,5 @@ input[type="checkbox"] { flex: none; min-width: 0; margin: 0 4px 0 0; }
 .lista-completa .lista a:hover, .lista-completa .lista a:focus-visible { border-color: var(--destaque); }
 .populacao { font-size: 1.15em; }
 dt.secundario, dd.secundario { font-size: 0.9em; }
+.aviso-fontes { margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--borda); border-left: 4px solid var(--sit-alerta); border-radius: 6px; background: var(--cartao); font-size: 0.9em; }
+.tabela-rolavel { overflow-x: auto; }

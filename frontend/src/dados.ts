@@ -42,6 +42,16 @@ export function lerJson<T>(caminho: string, opcional = false): Promise<T | null>
 export const normalizar = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
+export type SituacaoFonte = {
+  fonte: string;
+  nome: string;
+  ultima_atualizacao: string | null;
+  tentada_nesta_coleta: boolean;
+  atualizada_nesta_coleta: boolean;
+  disponivel: boolean;
+  falha: string | null;
+};
+
 export type Manifesto = {
   gerado_em: string;
   ultima_coleta: string | null;
@@ -50,6 +60,7 @@ export type Manifesto = {
   metodologia: { versao: string; hash: string };
   mapeamento: { versao: number; hash: string };
   contagens: Record<string, number>;
+  fontes?: SituacaoFonte[];
 };
 
 export const obterManifesto = () => lerJson<Manifesto>("manifesto.json", true);

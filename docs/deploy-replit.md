@@ -149,7 +149,8 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 |---|---|
 | Ver publicações guardadas | Shell do rastro-coleta: `cd backend && uv run rastro listar-publicacoes` |
 | Reverter o site para a publicação anterior | `RASTRO_GITHUB_TOKEN=<token> uv run rastro reverter-site` (ou `--para site-AAAAMMDD-HHMMSS`) |
-| Uma fonte fora do ar | nada a fazer: a próxima execução retoma; o site não perde dados |
+| Uma fonte fora do ar | Nada a fazer. A fonte é tentada de novo com espera de 1, 2 e 4 minutos (`RASTRO_FONTE_ESPERAS`, em segundos). Se continuar falhando, o site é publicado com os dados anteriores dela e a execução termina com **AVISO** (não com erro). O log traz o traceback completo e a linha `Fontes com falha: pol-camara (HTTP 504 após 4 tentativas; ...)`; o site mostra um aviso no topo e a página **Status das fontes** (`#/fontes`). Se a fonte nunca tinha sido coletada, as seções dela aparecem como "fonte indisponível nesta coleta". A próxima execução tenta de novo. |
+| Execução terminou com erro | Só acontece quando algo crítico falha: banco, migrações, verificação do arquivo bruto, exportação ou verificação do site, ou o envio ao GitHub. Nesses casos nada é publicado e o site continua como estava; veja a última mensagem de erro no log. |
 | Código novo no `main` | nos dois apps: Git → **Pull**, depois **Publish** |
 | Token vencendo | passo 1.4 |
 | App reiniciando sem parar (*crash loop*) | Publishing → **Logs**. Se aparecer `ERRO: RASTRO_PAPEL` ou `ERRO: o Secret RASTRO_PAPEL não está definido`, corrija o Secret em Publishing → Production app secrets (`coleta` ou `auditoria`) e publique de novo. Os Secrets de produção não aparecem no Shell do editor: para testar um valor lá, rode `RASTRO_PAPEL=<valor> bash backend/scripts/replit.sh --validar-papel` |

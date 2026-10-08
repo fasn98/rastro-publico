@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+import traceback
 from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -138,7 +139,9 @@ def executar(session: Session, fonte: str, coletor: Coletor, client: httpx.Clien
     except Exception as exc:
         session.rollback()
         coleta.status = "falha"
-        coleta.erro = f"{type(exc).__name__}: {exc}"
+        # traceback completo no banco (e no log, pelo log.exception)
+        coleta.erro = f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}"
+        coleta.excecao = exc  # não é coluna: só para quem chamou decidir se tenta de novo
         log.exception("Falha na coleta %s", fonte)
     finally:
         coleta_atual.reset(token)

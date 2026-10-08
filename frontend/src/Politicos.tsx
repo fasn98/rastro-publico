@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { buscarMunicipios, type Municipio } from "./api";
-import { AUDITORIA_ATIVA, urlAuditoria } from "./dados";
+import { AUDITORIA_ATIVA, obterManifesto, type SituacaoFonte, urlAuditoria } from "./dados";
+import { FONTE_DO_CARGO } from "./Fontes";
 import {
   CARGOS,
   FONTES,
@@ -112,6 +113,15 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
   const [rep, setRep] = useState<Representantes | null>(null);
   const [emendas, setEmendas] = useState<Emendas | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [fontes, setFontes] = useState<SituacaoFonte[]>([]);
+  useEffect(() => {
+    obterManifesto().then((m) => setFontes(m?.fontes ?? [])).catch(() => setFontes([]));
+  }, []);
+  /** Nome da fonte do cargo quando ela nunca foi coletada com sucesso (senão, null). */
+  const indisponivel = (cargo: string) => {
+    const f = fontes.find((x) => x.fonte === FONTE_DO_CARGO[cargo]);
+    return f && !f.disponivel ? f.nome : null;
+  };
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -215,7 +225,12 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
                     {CARGOS[g.cargo] ?? g.cargo}
                     {g.politicos.length > 0 && <span className="sub"> ({g.politicos.length})</span>}
                   </h4>
-                  {g.pendente ? (
+                  {g.politicos.length === 0 && indisponivel(g.cargo) ? (
+                    <p className="pendente">
+                      {indisponivel(g.cargo)}: fonte indisponível nesta coleta.{" "}
+                      <a href="#/fontes">Status das fontes</a>
+                    </p>
+                  ) : g.pendente ? (
                     <p className="pendente">
                       {g.pendente}
                       {g.pendente_url && (

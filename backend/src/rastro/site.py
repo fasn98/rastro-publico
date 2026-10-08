@@ -69,6 +69,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from rastro import fontes
 from rastro import mapeamento as mp
 from rastro import ranking as rk
 from rastro.config import get_settings
@@ -563,6 +564,12 @@ def exportar(
         ultima_coleta = s.scalar(
             select(func.max(Coleta.finalizada_em)).where(Coleta.status.in_(["sucesso", "parcial"]))
         )
+        # situação de cada fonte nesta coleta (RASTRO_INICIO_COLETA, posto pela coleta
+        # agendada); a página "Status das fontes" e os avisos do site leem daqui
+        inicio_coleta = os.environ.get("RASTRO_INICIO_COLETA")
+        situacao_fontes = fontes.status(
+            s, datetime.fromisoformat(inicio_coleta) if inicio_coleta else None
+        )
 
         # representantes: as seções de estado e federais são iguais em todos os municípios
         # da UF; cada seção que se repete vira um arquivo só, nomeado pelo hash do conteúdo
@@ -710,6 +717,7 @@ def exportar(
         "metodologia": {"versao": met.versao, "hash": met.hash},
         "mapeamento": {"versao": mapa.versao, "hash": mapa.hash},
         "travas": _travas(),
+        "fontes": situacao_fontes,
         "cota_detalhada": list(anos_cota),
         "contagens": {
             "municipios": len(municipios),
@@ -895,9 +903,23 @@ def verificar(saida: Path, anterior: dict | None = None) -> list[str]:
             problemas.append(f"arquivo obrigatório ausente: {obrigatorio}")
     if anterior:
         mesmas_travas = anterior.get("travas") == manifesto.get("travas")
+        # fonte de políticos que nunca foi coletada com sucesso (falhou nesta coleta e não
+        # tem dado anterior no banco): a seção dela sai como "fonte indisponível nesta
+        # coleta" e a queda no número de políticos é esperada, não um erro
+        indisponiveis = [
+            f["fonte"]
+            for f in manifesto.get("fontes", [])
+            if f["fonte"] in fontes.FONTES_POLITICOS and not f["disponivel"]
+        ]
         for chave in ("municipios", "politicos"):
             if chave == "politicos" and not mesmas_travas:
                 continue  # ligar/desligar uma trava muda o número de políticos de propósito
+            if chave == "politicos" and indisponiveis:
+                log.warning(
+                    "Número de políticos pode cair: fonte(s) indisponível(is) nesta coleta: %s",
+                    ", ".join(indisponiveis),
+                )
+                continue
             antes = anterior.get("contagens", {}).get(chave, 0)
             agora = manifesto["contagens"].get(chave, 0)
             if agora < antes:
