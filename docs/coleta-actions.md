@@ -35,12 +35,13 @@ Aba **Secrets → New repository secret**:
 |---|---|
 | `DATABASE_URL` | a do banco de produção: copie dos Secrets do app **rastro-coleta** no Replit |
 | `RASTRO_TRANSPARENCIA_CHAVE` | a chave do Portal da Transparência (sem espaços nas pontas) |
-
-Aba **Variables → New repository variable**:
-
-| Nome | Valor |
-|---|---|
 | `RASTRO_URL_AUDITORIA` | a URL da API de auditoria (a mesma do Secret do Replit) |
+
+A `RASTRO_URL_AUDITORIA` não é sigilosa: também pode ficar na aba **Variables**. O workflow
+lê das duas formas (a variável, se existir; senão, o secret).
+
+O `DATABASE_URL` não aparece nos Secrets do Replit: copie em **Database → Production
+Database → Settings → Connection string** (botão de copiar, sem revelar a senha).
 
 ## 2. Teste sem publicar
 
