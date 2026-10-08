@@ -16,6 +16,7 @@
 #   DATABASE_URL           banco de produção (criado pelo Replit)
 #   RASTRO_GITHUB_TOKEN    token fine-grained, só este repositório, Contents: read and write
 #   RASTRO_URL_AUDITORIA   URL pública da API de auditoria (ex.: https://rastro-auditoria.replit.app)
+#   RASTRO_SIMULAR=1       (opcional) coleta, exporta e verifica, mas não publica o site
 set -euo pipefail
 # qualquer etapa que falhar diz qual foi e com que código (137 = processo morto pelo
 # sistema, em geral por falta de memória; 143 = encerrado pelo agendador)
@@ -65,8 +66,16 @@ echo "== situação das fontes nesta coleta"
 RESUMO="$(uv run rastro resumo-coleta --desde "$RASTRO_INICIO_COLETA")"
 echo "$RESUMO"
 
+if [ "${RASTRO_SIMULAR:-}" = "1" ]; then
+  echo "== simulação: verifica contra o site publicado, sem publicar"
+  uv run rastro publicar-site --dist "$DIST" --simular
+  echo "Duração da coleta: ${SECONDS} s"
+  exit 0
+fi
+
 echo "== publicação (verifica antes; tudo ou nada)"
 uv run rastro publicar-site --dist "$DIST"
+echo "Duração da coleta: ${SECONDS} s"
 if ! grep -q "^Fontes com falha: nenhuma$" <<<"$RESUMO"; then
   echo "AVISO: site publicado com fontes desatualizadas: $(grep '^Fontes com falha:' <<<"$RESUMO")"
 fi

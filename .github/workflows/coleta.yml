@@ -1,0 +1,57 @@
+# Coleta de SP e publicação do site estático no GitHub Pages (gh-pages).
+#
+# Substitui o Scheduled Deployment do Replit: roda sempre o código do main, sem Pull nem
+# Republish. Guia: docs/coleta-actions.md.
+#
+# Fase de teste: só roda pelo botão "Run workflow". Sem marcar "publicar", coleta,
+# exporta e verifica contra o site publicado, mas não publica (RASTRO_SIMULAR=1).
+# O agendamento (schedule) entra depois do teste, quando a coleta do Replit for desligada.
+name: Coleta
+
+on:
+  workflow_dispatch:
+    inputs:
+      publicar:
+        description: "Publicar o site no fim (desmarcado: só verifica, sem publicar)"
+        type: boolean
+        default: false
+
+# publicar no gh-pages (branch e tags site-*) com o token do próprio workflow
+permissions:
+  contents: write
+
+# uma execução por vez neste workflow; a trava no banco (rastro coleta-exclusiva) também
+# impede rodar junto com a coleta do Replit
+concurrency:
+  group: coleta
+  cancel-in-progress: false
+
+jobs:
+  coleta:
+    runs-on: ubuntu-latest
+    # limite do GitHub: 6 h. O RREO/RGF é retomável: o que faltar fica para a próxima.
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Dependências
+        working-directory: backend
+        run: |
+          uv sync --frozen --no-dev
+          bash scripts/frontend_deps.sh --forcar
+      - name: Coleta, verificação e publicação
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RASTRO_TRANSPARENCIA_CHAVE: ${{ secrets.RASTRO_TRANSPARENCIA_CHAVE }}
+          RASTRO_URL_AUDITORIA: ${{ vars.RASTRO_URL_AUDITORIA }}
+          RASTRO_GITHUB_TOKEN: ${{ github.token }}
+          RASTRO_SIMULAR: ${{ inputs.publicar && '0' || '1' }}
+        run: |
+          uv run rastro conferir-producao
+          uv run rastro coleta-exclusiva bash scripts/coleta_sp.sh

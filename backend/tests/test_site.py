@@ -378,6 +378,16 @@ def test_publicacao_com_dados_faltando_nao_altera_o_site(exportado, remoto, tmp_
     assert len(publicacao.listar(remoto)) == 1
 
 
+def test_simulacao_verifica_e_nao_envia_nada(exportado, remoto):
+    dist, _ = exportado
+    publicacao.publicar(dist, remoto, agora=datetime(2026, 10, 1, tzinfo=UTC))
+    antes = _ramo(remoto)
+    tag = publicacao.publicar(dist, remoto, agora=datetime(2026, 10, 2, tzinfo=UTC), simular=True)
+    assert tag == "site-20261002-000000"
+    assert _ramo(remoto) == antes
+    assert [p["tag"] for p in publicacao.listar(remoto)] == ["site-20261001-000000"]
+
+
 def test_token_nunca_aparece_em_mensagens():
     token = "github_pat_SEGREDO123"
     with pytest.raises(publicacao.ErroPublicacao) as erro:
