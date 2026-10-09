@@ -33,4 +33,4 @@ regra exige subir a versão.
 
 ## Como revisitar
 
-A cada mudança de metodologia (a v1.1 está em proposta).
+A cada mudança de metodologia. A v1.1 foi aceita em 2026-10-09 (ADR-0017).
