@@ -51,13 +51,24 @@ def coletar(session: Session, client: httpx.Client) -> int:
     return len(linhas)
 
 
-# População residente estimada (SIDRA, tabela 6579, variável 9324), último ano publicado,
-# de todos os municípios. Documentação: https://servicodados.ibge.gov.br/api/docs/agregados
+# População de todos os municípios (documentação: https://servicodados.ibge.gov.br/api/docs/agregados):
+# - estimativas anuais (SIDRA, tabela 6579, variável 9324), os 3 últimos anos publicados;
+# - Censo 2022 (SIDRA, tabela 4709, variável 93): a tabela 6579 não tem 2022 nem 2023, e o
+#   per capita de 2023 usa a população oficial mais recente até aquele ano (metodologia v1.1).
 TABELA_POPULACAO = 6579
 URL_POPULACAO = (
     f"https://servicodados.ibge.gov.br/api/v3/agregados/{TABELA_POPULACAO}"
-    "/periodos/-1/variaveis/9324?localidades=N6[all]"
+    "/periodos/-3/variaveis/9324?localidades=N6[all]"
 )
+TABELA_CENSO_2022 = 4709
+URL_CENSO_2022 = (
+    f"https://servicodados.ibge.gov.br/api/v3/agregados/{TABELA_CENSO_2022}"
+    "/periodos/2022/variaveis/93?localidades=N6[all]"
+)
+FONTE_POPULACAO = {
+    TABELA_POPULACAO: "IBGE, Estimativas de População (SIDRA, tabela 6579)",
+    TABELA_CENSO_2022: "IBGE, Censo Demográfico 2022 (SIDRA, tabela 4709)",
+}
 
 
 def normalizar_populacao(dados: list[dict]) -> list[dict]:
@@ -79,15 +90,21 @@ def normalizar_populacao(dados: list[dict]) -> list[dict]:
 
 
 def coletar_populacao(session: Session, client: httpx.Client) -> int:
-    dados, origem = get_json_com_origem(client, URL_POPULACAO)
-    linhas = [{**linha, "resposta_id": origem} for linha in normalizar_populacao(dados)]
-    if not linhas:
-        return 0
-    stmt = insert(PopulacaoIbge).values(linhas)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=[PopulacaoIbge.cod_ibge, PopulacaoIbge.ano],
-        set_={"populacao": stmt.excluded.populacao, "resposta_id": stmt.excluded.resposta_id},
-    )
-    session.execute(stmt)
+    total = 0
+    for tabela, url in ((TABELA_POPULACAO, URL_POPULACAO), (TABELA_CENSO_2022, URL_CENSO_2022)):
+        dados, origem = get_json_com_origem(client, url)
+        linhas = [
+            {**linha, "tabela": tabela, "resposta_id": origem}
+            for linha in normalizar_populacao(dados)
+        ]
+        if not linhas:
+            continue
+        stmt = insert(PopulacaoIbge).values(linhas)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[PopulacaoIbge.cod_ibge, PopulacaoIbge.ano],
+            set_={c: stmt.excluded[c] for c in ("populacao", "tabela", "resposta_id")},
+        )
+        session.execute(stmt)
+        total += len(linhas)
     session.commit()
-    return len(linhas)
+    return total

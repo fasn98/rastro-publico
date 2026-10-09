@@ -8,7 +8,10 @@ Regras gerais (valem para qualquer versão da metodologia):
 - Indicador sem nenhum ano com dado = "não reportado": fica fora da média ponderada
   (os pesos são redistribuídos) e entra na contagem de indicadores faltantes.
   Exceção: a transparência, em que ausência de relatório vale 0.
+- Indicador com `multiplicador = true` (a transparência, desde a v1.1) não entra na média:
+  multiplica a média ponderada dos demais.
 - Abaixo de `minimo_indicadores_fiscais`, o município fica sem nota.
+- Faixa populacional: estimativa mais recente do IBGE (SIDRA 6579), desde a v1.1.
 """
 
 import hashlib
@@ -22,9 +25,11 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from rastro import indicadores as ind
-from rastro.models import EnteSiconfi, NotaRanking
+from rastro.models import EnteSiconfi, NotaRanking, PopulacaoIbge
 
-ARQUIVO_PADRAO = Path(__file__).with_name("metodologia_v1.toml")
+ARQUIVO_PADRAO = Path(__file__).with_name("metodologia_v1_1.toml")
+# versões anteriores, para consulta e testes
+ARQUIVO_V1_0 = Path(__file__).with_name("metodologia_v1.toml")
 FISCAIS = ("autonomia", "pessoal", "liquidez", "investimento")
 
 
@@ -107,6 +112,21 @@ def _nota_ano(dado: dict | None, regra: dict) -> float | None:
     return normalizar(dado["valor"], pior, melhor)
 
 
+def _populacao(
+    session: Session, ente: EnteSiconfi, met: Metodologia
+) -> tuple[int | None, int | None]:
+    """(população, ano) usada nas faixas. v1.0: cadastro do SICONFI; v1.1 em diante: a
+    estimativa mais recente do IBGE (SIDRA 6579); sem ela, (None, None)."""
+    if met.regras.get("populacao") != "ibge":
+        return ente.populacao, ente.exercicio
+    pop = session.scalars(
+        select(PopulacaoIbge)
+        .where(PopulacaoIbge.cod_ibge == ente.cod_ibge, PopulacaoIbge.tabela == 6579)
+        .order_by(PopulacaoIbge.ano.desc())
+    ).first()
+    return (pop.populacao, pop.ano) if pop else (None, None)
+
+
 def avaliar(session: Session, ente: EnteSiconfi, met: Metodologia) -> dict:
     """Nota de um município, com o detalhe de cada indicador e ano."""
     regras = met.regras["indicadores"]
@@ -124,24 +144,33 @@ def avaliar(session: Session, ente: EnteSiconfi, met: Metodologia) -> dict:
         componentes[nome] = {
             "nota": round(sum(notas) / len(notas), 4) if notas else None,
             "anos_com_dado": len(notas),
-            "peso": regra["peso"],
+            "peso": regra.get("peso"),  # sem peso: multiplicador (v1.1)
             "anos": anos,
         }
 
     faltantes = [n for n, c in componentes.items() if c["nota"] is None]
     fiscais_presentes = sum(1 for n in FISCAIS if componentes[n]["nota"] is not None)
-    presentes = [c for c in componentes.values() if c["nota"] is not None]
+    multiplicadores = [n for n, r in regras.items() if r.get("multiplicador")]
+    presentes = [
+        c for n, c in componentes.items() if c["nota"] is not None and n not in multiplicadores
+    ]
     peso_total = sum(c["peso"] for c in presentes)
     if fiscais_presentes < met.regras["minimo_indicadores_fiscais"] or not peso_total:
         nota = None
     else:
-        nota = round(sum(c["nota"] * c["peso"] for c in presentes) / peso_total, 4)
+        nota = sum(c["nota"] * c["peso"] for c in presentes) / peso_total
+        for n in multiplicadores:
+            if componentes[n]["nota"] is not None:
+                nota *= componentes[n]["nota"]
+        nota = round(nota, 4)
+    populacao, ano_populacao = _populacao(session, ente, met)
     return {
         "cod_ibge": ente.cod_ibge,
         "nome": ente.nome,
         "uf": ente.uf,
-        "populacao": ente.populacao,
-        "faixa": faixa_populacional(ente.populacao, met.regras["faixas"]),
+        "populacao": populacao,
+        "ano_populacao": ano_populacao,
+        "faixa": faixa_populacional(populacao, met.regras["faixas"]),
         "nota": nota,
         "indicadores_faltantes": len(faltantes),
         "faltantes": faltantes,
@@ -189,6 +218,7 @@ def calcular(session: Session, uf: str, met: Metodologia | None = None) -> list[
             cod_ibge=i["cod_ibge"],
             uf=i["uf"],
             populacao=i["populacao"],
+            ano_populacao=i["ano_populacao"],
             faixa=i["faixa"],
             nota=Decimal(str(i["nota"])) if i["nota"] is not None else None,
             indicadores_faltantes=i["indicadores_faltantes"],

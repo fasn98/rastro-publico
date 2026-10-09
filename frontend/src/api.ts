@@ -100,6 +100,8 @@ type Referencia = {
   periodicidade: "B" | "Q" | "S";
   periodo: number;
   periodo_final: boolean;
+  /** instituição que entregou o relatório (desde a v1.1, a Prefeitura quando houver) */
+  instituicao?: string | null;
 };
 
 export type Situacao = "regular" | "acima_alerta" | "acima_prudencial" | "acima_maximo";
@@ -156,6 +158,8 @@ export type Liquidez = Referencia & {
   rcl: string | null;
   percentual: string | null;
   percentual_com_vinculados: string | null;
+  /** a linha (I) não veio na API; calculada como IV − II − III (metodologia v1.1) */
+  nao_vinculados_derivado?: boolean;
 };
 
 export type Investimento = Referencia & {
@@ -174,6 +178,16 @@ export type Transparencia = {
   provisorio: boolean;
 };
 
+/** Valores por habitante, com a população oficial do IBGE do ano (contexto, fora da nota). */
+export type PerCapita = {
+  populacao: number;
+  ano_populacao: number;
+  fonte_populacao: string | null;
+  resposta_id_populacao: number | null;
+  receita_local: string | null;
+  investimento_liquidado: string | null;
+};
+
 export type Indicadores = {
   cod_ibge: number;
   exercicio: number;
@@ -185,6 +199,7 @@ export type Indicadores = {
   liquidez: Liquidez | null;
   investimento: Investimento | null;
   transparencia: Transparencia | null;
+  per_capita?: PerCapita | null;
 };
 
 /** Devolve null quando o ente ainda não tem RREO/RGF coletado (404). */
@@ -215,6 +230,7 @@ export type ItemRanking = {
   cod_ibge: number;
   nome: string;
   populacao: number | null;
+  ano_populacao?: number | null;
   faixa: string | null;
   nota: string | null;
   indicadores_faltantes: number;
@@ -234,7 +250,8 @@ export type Ranking = {
 type Componente = {
   nota: number | null;
   anos_com_dado: number;
-  peso: number;
+  /** null: o indicador multiplica a nota (transparência, desde a v1.1) */
+  peso: number | null;
   anos: Record<string, { valor: number | null; nota: number | null }>;
 };
 
@@ -243,6 +260,8 @@ export type DetalheRanking = {
   versao: string;
   hash_metodologia: string;
   exercicios: string;
+  populacao?: number | null;
+  ano_populacao?: number | null;
   faixa: string | null;
   nota: string | null;
   indicadores_faltantes: number;
@@ -255,7 +274,9 @@ export type DetalheRanking = {
 
 export type RegraIndicador = {
   nome: string;
-  peso: number;
+  /** ausente quando o indicador é multiplicador */
+  peso?: number;
+  multiplicador?: boolean;
   unidade: string;
   pior: number;
   melhor: number;
@@ -271,6 +292,8 @@ export type Metodologia = {
   ultimo_exercicio: number;
   janela_exercicios: number;
   minimo_indicadores_fiscais: number;
+  /** "ibge": faixas pela estimativa do IBGE (v1.1); ausente: cadastro do SICONFI (v1.0) */
+  populacao?: string;
   faixas: { nome: string; ate?: number }[];
   indicadores: Record<IndicadorRanking, RegraIndicador>;
 };

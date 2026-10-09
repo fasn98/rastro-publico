@@ -1,7 +1,7 @@
 # Ranking Fiscal — proposta da metodologia v1.1
 
-**Situação: proposta, aguardando aprovação do Fabio. Nada aqui foi publicado nem mudou no código
-do ranking.**
+**Situação: aprovada pelo Fabio em 09/10/2026 (D1 a D7, como propostas) e implementada no PR #24.
+A publicação depende do merge desse PR, que também precisa da aprovação dele.**
 
 Base: os 645 municípios de SP, exercícios 2023, 2024 e 2025, como publicados em 08/10/2026
 (`site-20261008-223829`), mais verificações feitas na API do SICONFI e do IBGE em 08/10/2026.

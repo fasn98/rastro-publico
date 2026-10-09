@@ -19,7 +19,7 @@ const FORMULA: Record<string, { formula: string; fonte: string }> = {
     formula:
       "Disponibilidade de caixa líquida após a inscrição de restos a pagar não processados, recursos NÃO vinculados ÷ RCL, em %",
     fonte:
-      "RGF Anexo 5 do Executivo, linha “TOTAL DOS RECURSOS NÃO VINCULADOS (I)”, coluna DisponibilidadeDeCaixaLiquidaAposRP (i); RCL do RGF Anexo 2. 3º quadrimestre ou 2º semestre.",
+      "RGF Anexo 5 do Executivo, linha “TOTAL DOS RECURSOS NÃO VINCULADOS (I)”, coluna DisponibilidadeDeCaixaLiquidaAposRP (i); RCL do RGF Anexo 2. 3º quadrimestre ou 2º semestre. Quando a API não traz a linha (I) (ela omite linhas com valor zero), (I) = (IV) − (II) − (III), pelo total do próprio relatório.",
   },
   investimento: {
     formula: "Investimentos liquidados (exceto intraorçamentários) ÷ receita total realizada, em %",
@@ -37,14 +37,16 @@ const FORMULA: Record<string, { formula: string; fonte: string }> = {
 function Regra({ chave, r }: { chave: string; r: RegraIndicador }) {
   const sentido = r.pior > r.melhor ? "menor é melhor" : "maior é melhor";
   const faixa = chave === "transparencia"
-    ? "o índice já vai de 0 a 1 (0% a 100% dos relatórios esperados) e é usado diretamente"
+    ? r.multiplicador
+      ? "o índice já vai de 0 a 1 (0% a 100% dos relatórios esperados) e multiplica a média dos indicadores fiscais"
+      : "o índice já vai de 0 a 1 (0% a 100% dos relatórios esperados) e é usado diretamente"
     : r.relativo_ao_limite_maximo
     ? `nota 0 com ${n(r.pior * 100)}% do limite máximo declarado; nota 10 até ${n(r.melhor * 100)}% dele (em municípios, limite de 54%: ${n(r.pior * 54)}% e ${n(r.melhor * 54)}% da RCL)`
     : `nota 0 com ${n(r.pior)}${r.unidade.startsWith("%") ? "%" : ""} ou ${r.pior > r.melhor ? "mais" : "menos"}; nota 10 com ${n(r.melhor)}${r.unidade.startsWith("%") ? "%" : ""} ou ${r.pior > r.melhor ? "menos" : "mais"}`;
   return (
     <article className="regra">
       <h3>
-        {r.nome} <span className="sub">peso {r.peso}</span>
+        {r.nome} <span className="sub">{r.multiplicador ? "multiplicador" : `peso ${r.peso}`}</span>
       </h3>
       <p>
         <strong>Fórmula:</strong> {FORMULA[chave].formula}
@@ -73,7 +75,7 @@ export default function Metodologia() {
     <article className="metodologia">
       <h2>Metodologia do Ranking Fiscal</h2>
       <p className="sub">
-        Versão {met.versao} · arquivo de regras <code>metodologia_v1.toml</code> (hash {met.hash}) ·
+        Versão {met.versao} · arquivo de regras <code>metodologia_v1_1.toml</code> (hash {met.hash}) ·
         exercícios {met.exercicios.join(", ")}
       </p>
 
@@ -110,12 +112,15 @@ export default function Metodologia() {
           ({met.exercicios.join(", ")}) que têm dado.
         </li>
         <li>
-          Nota final = média ponderada dos indicadores com dado (pesos iguais nesta versão). Indicador
+          Média ponderada dos 4 indicadores fiscais com dado (pesos iguais nesta versão). Indicador
           sem nenhum ano com dado é <strong>não reportado</strong>: sai da média, os pesos dos demais
           são redistribuídos e a nota informa quantos faltaram.
         </li>
         <li>
-          A transparência é a única que penaliza ausência: ano coletado sem relatório vale 0.
+          Nota final = essa média × o índice de transparência. Quem entregou todos os relatórios
+          esperados (índice 1) fica com a média fiscal; quem deixou de entregar perde na mesma
+          proporção. A transparência é a única que penaliza ausência: ano coletado sem relatório
+          vale 0.
         </li>
         <li>
           Com menos de {met.minimo_indicadores_fiscais} dos 4 indicadores fiscais, o município fica{" "}
@@ -124,8 +129,8 @@ export default function Metodologia() {
         </li>
         <li>
           Posições por competição (empates dividem a posição), no ranking geral e por faixa
-          populacional: {met.faixas.map((f) => f.nome).join("; ")}. População do cadastro de entes
-          do SICONFI.
+          populacional: {met.faixas.map((f) => f.nome).join("; ")}. População: estimativa mais
+          recente do IBGE (SIDRA, tabela 6579); sem ela, o município fica sem faixa.
         </li>
       </ol>
 
@@ -147,8 +152,9 @@ export default function Metodologia() {
             <td>
               As cotas-parte refletem a atividade econômica do próprio município. Usamos sempre os
               totais declarados, não a soma de partes. Como a razão não tem teto, acima de{" "}
-              {n(met.indicadores.autonomia.melhor)} a nota é máxima. Esse teto é provisório, escolhido
-              pela amostra de 10 municípios (razões de 0,8 a 22), e será revisto com a coleta completa.
+              {n(met.indicadores.autonomia.melhor)} a nota é máxima: é o percentil 95 da coleta
+              completa de SP (2023–2025, 1.931 município-anos: 6,94). Com o teto anterior (10), só
+              0,9% dos casos chegavam à nota máxima.
             </td>
           </tr>
           <tr>
@@ -171,12 +177,14 @@ export default function Metodologia() {
           </tr>
           <tr>
             <td>Transparência</td>
-            <td>4 blocos: RREO, RGF Executivo, RGF Legislativo, DCA</td>
-            <td>Incluir MSC mensal; medir pontualidade</td>
+            <td>4 blocos (RREO, RGF Executivo, RGF Legislativo, DCA), como multiplicador da média fiscal</td>
+            <td>Peso 1 ou 0,5 na média; incluir a MSC mensal; medir pontualidade</td>
             <td>
-              Provisório. A data do extrato muda quando o ente retifica, então a pontualidade não é
-              medida com segurança, e retificações não penalizam. Peso e composição serão revistos
-              com a distribuição da coleta completa.
+              Na coleta de SP (2023–2025), o índice vale 1 em 99,3% dos casos: com peso na média, ele
+              somava quase o mesmo a todas as notas. A MSC não muda nada (todos os 645 municípios
+              entregaram as 12 mensais e a de encerramento). A data do extrato muda quando o ente
+              retifica, então a pontualidade não é medida com segurança, e retificações não
+              penalizam.
             </td>
           </tr>
         </tbody>
@@ -187,6 +195,46 @@ export default function Metodologia() {
         Dívida consolidada líquida, resultado orçamentário e execução da receita e da despesa seguem
         visíveis na página de cada município, mas não entram nesta versão do ranking.
       </p>
+      <p>
+        Valores por habitante (receita local e investimento liquidado) usam a população oficial do
+        IBGE mais recente até o ano do exercício: estimativas da tabela 6579 para 2024 e 2025 e o
+        Censo 2022 (tabela 4709) para 2023, porque o IBGE não publicou estimativa para 2022 nem
+        2023. Ficam fora da nota: os 4 indicadores já são razões, que não dependem do tamanho do
+        município.
+      </p>
+
+      <h3>O que mudou na versão 1.1 (aprovada em 09/10/2026)</h3>
+      <ul>
+        <li>
+          <strong>Relatório da Prefeitura:</strong> consórcios públicos podem entregar RREO e RGF com o
+          código do município-sede. Os indicadores usam sempre o relatório da Prefeitura. Na v1.0, o
+          de um consórcio podia ser lido no lugar dele (em SP, só Votuporanga).
+        </li>
+        <li>
+          <strong>Linha omitida no RGF Anexo 5:</strong> (I) = (IV) − (II) − (III) quando a API não
+          traz a linha dos recursos não vinculados.
+        </li>
+        <li>
+          <strong>Teto da autonomia:</strong> de 10 para 7.
+        </li>
+        <li>
+          <strong>Transparência:</strong> deixa de ser um 5º indicador com peso 1 e passa a multiplicar
+          a média fiscal. Por isso as notas da v1.1 são, em geral, mais baixas que as da v1.0: sai um
+          componente que valia 10 para quase todos. Não é piora dos municípios.
+        </li>
+        <li>
+          <strong>Faixas populacionais</strong> pela estimativa do IBGE (nenhum município de SP mudou
+          de faixa) e <strong>valores por habitante</strong> como contexto.
+        </li>
+        <li>
+          <strong>Gasto com pessoal acima de 100% da RCL:</strong> fica como declarado, com um aviso
+          de possível erro de preenchimento na fonte.
+        </li>
+      </ul>
+      <p className="sub">
+        A v1.0 continua registrada no repositório (<code>metodologia_v1.toml</code>), com a proposta e a
+        simulação da mudança em <code>docs/metodologia-v1.1/</code>.
+      </p>
 
       <h3>Limitações conhecidas</h3>
       <ul>
@@ -194,7 +242,7 @@ export default function Metodologia() {
         <li>A API omite linhas com valor zero; nesses casos usamos o total declarado ou tratamos a parcela ausente como zero.</li>
         <li>A liquidez considera só o Executivo; o caixa da Câmara não entra.</li>
         <li>Os limites das normalizações (“pior” e “melhor”) são escolhas desta versão, registradas no arquivo de regras.</li>
-        <li>A transparência é provisória: na amostra inicial, todos os municípios tiveram 100%.</li>
+        <li>A transparência mede presença dos relatórios, não pontualidade nem qualidade: em SP, 99,3% dos casos têm 100%.</li>
         <li>Municípios ainda não coletados aparecem sem nota.</li>
       </ul>
 
@@ -253,6 +301,10 @@ export default function Metodologia() {
           dados abertos, apidatalake.tesouro.gov.br).
         </li>
         <li>IBGE: malha municipal (API de Malhas v3) e cadastro de municípios (API de Localidades).</li>
+        <li>
+          IBGE: população (API de agregados do SIDRA): estimativas anuais (tabela 6579) e Censo
+          2022 (tabela 4709).
+        </li>
       </ul>
     </article>
   );

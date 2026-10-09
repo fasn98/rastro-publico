@@ -56,9 +56,21 @@ class PopulacaoIbge(Base):
     cod_ibge: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     ano: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     populacao: Mapped[int]
+    # tabela do SIDRA: 6579 (estimativas anuais) ou 4709 (Censo 2022)
+    tabela: Mapped[int] = mapped_column(Integer, server_default="6579")
     resposta_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("resposta_bruta.id"), index=True
     )
+
+
+class Estado(Base):
+    """O que já foi aplicado ao banco (ex.: versão do mapeamento reconstruída do bruto)."""
+
+    __tablename__ = "estado"
+
+    chave: Mapped[str] = mapped_column(String(80), primary_key=True)
+    valor: Mapped[str] = mapped_column(Text)
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class EnteSiconfi(Base):
@@ -263,6 +275,8 @@ class NotaRanking(Base):
     cod_ibge: Mapped[int] = mapped_column(Integer, index=True)
     uf: Mapped[str] = mapped_column(String(2), index=True)
     populacao: Mapped[int | None]
+    # ano da população usada na faixa (v1.1: estimativa do IBGE; v1.0: cadastro do SICONFI)
+    ano_populacao: Mapped[int | None]
     faixa: Mapped[str | None] = mapped_column(String(40))
     nota: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
     indicadores_faltantes: Mapped[int]

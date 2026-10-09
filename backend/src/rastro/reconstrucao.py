@@ -9,6 +9,7 @@ tabela a um mapeamento novo (`rastro aplicar-mapeamento`).
 import json
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import delete, select
@@ -21,6 +22,7 @@ from rastro.models import (
     ContaDemonstrativo,
     DemonstrativoResposta,
     DemonstrativoSiconfi,
+    Estado,
     PayloadBruto,
     RespostaBruta,
 )
@@ -37,6 +39,8 @@ class Filtro:
     cod_ibge: list[int] | None = None
     exercicio: list[int] | None = None
     demonstrativo_id: list[int] | None = None
+    # prefixo do tipo de relatório: "RGF" pega RGF e RGF Simplificado
+    tipo: str | None = None
 
     def aceita(self, item: dict) -> bool:
         return (
@@ -70,6 +74,8 @@ def _demonstrativos(session: Session, f: Filtro):
         q = q.where(DemonstrativoSiconfi.exercicio.in_(f.exercicio))
     if f.demonstrativo_id:
         q = q.where(DemonstrativoSiconfi.id.in_(f.demonstrativo_id))
+    if f.tipo:
+        q = q.where(DemonstrativoSiconfi.demonstrativo.startswith(f.tipo))
     return session.scalars(q).all()
 
 
@@ -160,13 +166,26 @@ def gravar(session: Session, linhas: list[LinhaReconstruida]) -> int:
 
 
 def aplicar_mapeamento(
-    session: Session, mapeamento: mp.Mapeamento | None = None, podar: bool = False
+    session: Session,
+    mapeamento: mp.Mapeamento | None = None,
+    podar: bool = False,
+    tipo: str | None = None,
+    se_mudou: bool = False,
 ) -> dict:
     """Alinha conta_demonstrativo ao mapeamento: reconstrói do bruto o que falta e, com
-    `podar`, apaga o que o mapeamento não pede mais (continua no arquivo bruto)."""
+    `podar`, apaga o que o mapeamento não pede mais (continua no arquivo bruto).
+
+    `tipo` limita a um tipo de relatório ("RGF" = RGF e RGF Simplificado). Com `se_mudou`,
+    não faz nada se este mapeamento já foi aplicado a esse tipo (tabela `estado`); serve
+    para a coleta aplicar uma versão nova do mapeamento uma vez só.
+    """
     mapeamento = mapeamento or mp.padrao()
+    chave = f"mapeamento_aplicado:{tipo or 'todos'}"
+    marca = session.get(Estado, chave)
+    if se_mudou and marca is not None and marca.valor == mapeamento.hash:
+        return {"podadas": 0, "reconstruidas": 0, "mapeamento": mapeamento.hash, "pulado": True}
     podadas = reconstruidas = 0
-    for d in _demonstrativos(session, Filtro()):
+    for d in _demonstrativos(session, Filtro(tipo=tipo)):
         if podar:
             fora = [
                 c.id
@@ -182,4 +201,11 @@ def aplicar_mapeamento(
         reconstruidas += gravar(session, faltando)
         _atualizar_contagem(session, {d.id})
         session.commit()
-    return {"podadas": podadas, "reconstruidas": reconstruidas, "mapeamento": mapeamento.hash}
+    session.merge(Estado(chave=chave, valor=mapeamento.hash, atualizado_em=datetime.now(UTC)))
+    session.commit()
+    return {
+        "podadas": podadas,
+        "reconstruidas": reconstruidas,
+        "mapeamento": mapeamento.hash,
+        "pulado": False,
+    }

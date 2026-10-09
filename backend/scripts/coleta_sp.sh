@@ -30,6 +30,9 @@ export RASTRO_INICIO_COLETA
 
 echo "== migrações e cadastros"
 uv run alembic upgrade head
+# versão nova do mapeamento de contas: reconstrói do arquivo bruto, uma vez só, as linhas
+# do RGF que ela passou a pedir (sem chamar a API; ver mapeamento_siconfi.yaml)
+uv run rastro aplicar-mapeamento --tipo RGF --se-mudou
 uv run rastro coletar ibge-municipios ibge-populacao siconfi-entes \
   || echo "AVISO: cadastros com falha; seguem os dados anteriores (resumo no fim)"
 
