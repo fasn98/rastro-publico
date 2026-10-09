@@ -30,6 +30,18 @@ descrições de PR, comentários no GitHub e comentários no código.
   - publicação de dados novos;
   - mudanças de formato.
 
+## Congelamento até o segundo turno (até 25/10/2026, ADR-0019)
+
+- Escopo congelado na metodologia **v1.1.0**. Até 25/10/2026, inclusive, **não entra no
+  `main`**: mudança de metodologia, mudança de formato ou funcionalidade nova. Trabalho
+  novo pode seguir em branch, **sem merge**.
+- **Exceções:** correções de bugs e a **expansão nacional do escopo atual** (mesmas fontes,
+  indicadores e metodologia, para todas as UFs). Elas seguem as regras de sempre: PR, CI
+  verde e aprovação do Fabio nos casos do "Merge dos próprios PRs".
+- O modo prévia continua ligado.
+- Na dúvida se algo é correção de bug ou expansão nacional, trate como congelado e
+  pergunte ao Fabio.
+
 ## Fluxo de Git
 
 - O `main` só recebe mudanças **por PR, um por vez, com CI verde**.
