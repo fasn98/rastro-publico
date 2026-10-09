@@ -93,7 +93,7 @@ def test_executar_registra_falha(session):
 
 
 @respx.mock
-def test_populacao_ibge_grava_e_aparece_no_municipio(session):
+def test_populacao_ibge_grava_e_aparece_no_municipio(session, monkeypatch):
     from fastapi.testclient import TestClient
 
     from rastro.api.main import app
@@ -113,7 +113,9 @@ def test_populacao_ibge_grava_e_aparece_no_municipio(session):
     )
     with novo_cliente(req_por_segundo=0, arquivo=ArquivoBruto(session.get_bind())) as client:
         ibge.coletar(session, client)
-        # 3 municípios x (3 estimativas + Censo 2022)
+        # 3 municípios x (3 estimativas + Censo 2022); em lotes de 2 linhas, como os de
+        # 5.000 que mantêm o país inteiro abaixo do limite de parâmetros do PostgreSQL
+        monkeypatch.setattr(ibge, "LOTE_POPULACAO", 2)
         assert ibge.coletar_populacao(session, client) == 12
         assert ibge.coletar_populacao(session, client) == 12  # upsert, sem duplicar
     assert session.get(PopulacaoIbge, (3500105, 2026)).populacao == 35701

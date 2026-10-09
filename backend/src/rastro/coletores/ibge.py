@@ -65,6 +65,8 @@ URL_CENSO_2022 = (
     f"https://servicodados.ibge.gov.br/api/v3/agregados/{TABELA_CENSO_2022}"
     "/periodos/2022/variaveis/93?localidades=N6[all]"
 )
+# linhas por INSERT (5 parâmetros cada: bem abaixo do limite de 65.535 do PostgreSQL)
+LOTE_POPULACAO = 5000
 FONTE_POPULACAO = {
     TABELA_POPULACAO: "IBGE, Estimativas de População (SIDRA, tabela 6579)",
     TABELA_CENSO_2022: "IBGE, Censo Demográfico 2022 (SIDRA, tabela 4709)",
@@ -97,14 +99,17 @@ def coletar_populacao(session: Session, client: httpx.Client) -> int:
             {**linha, "tabela": tabela, "resposta_id": origem}
             for linha in normalizar_populacao(dados)
         ]
-        if not linhas:
-            continue
-        stmt = insert(PopulacaoIbge).values(linhas)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=[PopulacaoIbge.cod_ibge, PopulacaoIbge.ano],
-            set_={c: stmt.excluded[c] for c in ("populacao", "tabela", "resposta_id")},
-        )
-        session.execute(stmt)
+        # em lotes: o PostgreSQL aceita até 65.535 parâmetros por comando, e 3 anos de
+        # estimativas dos 5.570 municípios passam disso
+        for i in range(0, len(linhas), LOTE_POPULACAO):
+            stmt = insert(PopulacaoIbge).values(linhas[i : i + LOTE_POPULACAO])
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[PopulacaoIbge.cod_ibge, PopulacaoIbge.ano],
+                set_={c: stmt.excluded[c] for c in ("populacao", "tabela", "resposta_id")},
+            )
+            session.execute(stmt)
+        # grava cada tabela antes de baixar a próxima: sem transação aberta durante a
+        # consulta à rede (idle_in_transaction_session_timeout em produção)
+        session.commit()
         total += len(linhas)
-    session.commit()
     return total
