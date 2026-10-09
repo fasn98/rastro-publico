@@ -250,3 +250,8 @@ input[type="checkbox"] { flex: none; min-width: 0; margin: 0 4px 0 0; }
 dt.secundario, dd.secundario { font-size: 0.9em; }
 .aviso-fontes { margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--borda); border-left: 4px solid var(--sit-alerta); border-radius: 6px; background: var(--cartao); font-size: 0.9em; }
 .tabela-rolavel { overflow-x: auto; }
+.prefeitos-eleitos { border-top: 1px solid var(--borda); margin-top: 20px; }
+.mandatos-prefeito { padding-left: 1.2em; }
+.mandatos-prefeito li { margin: 8px 0; }
+.prefeito-exercicio { margin-top: 4px; }
+.tabela-ranking td.prefeitos { min-width: 18em; max-width: 28em; white-space: normal; font-size: 0.85em; }

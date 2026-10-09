@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # eleitos 2026 (aprovado em 06/10/2026); cargos/UF com 2º turno pendente ficam ocultos
     pol_publicar_tse_2026: bool = True
     pol_publicar_emendas: bool = True  # aprovado em 06/10/2026 (regra de vínculo confirmado)
+    # prefeitos eleitos por exercício (ADR-0018): desligada até a aprovação da publicação,
+    # depois do 2º turno de 25/10/2026
+    pol_publicar_gestoes: bool = False
 
     @property
     def origens_cors(self) -> list[str]:

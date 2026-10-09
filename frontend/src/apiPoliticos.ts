@@ -410,6 +410,43 @@ export async function obterEmendas(p: PoliticoDetalhe, ano: number | null): Prom
 export const obterEmendasMunicipio = async (cod: number) =>
   (await arquivoMunicipio(cod)).emendas as Emendas;
 
+// --------------------------------------------- prefeitos eleitos por exercício (ADR-0018)
+
+export type Candidato = { nome: string; partido: string };
+
+export type EleicaoPrefeito = {
+  descricao: string;
+  data: string;
+  suplementar: boolean;
+  turno: number;
+  prefeito: Candidato | null;
+  vice: Candidato | null;
+  data_divulgacao: string | null;
+  url_fonte: string;
+  sha256: string | null;
+};
+
+export type MandatoPrefeito = {
+  inicio: number;
+  fim: number;
+  situacao: "ordinaria" | "suplementar" | "sem_eleito";
+  texto: string;
+  eleicao: EleicaoPrefeito | null;
+};
+
+export type PrefeitosEleitos = {
+  publicados: boolean;
+  aviso: string | null;
+  mandatos: MandatoPrefeito[];
+  exercicios: { ano: number; mandato: string; texto: string }[];
+};
+
+/** null quando a exportação não tem o dado ou a publicação ainda está travada. */
+export async function obterPrefeitos(cod: number): Promise<PrefeitosEleitos | null> {
+  const p = (await arquivoMunicipio(cod)).prefeitos as PrefeitosEleitos | undefined;
+  return p && p.publicados && p.mandatos.length ? p : null;
+}
+
 export const CARGOS: Record<string, string> = {
   prefeito: "Prefeito(a)",
   vereador: "Vereador(a)",

@@ -3,8 +3,8 @@
 Os dados podem ser coletados e conferidos antes (pela API de auditoria e pelo banco), mas
 a API pública (e o site estático, que é gerado a partir dela) só os mostra quando a trava
 estiver ligada. As travas ficam em `rastro.config.Settings` (padrão = decisão vigente,
-variáveis RASTRO_POL_PUBLICAR_TSE, RASTRO_POL_PUBLICAR_TSE_2026 e
-RASTRO_POL_PUBLICAR_EMENDAS sobrepõem).
+variáveis RASTRO_POL_PUBLICAR_TSE, RASTRO_POL_PUBLICAR_TSE_2026,
+RASTRO_POL_PUBLICAR_EMENDAS e RASTRO_POL_PUBLICAR_GESTOES sobrepõem).
 """
 
 from rastro.config import get_settings
@@ -23,3 +23,8 @@ def tse_2026() -> bool:
 
 def emendas() -> bool:
     return get_settings().pol_publicar_emendas
+
+
+def gestoes() -> bool:
+    """Prefeitos eleitos por exercício (ADR-0018)."""
+    return get_settings().pol_publicar_gestoes
