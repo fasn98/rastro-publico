@@ -237,7 +237,8 @@ def test_ranking_traz_os_prefeitos_so_com_a_trava(
         api = TestClient(app)
         _trava(monkeypatch, "RASTRO_POL_PUBLICAR_GESTOES", "0")
         item = api.get("/api/ranking").json()["itens"][0]
-        assert item["cod_ibge"] == COD and item["prefeitos_no_periodo"] is None
+        # trava desligada: a chave nem aparece (o ranking.json fica como antes)
+        assert item["cod_ibge"] == COD and "prefeitos_no_periodo" not in item
         cabecalho = api.get("/api/ranking.csv").content.decode("utf-8-sig").splitlines()[0]
         assert "prefeitos" not in cabecalho
 

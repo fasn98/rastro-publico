@@ -609,6 +609,12 @@ def exportar(
                 secoes_gravadas.add(ref)
             return {"ref": ref}
 
+        def prefeitos(cod: int) -> dict:
+            """Prefeito e vice eleitos por mandato e exercício (ADR-0018). Só entra no arquivo
+            com a trava ligada: desligada, o arquivo do município fica como antes."""
+            p = get(f"/api/municipios/{cod}/prefeitos")
+            return {"prefeitos": arquivados.trocar(p)} if p["publicados"] else {}
+
         lista = []
         for m in municipios:
             cod = m.cod_ibge
@@ -637,8 +643,7 @@ def exportar(
                         "secoes": [secao(sec) for sec in rep["secoes"]],
                     },
                     "emendas": arquivados.trocar(get(f"/api/municipios/{cod}/emendas")),
-                    # prefeito e vice eleitos por mandato e exercício (ADR-0018)
-                    "prefeitos": arquivados.trocar(get(f"/api/municipios/{cod}/prefeitos")),
+                    **prefeitos(cod),
                 },
             )
         out.json("municipios.json", lista)

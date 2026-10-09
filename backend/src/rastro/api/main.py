@@ -435,8 +435,10 @@ def _prefeitos(session: Session, uf: str, linhas) -> dict[int, str | None]:
 
 
 def _item(n: NotaRanking, nome: str, prefeitos: str | None = None) -> dict:
+    # a chave só existe com a trava ligada: desligada, o ranking.json fica como antes
+    extra = {"prefeitos_no_periodo": prefeitos} if prefeitos is not None else {}
     return {
-        "prefeitos_no_periodo": prefeitos,
+        **extra,
         "cod_ibge": n.cod_ibge,
         "nome": nome,
         "populacao": n.populacao,
@@ -450,7 +452,7 @@ def _item(n: NotaRanking, nome: str, prefeitos: str | None = None) -> dict:
     }
 
 
-@app.get("/api/ranking", response_model=Ranking)
+@app.get("/api/ranking", response_model=Ranking, response_model_exclude_unset=True)
 def obter_ranking(
     session: SessionDep,
     uf: str = "SP",

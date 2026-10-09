@@ -789,8 +789,8 @@ def test_prefeitos_eleitos_so_vao_para_o_site_com_a_trava(coletado, engine, tmp_
     fechado = tmp_path / "fechado"
     manifesto = site.exportar(fechado, "SP", coletado, hoje=HOJE)
     assert manifesto["travas"]["pol_publicar_gestoes"] is False
-    sp = json.loads((fechado / "municipios" / "3550308.json").read_text())["prefeitos"]
-    assert sp["publicados"] is False and sp["mandatos"] == [] and sp["exercicios"] == []
+    # trava desligada: o formato fica como antes (nem a chave entra no arquivo)
+    assert "prefeitos" not in json.loads((fechado / "municipios" / "3550308.json").read_text())
     assert "BRUNO COVAS" not in "".join(p.read_text() for p in fechado.rglob("*.json"))
     assert site.verificar(fechado) == []
 
