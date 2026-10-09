@@ -473,12 +473,23 @@ class _Escritor:
 
 @contextmanager
 def _sessao(session: Session | None):
-    from rastro.db import get_sessionmaker
+    """Sessão de leitura da exportação, em autocommit: cada consulta é a própria transação.
+
+    A exportação passa minutos chamando a API interna entre uma consulta e outra. Com uma
+    transação aberta nesse intervalo, a conexão fica "idle in transaction", e o banco de
+    produção a encerra (idle_in_transaction_session_timeout; execução 6pfw6, 09/10/2026).
+    A exportação só lê, e roda com a trava da coleta (nenhuma gravação concorrente), então
+    não precisa de uma transação única.
+    """
+    from rastro.db import get_engine
 
     if session is not None:
         yield session
         return
-    s = get_sessionmaker()()
+    s = Session(
+        bind=get_engine().execution_options(isolation_level="AUTOCOMMIT"),
+        expire_on_commit=False,
+    )
     try:
         yield s
     finally:

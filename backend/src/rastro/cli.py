@@ -435,6 +435,15 @@ def _seguranca(comando: str) -> int:
         seguranca.conferir_producao(get_settings().database_url)
         if comando == "conferir-producao":
             print("Banco de produção: credencial própria (não é a de desenvolvimento).")
+            # limite do servidor para conexão "idle in transaction" (diagnóstico no log)
+            try:
+                with get_engine().connect() as con:
+                    limite = con.exec_driver_sql(
+                        "SHOW idle_in_transaction_session_timeout"
+                    ).scalar()
+                print(f"Banco de produção: idle_in_transaction_session_timeout = {limite}")
+            except Exception as exc:  # só diagnóstico: não impede a coleta
+                print(f"AVISO: não foi possível ler o limite de transação ociosa ({exc})")
             return 0
         url = seguranca.criar_usuario_auditoria(get_engine())
     except seguranca.ErroSeguranca as exc:

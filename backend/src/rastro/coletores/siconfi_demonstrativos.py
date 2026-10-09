@@ -286,6 +286,11 @@ def coletar_ente(
     for e in entregas_de(itens):
         if not forcar and _ja_coletado(session, ente.cod_ibge, exercicio, e):
             continue
+        # fecha a transação da consulta acima antes de ir à rede: o download pode levar
+        # minutos (novas tentativas), e o banco de produção encerra a conexão que fica
+        # "idle in transaction" (idle_in_transaction_session_timeout). Nada está pendente:
+        # o extrato e o relatório anterior já foram gravados com commit.
+        session.commit()
         por_poder = baixar(client, ente.cod_ibge, exercicio, ente.esfera, e)
         if not por_poder:
             # consta no extrato mas a API ainda não tem as linhas; tenta de novo na próxima
