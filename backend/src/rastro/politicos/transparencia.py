@@ -25,6 +25,7 @@ import os
 import re
 import unicodedata
 import zipfile
+from collections.abc import Iterable
 from decimal import Decimal, InvalidOperation
 
 import httpx
@@ -179,7 +180,38 @@ def coletar_emendas_autor(
 
 URL_ARQUIVO = "https://portaldatransparencia.gov.br/download-de-dados/emendas-parlamentares/UNICO"
 MEMBRO_ARQUIVO = "EmendasParlamentares.csv"
-NOMES_UF = {"SP": "SÃO PAULO"}
+# Nome da UF como aparece na coluna "UF" do arquivo. Conferido em 09/10/2026 no próprio
+# arquivo: cada nome tem um único "Código UF IBGE", e esse código leva à sigla pela tabela
+# de municípios do IBGE. Ficam de fora "Múltiplo" e "Sem informação".
+NOMES_UF = {
+    "AC": "ACRE",
+    "AL": "ALAGOAS",
+    "AM": "AMAZONAS",
+    "AP": "AMAPÁ",
+    "BA": "BAHIA",
+    "CE": "CEARÁ",
+    "DF": "DISTRITO FEDERAL",
+    "ES": "ESPÍRITO SANTO",
+    "GO": "GOIÁS",
+    "MA": "MARANHÃO",
+    "MG": "MINAS GERAIS",
+    "MS": "MATO GROSSO DO SUL",
+    "MT": "MATO GROSSO",
+    "PA": "PARÁ",
+    "PB": "PARAÍBA",
+    "PE": "PERNAMBUCO",
+    "PI": "PIAUÍ",
+    "PR": "PARANÁ",
+    "RJ": "RIO DE JANEIRO",
+    "RN": "RIO GRANDE DO NORTE",
+    "RO": "RONDÔNIA",
+    "RR": "RORAIMA",
+    "RS": "RIO GRANDE DO SUL",
+    "SC": "SANTA CATARINA",
+    "SE": "SERGIPE",
+    "SP": "SÃO PAULO",
+    "TO": "TOCANTINS",
+}
 
 
 _SUFIXO = re.compile(r"\s*\(.*$")
@@ -198,34 +230,39 @@ def normalizar_nome(nome: str) -> str:
 def coletar_arquivo(
     session: Session,
     client: httpx.Client,
-    uf: str,
+    ufs: str | Iterable[str],
     ano_min: int,
     autores: dict,
     excecoes: dict[str, tuple[int, str]] | None = None,
 ) -> dict:
     """Emendas do arquivo em lote do Portal (não exige chave).
 
-    Grava as linhas do ano `ano_min` em diante cujo destino é a UF (coluna UF) ou cujo
-    autor é um parlamentar da UF. O município de destino vem da coluna oficial "Código
-    Município IBGE" (não do texto). `autores`: nome normalizado -> `vinculo.Autor` (só os
-    confirmáveis); a ligação com a página do político segue as regras de `vinculo`.
+    Grava as linhas do ano `ano_min` em diante cujo destino é uma das UFs (coluna UF) ou
+    cujo autor é um parlamentar de uma delas. Todas as UFs vão numa passada só: a gravação
+    substitui por inteiro as linhas do arquivo, e uma coleta por UF apagaria as outras.
+    O município de destino vem da coluna oficial "Código Município IBGE" (não do texto).
+    `autores`: nome normalizado -> `vinculo.Autor` (só os confirmáveis); a ligação com a
+    página do político segue as regras de `vinculo`.
     `excecoes`: texto exato do autor -> (pol_politico.id, rótulo), da tabela aprovada.
     O arquivo bruto guarda só esse recorte do CSV (o arquivo não traz dados pessoais),
     com o SHA-256 do ZIP original.
     """
-    nome_uf = NOMES_UF[uf]
+    siglas = sorted({ufs} if isinstance(ufs, str) else set(ufs))
+    nomes_uf = {NOMES_UF[uf] for uf in siglas}
     excecoes = excecoes or {}
 
     def no_recorte(r: dict) -> bool:
         autor = r["Nome do Autor da Emenda"]
         return r["Ano da Emenda"] >= str(ano_min) and (
-            r["UF"] == nome_uf or normalizar_nome(autor) in autores or autor in excecoes
+            r["UF"] in nomes_uf or normalizar_nome(autor) in autores or autor in excecoes
         )
 
     redator = redator_csv(
         [],
         filtro=no_recorte,
-        descricao_filtro=f"recorte: ano >= {ano_min} e destino em {uf} ou autor de {uf}",
+        descricao_filtro=(
+            f"recorte: ano >= {ano_min} e destino em {', '.join(siglas)} ou autor dessas UFs"
+        ),
         encoding="latin-1",
         membro_zip=MEMBRO_ARQUIVO,
     )

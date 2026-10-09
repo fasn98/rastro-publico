@@ -2,10 +2,13 @@
 
     uv run rastro politicos --uf SP --anos 2023-2026
     uv run rastro politicos --uf SP --anos 2025 --fontes senado
+    uv run rastro politicos --uf SP AC --anos 2023-2026 --fontes emendas
+    uv run rastro politicos --uf TODAS --fontes tse
 
 Cada fonte vira uma execução na tabela `coleta` (pol-camara, pol-senado, pol-emendas), e
-toda resposta recebida fica no arquivo de respostas brutas. Falha em um deputado ou ano
-não interrompe os outros: a coleta fica `parcial`, com os erros registrados.
+toda resposta recebida fica no arquivo de respostas brutas. As emendas do arquivo em lote
+saem numa execução só para todas as UFs pedidas; as outras fontes, uma por UF. Falha em um
+deputado ou ano não interrompe os outros: a coleta fica `parcial`, com os erros registrados.
 """
 
 import argparse
@@ -18,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from rastro.coletores.base import ColetaParcial, novo_cliente
-from rastro.coletores.siconfi_lote import interpretar_anos
+from rastro.coletores.siconfi_lote import TODAS, interpretar_anos
 from rastro.db import get_sessionmaker
 from rastro.fontes import executar_com_esperas
 from rastro.politicos import camara, gestoes, senado, transparencia, tse
@@ -127,18 +130,24 @@ def coletor_senado(uf: str, anos: list[int]):
     return coletar
 
 
-def coletor_emendas_arquivo(uf: str, anos: list[int]):
-    """Emendas do arquivo em lote do Portal (sem chave), com o código IBGE oficial."""
+def coletor_emendas_arquivo(ufs: list[str], anos: list[int]):
+    """Emendas do arquivo em lote do Portal (sem chave), com o código IBGE oficial.
+
+    Uma passada para todas as UFs: a gravação substitui as linhas do arquivo por inteiro.
+    """
 
     def coletar(session: Session, client: httpx.Client) -> int:
         from rastro.politicos import vinculo
 
         nomes = vinculo.universo(client)
-        autores, recusados = vinculo.autores_confirmaveis(session, uf, nomes)
-        if recusados:
-            log.info("autores sem vínculo confirmável: %s", recusados)
+        autores = {}
+        for uf in ufs:
+            da_uf, recusados = vinculo.autores_confirmaveis(session, uf, nomes)
+            autores.update(da_uf)
+            if recusados:
+                log.info("autores de %s sem vínculo confirmável: %s", uf, recusados)
         excecoes = vinculo.excecoes_por_texto(session)
-        r = transparencia.coletar_arquivo(session, client, uf, min(anos), autores, excecoes)
+        r = transparencia.coletar_arquivo(session, client, ufs, min(anos), autores, excecoes)
         log.info("emendas (arquivo): %s", r)
         return r["linhas"]
 
@@ -218,7 +227,7 @@ def coletor_prefeitos(uf: str):
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="rastro politicos", description=__doc__.split("\n\n")[0])
-    p.add_argument("--uf", default="SP")
+    p.add_argument("--uf", nargs="+", default=["SP"], help="ex.: SP AC; TODAS = as 27 UFs")
     p.add_argument("--anos", help="anos de atuação, ex.: 2023-2026 (câmara, senado, emendas)")
     p.add_argument("--fontes", nargs="+", choices=FONTES, default=list(PADRAO))
     p.add_argument(
@@ -231,7 +240,12 @@ def main(argv: list[str] | None = None) -> int:
     logging.getLogger("httpx").setLevel(logging.WARNING)
     if not args.anos and set(args.fontes) - {"tse", "prefeitos"}:
         p.error("--anos é obrigatório para câmara, senado e emendas")
-    uf, anos = args.uf.upper(), interpretar_anos(args.anos) if args.anos else []
+    ufs = sorted({u.upper() for u in args.uf})
+    if ufs == [TODAS]:
+        ufs = sorted(transparencia.NOMES_UF)
+    elif desconhecidas := set(ufs) - set(transparencia.NOMES_UF):
+        p.error(f"UF desconhecida: {', '.join(sorted(desconhecidas))}")
+    anos = interpretar_anos(args.anos) if args.anos else []
 
     coletores = {
         "camara": ("pol-camara", coletor_camara),
@@ -247,12 +261,17 @@ def main(argv: list[str] | None = None) -> int:
             nome, fabrica = coletores[fonte]
             if fonte == "emendas-api":
                 print(f"emendas: acesso por {transparencia.modo_de_acesso()}")
-            coleta = executar_com_esperas(session, nome, fabrica(uf, anos), cliente_da_fonte(fonte))
-            print(f"{nome}: {coleta.status} ({coleta.registros or 0} registros)")
-            if coleta.erro:
-                print(coleta.erro, file=sys.stderr)
-            if coleta.status != "sucesso":
-                status = 1
+            # emendas do arquivo: uma passada para todas as UFs; demais fontes: uma por UF
+            alvos = [(ufs, "/".join(ufs))] if fonte == "emendas" else [(u, u) for u in ufs]
+            for alvo, rotulo in alvos:
+                coleta = executar_com_esperas(
+                    session, nome, fabrica(alvo, anos), cliente_da_fonte(fonte)
+                )
+                print(f"{nome} {rotulo}: {coleta.status} ({coleta.registros or 0} registros)")
+                if coleta.erro:
+                    print(coleta.erro, file=sys.stderr)
+                if coleta.status != "sucesso":
+                    status = 1
     return status
 
 
