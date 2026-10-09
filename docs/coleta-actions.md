@@ -1,21 +1,21 @@
-# Coleta pelo GitHub Actions
+# Coleta pelo GitHub Actions (só manual, para diagnóstico)
 
-A coleta de SP e a publicação do site passam a rodar no GitHub Actions
-(`.github/workflows/coleta.yml`), em vez do Scheduled Deployment do Replit. O Actions roda
-sempre o código que está no `main`: depois do merge de um PR, a próxima coleta já usa o
-código novo, **sem Pull nem Republish**. O Replit fica só com a API de auditoria.
+> **Decisão (ADR-0016, 09/10/2026): a coleta oficial é a do Replit.** O workflow "Coleta"
+> (`.github/workflows/coleta.yml`) fica **só com disparo manual**, sem agendamento, para
+> diagnóstico. **Não rode o workflow enquanto houver coleta no Replit** (confira a aba
+> Schedule do rastro-coleta antes). A trava no banco impede as duas ao mesmo tempo, mas a
+> que chegar depois sai sem coletar; a do Actions segura a trava por horas e pode fazer a
+> coleta agendada do Replit daquele dia não acontecer.
 
-O script da coleta é o mesmo (`backend/scripts/coleta_sp.sh`, com a trava de uma coleta
-por vez), e o banco é o mesmo (o de produção, no Neon).
+## Resultado do teste (08–09/10/2026)
 
-## Por que
+- O banco do Replit (Neon) aceitou a conexão, e as fontes responderam.
+- A etapa de RREO/RGF levou 4h02 (no Replit, cerca de 54 min); o ranking ainda rodava 1 h
+  depois, e a execução foi encerrada pelo limite de 350 min. Causa provável: as milhares de
+  consultas ao banco, que fica em São Paulo, a partir das máquinas do GitHub.
 
-- O deployment do Replit só muda com Pull + Republish. Esquecido o Republish, a coleta roda
-  com o código antigo (aconteceu duas vezes em 08/10).
-- A publicação no `gh-pages` usa o token do próprio workflow: o token fine-grained
-  (`RASTRO_GITHUB_TOKEN`) deixa de ser necessário.
-- Repositório público: o Actions é gratuito nas máquinas padrão (4 vCPU e 16 GB de RAM,
-  contra 1 vCPU e 2 GiB do Scheduled do Replit).
+O workflow roda o mesmo script da coleta (`backend/scripts/coleta_sp.sh`), com a mesma
+trava, contra o mesmo banco de produção. Por padrão não publica (`RASTRO_SIMULAR=1`).
 
 ## Limites
 
@@ -66,12 +66,11 @@ A confirmar neste teste:
 **Status das fontes** mostram a data da coleta. A publicação com o token do workflow deve
 disparar a atualização do GitHub Pages; confirmar neste passo.
 
-## 4. Troca definitiva (PR próprio, com aprovação)
+## 4. Troca definitiva: descartada
 
-- acrescentar o agendamento (`schedule`) ao workflow, no horário escolhido;
-- desligar o Scheduled Deployment do rastro-coleta no Replit;
-- revogar o token fine-grained `RASTRO_GITHUB_TOKEN` no GitHub e apagá-lo do Replit;
-- atualizar o guia de deploy (`docs/deploy-replit.md`).
+A troca (agendamento no Actions, Replit desligado, token fine-grained revogado) não será
+feita (ADR-0016). Se o banco mudar de região ou a coleta reduzir as idas ao banco, um novo
+teste pode reabrir a decisão.
 
 ## Operação
 

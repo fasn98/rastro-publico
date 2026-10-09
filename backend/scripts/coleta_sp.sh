@@ -28,6 +28,14 @@ ANO_ATUAL="$(date +%Y)"
 RASTRO_INICIO_COLETA="$(date -u +%Y-%m-%dT%H:%M:%S+00:00)"
 export RASTRO_INICIO_COLETA
 
+echo "== versão do código"
+# compara o código em disco com o main do GitHub: o Replit só muda com Pull + Republish.
+# O aviso sai aqui e de novo no fim; a conferência nunca interrompe a coleta.
+CONFERENCIA="$(mktemp)"
+COMMIT_PUBLICADO="$(uv run rastro conferir-codigo 2>"$CONFERENCIA")" || COMMIT_PUBLICADO=""
+grep -v "UV_NATIVE_TLS" "$CONFERENCIA" >&2 || true
+AVISO_CODIGO="$(grep '^AVISO' "$CONFERENCIA" || true)"
+
 echo "== migrações e cadastros"
 uv run alembic upgrade head
 # versão nova do mapeamento de contas: reconstrói do arquivo bruto, uma vez só, as linhas
@@ -55,7 +63,8 @@ rm -rf "$DIST" "$DADOS"
 # com o indice.json da publicação anterior, a exportação reaproveita os grupos sem
 # mudança; sem publicação anterior (ou noutro formato), ela é completa
 uv run rastro baixar-site --saida "$DADOS"
-RASTRO_COMMIT="$(git -C "$RAIZ" rev-parse HEAD 2>/dev/null || true)" \
+# commit do manifesto: o que a conferência identificou (o Replit não tem .git) ou o do Git
+RASTRO_COMMIT="${COMMIT_PUBLICADO:-$(git -C "$RAIZ" rev-parse HEAD 2>/dev/null || true)}" \
   uv run rastro exportar-site --uf SP --saida "$DADOS"
 # as dependências vêm do build do deployment; só reinstala se faltar alguma coisa
 bash scripts/frontend_deps.sh
@@ -75,6 +84,7 @@ if [ "${RASTRO_SIMULAR:-}" = "1" ]; then
   echo "== simulação: verifica contra o site publicado, sem publicar"
   uv run rastro publicar-site --dist "$DIST" --simular
   echo "Duração da coleta: ${SECONDS} s"
+  [ -n "$AVISO_CODIGO" ] && echo "$AVISO_CODIGO"
   exit 0
 fi
 
@@ -83,4 +93,7 @@ uv run rastro publicar-site --dist "$DIST"
 echo "Duração da coleta: ${SECONDS} s"
 if ! grep -q "^Fontes com falha: nenhuma$" <<<"$RESUMO"; then
   echo "AVISO: site publicado com fontes desatualizadas: $(grep '^Fontes com falha:' <<<"$RESUMO")"
+fi
+if [ -n "$AVISO_CODIGO" ]; then
+  echo "$AVISO_CODIGO"
 fi

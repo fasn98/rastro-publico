@@ -1,11 +1,11 @@
 # Coleta de SP e publicação do site estático no GitHub Pages (gh-pages).
 #
-# Substitui o Scheduled Deployment do Replit: roda sempre o código do main, sem Pull nem
-# Republish. Guia: docs/coleta-actions.md.
+# Só disparo manual, para diagnóstico: a coleta oficial é a do Replit (ADR-0016). NÃO
+# acrescente `schedule` e não rode enquanto houver coleta no Replit (a do Actions é cerca
+# de 4,5 vezes mais lenta e seguraria a trava no banco). Guia: docs/coleta-actions.md.
 #
-# Fase de teste: só roda pelo botão "Run workflow". Sem marcar "publicar", coleta,
-# exporta e verifica contra o site publicado, mas não publica (RASTRO_SIMULAR=1).
-# O agendamento (schedule) entra depois do teste, quando a coleta do Replit for desligada.
+# Sem marcar "publicar", coleta, exporta e verifica contra o site publicado, mas não
+# publica (RASTRO_SIMULAR=1).
 name: Coleta
 
 on:
