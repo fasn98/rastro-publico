@@ -25,7 +25,13 @@ Medições em 09/10/2026, com uma coleta real do Acre (22 municípios e o estado
 Projeção nacional:
 
 - cerca de 300 mil consultas (cerca de 98 h a 1 req/s, ou 12 execuções diárias);
-- banco com cerca de 5,4 a 5,6 GB (limite do Replit: 10 GiB por banco de produção);
+- banco com cerca de 7,5 GB. Em 09/10/2026, o painel Database do Replit mostrava o banco
+  de produção com 907,99 MB (só SP) e limite de 100 GB. Com os políticos de SP em cerca
+  de 130 MB, a parte fiscal de SP dá cerca de 0,24 MB por município-exercício; para o
+  país, cerca de 6,7 GB fiscais, mais 0,6 a 0,8 GB de políticos (estimativa da sessão de
+  políticos). A primeira estimativa, de 5,4 a 5,6 GB, usava só a amostra do Acre e citava
+  um limite de 10 GiB tirado da página de cobrança do Replit; o painel da conta é a
+  referência;
 - site com cerca de 155 MB.
 
 ## Decisão
