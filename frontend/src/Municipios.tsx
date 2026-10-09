@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import {
+  arquivoMunicipio,
   obterMunicipio,
   sugerirMunicipios,
   todosMunicipios,
@@ -197,6 +198,7 @@ function Populacao({ d }: { d: MunicipioDetalhe }) {
 
 export default function Municipios({ cod }: { cod: number | null }) {
   const [detalhe, setDetalhe] = useState<MunicipioDetalhe | null>(null);
+  const [comRepresentantes, setComRepresentantes] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   // o município aberto fica na URL (#/municipio/3550308), para links diretos
@@ -207,6 +209,11 @@ export default function Municipios({ cod }: { cod: number | null }) {
       return;
     }
     setDetalhe(null);
+    setComRepresentantes(false);
+    // fora da UF dos políticos o arquivo vem sem representantes (ADR-0020): sem link
+    arquivoMunicipio(cod)
+      .then((a) => setComRepresentantes(a.representantes !== null))
+      .catch(() => setComRepresentantes(false));
     obterMunicipio(cod)
       .then((d) => {
         setDetalhe(d);
@@ -251,9 +258,11 @@ export default function Municipios({ cod }: { cod: number | null }) {
               </>
             )}
           </dl>
-          <p>
-            <a href={`#/representantes/${detalhe.cod_ibge}`}>Representantes e emendas recebidas</a>
-          </p>
+          {comRepresentantes && (
+            <p>
+              <a href={`#/representantes/${detalhe.cod_ibge}`}>Representantes e emendas recebidas</a>
+            </p>
+          )}
           {detalhe.ente_siconfi && <Indicadores cod={detalhe.cod_ibge} />}
           <PrefeitosEleitos cod={detalhe.cod_ibge} municipio={`${detalhe.nome}/${detalhe.uf}`} />
         </article>

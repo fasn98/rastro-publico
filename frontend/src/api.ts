@@ -43,11 +43,12 @@ export type ArquivoMunicipio = {
   detalhe: MunicipioDetalhe;
   serie: IndicadoresAno[];
   nota: DetalheRanking | null;
+  /** null fora da UF dos políticos: representantes ainda não coletados (ADR-0020) */
   representantes: {
     municipio: Representantes["municipio"];
     // seção inteira, ou referência ao arquivo de uma seção repetida entre municípios
     secoes: (Representantes["secoes"][number] | { ref: string })[];
-  };
+  } | null;
   emendas: unknown;
   /** prefeitos eleitos por mandato e exercício (ADR-0018); ausente em exportações antigas */
   prefeitos?: unknown;

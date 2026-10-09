@@ -62,6 +62,18 @@ Projeção nacional:
    - 3 municípios sorteados conferidos contra a fonte.
 
    Uma UF reprovada fica fora, sem bloquear as demais.
+   Implementação (PR do portão): `rastro portao` grava o resultado de cada UF e
+   `rastro exportar-site --portao` exporta só a parte fiscal das aprovadas. O resultado
+   vai para o manifesto, em `ufs.{UF}.fiscal`; o campo `ufs.{UF}.politicos` fica para o
+   portão dos políticos. A conferência com a fonte compara as células guardadas (as
+   contas do mapeamento) do último RREO de cada sorteado.
+   - Uma UF reprovada que já estava no site fica com a versão anterior (grupo `uf:XX`
+     do índice); senão, fica fora.
+   - A verificação antes de publicar recusa arquivo fiscal de UF fora do site.
+   - SP: até o PR das telas, os arquivos de sempre (`municipios.json`, `ranking.json`,
+     `municipios/35*.json`, com os políticos) continuam saindo como antes, para o site
+     atual não quebrar; o portão vale para os arquivos novos de SP. No PR das telas, SP
+     passa para os mesmos arquivos por UF.
 7. **Arquivos novos do site:** `busca`, `ranking/{UF}`, `ranking/BR`, `geo/{UF}` e
    `estados/{UF}`, aprovados como parte da expansão (ADR-0019). O formato de
    `municipios/{cod}.json` não muda.

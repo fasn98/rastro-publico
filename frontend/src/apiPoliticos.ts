@@ -243,8 +243,10 @@ const semEmendas: Emendas = {
   itens: [],
 };
 
-export async function obterRepresentantes(cod: number): Promise<Representantes> {
+/** null: representantes do município ainda não coletados (fora da UF dos políticos). */
+export async function obterRepresentantes(cod: number): Promise<Representantes | null> {
   const { representantes } = await arquivoMunicipio(cod);
+  if (representantes === null) return null;
   // seções iguais em todos os municípios (estado, federal) ficam num arquivo só
   const secoes = await Promise.all(
     representantes.secoes.map((s) => ("ref" in s ? lerJson<Secao>(s.ref) : Promise.resolve(s))),
