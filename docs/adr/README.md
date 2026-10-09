@@ -22,7 +22,7 @@ aprovadas pelo Fabio.
 | [0013](0013-vinculo-confirmado-de-emendas.md) | Emenda ligada a parlamentar só com vínculo confirmado | Aceito retroativo |
 | [0014](0014-uma-coleta-por-vez.md) | Uma coleta por vez (advisory lock) | Aceito retroativo |
 | [0015](0015-testes-com-respostas-reais.md) | Testes só com respostas reais gravadas | Aceito retroativo |
-| [0016](0016-onde-roda-a-coleta-agendada.md) | Coleta agendada: GitHub Actions ou Replit | **Proposto** |
+| [0016](0016-onde-roda-a-coleta-agendada.md) | Coleta agendada no Replit; Actions só manual | Aceito |
 | [0017](0017-ranking-fiscal-v1-1.md) | Ranking Fiscal v1.1 (D1 a D7) | Aceito |
 
 O status fica numa linha `- **Status:** <valor>`, sem parênteses: o painel War Room lê essa

@@ -1,7 +1,8 @@
 # ADR-0016: Onde roda a coleta agendada e a publicação do site: GitHub Actions ou Replit Scheduled
 
-- **Status:** Proposto
+- **Status:** Aceito
 - **Data:** 2026-10-08
+- **Decidido em:** 2026-10-09 (Fabio: "Replit fica como coleta oficial")
 - **Autor:** registro na migração para o squad
 - **Decisor:** Fabio
 
@@ -35,17 +36,30 @@ Em 2026-10-08 havia uma execução de teste do workflow "Coleta" em andamento no
   token fine-grained com renovação manual.
 - Custo de reverter: baixo.
 
+## Resultado do teste (run `37858037605`, 08–09/10/2026)
+
+- O Neon do Replit aceitou a conexão do GitHub, e as fontes responderam (Câmara, Senado e
+  TSE com sucesso).
+- **Desempenho:** a etapa de RREO/RGF levou 4h02 (cerca de 4,6 s por item, mesmo sem
+  linhas novas); no Replit, a mesma etapa levou cerca de 54 min. O cálculo do ranking ainda
+  rodava 1 h depois, e a execução foi encerrada pelo limite de 350 min, sem terminar.
+  Causa provável: milhares de consultas pequenas ao banco, que fica em São Paulo
+  (`sa-east-1`), a partir das máquinas do GitHub.
+
 ## Decisão
 
-**Em aberto.** Depende do resultado dos testes descritos em `docs/coleta-actions.md`
-(passos 2 e 3) e da aprovação do Fabio.
+**B) Replit Scheduled continua como coleta oficial.** O workflow "Coleta" do Actions fica
+só com disparo manual, para diagnóstico, e não deve rodar enquanto houver coleta no Replit.
+O risco do Republish esquecido é coberto pelo aviso de código atrasado no início da coleta
+(`rastro conferir-codigo`).
 
 ## Consequências
 
-Se A for aceita, a troca definitiva é um PR próprio, com aprovação (`docs/coleta-actions.md`,
-passo 4): agendamento no workflow, Scheduled do Replit desligado, token fine-grained
-revogado e `docs/deploy-replit.md` atualizado. O ADR-0010 (auditoria no Replit) não muda.
+- Mais fácil: a coleta continua onde já funciona, dentro do limite de 11 h.
+- Mais difícil: cada mudança no `main` ainda exige Pull + Republish no Replit; o aviso no
+  log mostra quando falta.
+- Proibido: agendar o workflow do Actions; rodá-lo enquanto houver coleta no Replit.
 
 ## Como revisitar
 
-Depois do teste sem publicar e do teste publicando no Actions.
+Se o banco mudar de região ou de provedor, ou se a coleta reduzir as idas ao banco.

@@ -76,6 +76,10 @@ def main(argv: list[str] | None = None) -> int:
         help="recusa a credencial de desenvolvimento (rastro:rastro) no banco de produção",
     )
     sub.add_parser(
+        "conferir-codigo",
+        help="avisa se o código em disco está atrás do main do GitHub (imprime o commit)",
+    )
+    sub.add_parser(
         "criar-usuario-auditoria",
         help="cria o usuário só de leitura da API de auditoria, com senha forte gerada",
     )
@@ -194,6 +198,28 @@ def main(argv: list[str] | None = None) -> int:
                 f"{marca} {f['fonte']:<16} última atualização: {f['ultima_atualizacao'] or 'nunca'}"
             )
         print(fontes.resumo(situacao))
+        return 0
+
+    if args.comando == "conferir-codigo":
+        import os
+        from pathlib import Path
+
+        import httpx
+
+        from rastro import versao_codigo
+
+        token = os.environ.get("RASTRO_GITHUB_TOKEN")
+        headers = {"Accept": "application/vnd.github+json", "User-Agent": "rastro-publico"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        # cliente sem arquivo bruto: a lista de commits traz e-mails de autores (LGPD)
+        commit = versao_codigo.conferir(
+            Path(__file__).resolve().parents[3],
+            lambda: httpx.Client(headers=headers, timeout=30),
+            lambda texto: print(texto, file=sys.stderr, flush=True),
+        )
+        if commit:
+            print(commit)
         return 0
 
     if args.comando in ("conferir-producao", "criar-usuario-auditoria"):
