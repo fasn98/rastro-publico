@@ -1044,7 +1044,7 @@ def _conferir_travas(saida: Path, travas: dict) -> list[str]:
                     "desligada"
                 )
     if not travas.get("pol_publicar_gestoes"):
-        # prefeitos eleitos por exercício (ADR-0018): nem na página do município nem no ranking
+        # prefeitos eleitos por exercício (ADR-0018): fora da página do município
         for arq in (saida / "municipios").glob("*.json"):
             p = json.loads(arq.read_bytes()).get("prefeitos") or {}
             if p.get("publicados") or p.get("mandatos") or p.get("exercicios"):
@@ -1052,16 +1052,14 @@ def _conferir_travas(saida: Path, travas: dict) -> list[str]:
                     f"{arq.relative_to(saida)}: prefeitos exportados com pol_publicar_gestoes "
                     "desligada"
                 )
-        if (saida / "ranking.json").exists():
-            itens = json.loads((saida / "ranking.json").read_bytes()).get("itens", [])
-            if any(i.get("prefeitos_no_periodo") for i in itens):
-                problemas.append(
-                    "ranking.json: prefeitos exportados com pol_publicar_gestoes desligada"
-                )
-        if (saida / "ranking.csv").exists():
-            cabecalho = (saida / "ranking.csv").read_text(encoding="utf-8-sig").split("\n", 1)[0]
-            if "prefeitos" in cabecalho:
-                problemas.append(
-                    "ranking.csv: prefeitos exportados com pol_publicar_gestoes desligada"
-                )
+    # o ranking nunca traz nomes de prefeitos, com qualquer trava (ADR-0018, decisão de
+    # 09/10/2026: na mesma linha da nota, o nome pareceria uma nota para a pessoa)
+    if (saida / "ranking.json").exists():
+        itens = json.loads((saida / "ranking.json").read_bytes()).get("itens", [])
+        if any("prefeitos_no_periodo" in i for i in itens):
+            problemas.append("ranking.json: o ranking não pode trazer prefeitos (ADR-0018)")
+    if (saida / "ranking.csv").exists():
+        cabecalho = (saida / "ranking.csv").read_text(encoding="utf-8-sig").split("\n", 1)[0]
+        if "prefeito" in cabecalho:
+            problemas.append("ranking.csv: o ranking não pode trazer prefeitos (ADR-0018)")
     return problemas

@@ -774,9 +774,18 @@ function usePrefeitos(cod: number) {
 /** Linha do tempo: prefeito e vice eleitos para cada mandato, com a eleição e a fonte. */
 export function PrefeitosEleitos({ cod, municipio }: { cod: number; municipio: string }) {
   const p = usePrefeitos(cod);
+  // vindo do ranking ("ver gestões", #/municipio/{cod}/prefeitos): abre já nesta seção.
+  // Repete depois que os indicadores (acima) terminam de carregar e mudam a altura da página.
+  useEffect(() => {
+    if (!p || !location.hash.endsWith("/prefeitos")) return;
+    const ir = () => document.getElementById("prefeitos-eleitos")?.scrollIntoView({ block: "start" });
+    ir();
+    const t = setTimeout(ir, 500);
+    return () => clearTimeout(t);
+  }, [p]);
   if (!p) return null;
   return (
-    <section className="prefeitos-eleitos" aria-labelledby="titulo-prefeitos">
+    <section id="prefeitos-eleitos" className="prefeitos-eleitos" aria-labelledby="titulo-prefeitos">
       <h3 id="titulo-prefeitos">Prefeitos eleitos (TSE)</h3>
       <p className="nota">
         Prefeito(a) e vice eleitos para cada mandato, como estão no arquivo atual do TSE. O TSE

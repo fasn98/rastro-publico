@@ -53,13 +53,17 @@ baixados em 09/10/2026):
    Mandato sem eleito em nenhuma eleição: "sem eleito válido no arquivo atual do TSE".
 3. **Vice:** aparece ao lado do titular ("NOME (PARTIDO), vice NOME (PARTIDO)"). Nada é
    inferido sobre quem exerceu o cargo.
-4. **Rótulos:** "eleito(a) para o mandato"; coluna do ranking "Prefeitos eleitos no
-   período da nota". Anos seguidos só se juntam dentro do mesmo mandato; a mesma pessoa não
-   é ligada entre mandatos.
-5. **Partido só como texto ao lado do nome:** sem média, ranking, filtro, agrupamento ou
+4. **Onde aparece:** só na página do município, com o rótulo "eleito(a) para o mandato":
+   linha do tempo por mandato e, nos indicadores, o texto do exercício selecionado. A mesma
+   pessoa não é ligada entre mandatos.
+5. **Ranking sem nomes (opção C, decidida em 09/10/2026):** a tabela, o `ranking.json` e o
+   `ranking.csv` não trazem prefeitos, com qualquer trava; cada município ganha só um link
+   discreto "ver gestões" para a seção da página do município. Na mesma linha da nota, o
+   nome da pessoa pareceria uma nota para ela. `verificar()` recusa ranking com prefeitos.
+6. **Partido só como texto ao lado do nome:** sem média, ranking, filtro, agrupamento ou
    cor por partido, e nenhum texto que compare partidos.
-6. **Publicação:** trava `pol_publicar_gestoes`, desligada por padrão. A coluna só é
-   publicada depois do 2º turno de 25/10/2026, com nova aprovação do Fabio.
+7. **Publicação:** trava `pol_publicar_gestoes`, desligada por padrão. Só é ligada depois
+   do 2º turno de 25/10/2026, com nova aprovação do Fabio.
 
 ## Consequências
 
@@ -67,4 +71,5 @@ baixados em 09/10/2026):
   cada nome, com link para o arquivo do TSE.
 - Mais difícil: quando o eleito não exerceu o cargo (morte, afastamento), o site mostra o
   eleito; a Metodologia explica o limite, com o exemplo de São Paulo.
-- Mudança de formato: campo novo em `municipios/{cod}.json` e em `ranking.json`.
+- Mudança de formato: campo `prefeitos` em `municipios/{cod}.json`, só com a trava ligada.
+  Desligada, a exportação sai idêntica à anterior; o ranking não muda em nenhum caso.

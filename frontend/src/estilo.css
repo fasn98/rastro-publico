@@ -254,4 +254,4 @@ dt.secundario, dd.secundario { font-size: 0.9em; }
 .mandatos-prefeito { padding-left: 1.2em; }
 .mandatos-prefeito li { margin: 8px 0; }
 .prefeito-exercicio { margin-top: 4px; }
-.tabela-ranking td.prefeitos { min-width: 18em; max-width: 28em; white-space: normal; font-size: 0.85em; }
+.ver-gestoes { display: block; font-size: 0.75em; color: var(--suave); margin-top: 2px; }

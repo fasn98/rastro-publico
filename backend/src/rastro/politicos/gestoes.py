@@ -176,24 +176,6 @@ def por_exercicio(lista_mandatos: list[dict], anos: list[int]) -> list[dict] | N
     return saida
 
 
-def resumo_do_periodo(lista_mandatos: list[dict], anos: list[int]) -> str | None:
-    """Texto da coluna "Prefeitos eleitos no período da nota".
-
-    Anos seguidos só se juntam dentro do mesmo mandato, quando o texto é igual:
-    "2023–2024: NOME (P), vice NOME (P); 2025: NOME (P), vice NOME (P)".
-    """
-    itens = por_exercicio(lista_mandatos, anos)
-    if itens is None:
-        return None
-    blocos: list[list] = []
-    for i in itens:
-        if blocos and blocos[-1][2] == (i["mandato"], i["texto"]):
-            blocos[-1][1] = i["ano"]
-        else:
-            blocos.append([i["ano"], i["ano"], (i["mandato"], i["texto"])])
-    return "; ".join(f"{a}{'–' + str(b) if b != a else ''}: {texto}" for a, b, (_, texto) in blocos)
-
-
 def eleicoes_do_municipio(session: Session, cod_ibge: int) -> list[PolEleicaoPrefeito]:
     return list(
         session.scalars(
@@ -202,14 +184,3 @@ def eleicoes_do_municipio(session: Session, cod_ibge: int) -> list[PolEleicaoPre
             .order_by(PolEleicaoPrefeito.data_eleicao, PolEleicaoPrefeito.cd_eleicao)
         )
     )
-
-
-def eleicoes_da_uf(session: Session, uf: str) -> dict[int, list[PolEleicaoPrefeito]]:
-    por_municipio: dict[int, list[PolEleicaoPrefeito]] = defaultdict(list)
-    for e in session.scalars(
-        select(PolEleicaoPrefeito)
-        .where(PolEleicaoPrefeito.uf == uf)
-        .order_by(PolEleicaoPrefeito.data_eleicao, PolEleicaoPrefeito.cd_eleicao)
-    ):
-        por_municipio[e.cod_ibge].append(e)
-    return por_municipio
