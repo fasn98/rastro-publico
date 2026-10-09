@@ -70,6 +70,7 @@ uv run rastro coletar ibge-municipios                          # pré-requisito
 uv run rastro politicos --uf SP --anos 2023-2026 --fontes camara senado
 uv run rastro politicos --uf SP --anos 2023-2026 --fontes emendas   # arquivo em lote, sem chave
 uv run rastro politicos --uf SP AC --anos 2023-2026 --fontes emendas  # várias UFs: uma passada só
+uv run rastro politicos --uf TODAS --anos 2023-2026 --fontes camara  # as 27 UFs, uma passada só
 uv run rastro politicos --fontes tse                           # eleitos 2022 e 2024
 uv run rastro politicos --fontes tse --eleicoes 2024           # só um ano
 uv run rastro redigir-respostas    # uma vez, em bancos coletados antes da redação LGPD
@@ -85,12 +86,39 @@ uv run rastro redigir-respostas    # uma vez, em bancos coletados antes da reda�
   com os erros registrados.
 - O limite é de 1 requisição por segundo.
 
+**Várias UFs** (`--uf SP AC` ou `--uf TODAS`, aprovado em 09/10/2026).
+- Câmara e emendas do arquivo saem numa execução só para todas as UFs. Os arquivos anuais
+  da Câmara (votos, presenças, cota) e o arquivo de emendas são nacionais e são baixados
+  uma vez.
+- Não rode as emendas uma UF por vez: a gravação substitui as linhas de todas as UFs.
+- Senado e TSE: uma execução por UF.
+
+**Reaproveitamento** (`reuso.py`, aprovado em 09/10/2026). Nos anos fechados da Câmara
+(antes do anterior ao corrente; em 2026, 2023 e 2024) e nas eleições do TSE anteriores à
+corrente (2022 e 2024), um arquivo não é baixado de novo quando:
+- já foi baixado com sucesso há menos de 7 dias;
+- a resposta está no arquivo de respostas brutas (a auditoria pelo SHA-256 continua);
+- o download cobriu todas as UFs pedidas.
+Uma UF nova, uma semana passada ou a coleta sem arquivamento fazem baixar de novo.
+
+**Limite de tempo:** `RASTRO_POLITICOS_LIMITE_MIN` (0 = sem limite). Ao passar dele, a
+coleta para antes do próximo item (deputado, ano, UF ou fonte), guarda o que já gravou e
+sai `parcial`, com o motivo.
+
 **Tempos medidos em 06/10/2026, SP:**
 - Câmara (com cota) e Senado, ano de 2025, numa só execução: 3 min 10 s. Foram 90
   deputados, 8.884 proposições, 24.565 votos, 14.936 presenças e 25.844 lançamentos de
   cota.
 - TSE 2022 e 2024: 31 s.
 - Emendas: 8 s.
+
+**Tempos medidos em 09/10/2026, as 27 UFs** (banco local, `--uf TODAS --anos 2023-2026`):
+- Câmara, 1ª passada: cerca de 90 min (6.758 s, contando três recomeços depois de HTTP 504
+  na lista de deputados). 648 deputados, 1.873.995 registros, pico de 1,05 GB de memória,
+  +615 MB no banco.
+- Câmara, 2ª passada (anos fechados reaproveitados): 3.291 s (55 min, com um recomeço
+  depois de 504), pico de 958 MB.
+- Senado: 751 s, pico de 96 MB. TSE: 234 s, pico de 733 MB.
 
 ## Fontes
 

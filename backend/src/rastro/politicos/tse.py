@@ -71,6 +71,10 @@ COLUNAS_PESSOAIS = (
 )
 
 ELEITO = {"ELEITO", "ELEITO POR QP", "ELEITO POR MÉDIA"}
+# o DF não se divide em municípios (Constituição, art. 32): não há eleição municipal, e o
+# arquivo de 2020/2024 não traz consulta_cand_{ano}_DF.csv
+ELEICOES_MUNICIPAIS = {2020, 2024}
+UFS_SEM_ELEICAO_MUNICIPAL = {"DF"}
 CARGOS = {
     2024: {"PREFEITO": PREFEITO, "VEREADOR": VEREADOR},
     2022: {"GOVERNADOR": GOVERNADOR, "DEPUTADO ESTADUAL": DEPUTADO_ESTADUAL},
