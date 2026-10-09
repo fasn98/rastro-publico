@@ -9,6 +9,7 @@ import io
 import json
 import shutil
 import subprocess
+import sys
 import zipfile
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -774,3 +775,21 @@ def test_queda_de_politicos_sem_fonte_indisponivel_continua_bloqueando(coletado,
     manifesto = site.exportar(dados, "SP", coletado, hoje=HOJE)
     anterior = {**manifesto, "contagens": {**manifesto["contagens"], "politicos": 99999}}
     assert any("politicos:" in p for p in site.verificar(dados, anterior))
+
+
+IMPORTAR_SEM_AVISO = """
+import warnings
+from starlette.exceptions import StarletteDeprecationWarning
+warnings.simplefilter("error", StarletteDeprecationWarning)
+import rastro.site
+"""
+
+
+def test_exportacao_sem_aviso_de_deprecacao_do_starlette():
+    # o log da coleta trazia StarletteDeprecationWarning ao importar o TestClient (httpx)
+    r = subprocess.run(
+        [sys.executable, "-c", IMPORTAR_SEM_AVISO],
+        capture_output=True,
+        text=True,
+    )
+    assert r.returncode == 0, r.stderr
