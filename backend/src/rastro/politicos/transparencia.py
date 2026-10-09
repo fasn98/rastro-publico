@@ -50,13 +50,23 @@ class SemChave(Exception):
     """A API do Portal da Transparência recusou o acesso (sem chave válida)."""
 
 
+def modo_de_acesso() -> str:
+    """Como as consultas vão se autenticar (para o log; nunca mostra a chave)."""
+    if chave():
+        return f"chave da variável {VARIAVEL_CHAVE}"
+    return "credencial injetada pelo proxy do ambiente (sem variável local)"
+
+
 def preparar_cliente(client: httpx.Client) -> str:
-    """Põe a chave no cliente, se houver na variável de ambiente. Devolve o modo usado."""
+    """Põe a chave no cliente, se houver na variável de ambiente. Devolve o modo usado.
+
+    A chave vai no cabeçalho `chave-api-dados`, nunca na URL: o arquivo bruto guarda a URL
+    das consultas, não os cabeçalhos.
+    """
     k = chave()
     if k:
         client.headers["chave-api-dados"] = k
-        return f"chave da variável {VARIAVEL_CHAVE}"
-    return "credencial injetada pelo proxy do ambiente (sem variável local)"
+    return modo_de_acesso()
 
 
 def verificar_acesso(client: httpx.Client, ano: int) -> None:

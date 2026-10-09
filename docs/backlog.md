@@ -10,7 +10,6 @@
 - [ ] T-004 Registrar o resultado do usuário só de leitura da auditoria em "Riscos aceitos" (`docs/deploy-replit.md`, passo 7) — `lexicon` — **pendente com o Fabio**: o resultado ainda não é conhecido
 
 ## P2
-- [ ] T-005 Chave da API do Portal da Transparência: validar `RASTRO_TRANSPARENCIA_CHAVE` (recusada em 06/10) e ligar o coletor `emendas-api` à coleta — `node-runner` — depende de chave válida (Fabio); publicar exige aprovação
 - [ ] T-006 Atualizar documentação desatualizada: o README diz que `/api/bruto/{sha256}` está "em implementação" (já existe desde `093a6a1`); "Próximas etapas" do módulo de políticos ainda lista "decidir e carregar os eleitos de 2026", já publicados — `lexicon`
 - [ ] T-007 Transferências especiais: ligar ao município que recebeu pelo arquivo de favorecidos do Portal — `keystone` (ADR de cruzamento) → `node-runner` — regra de cruzamento exige aprovação
 - [ ] T-008 Testes do frontend: hoje o CI só compila (`tsc -b` + `vite build`) — `keystone` (ADR da ferramenta) → `scalpel`
@@ -35,4 +34,5 @@
 - [x] T-000 Migração para o fluxo do squad — PR #25
 - [x] T-001 Teste da coleta no Actions: o Neon aceita conexão externa e as fontes respondem, mas a coleta foi cerca de 4,5 vezes mais lenta e não terminou em 5h50 (ADR-0016)
 - [x] ADR-0016 Coleta oficial no Replit; Actions só manual; aviso de código atrasado no início da coleta (T-002 cancelada) — 2026-10-09
+- [x] T-005 Chave do Portal da Transparência: era posta num cliente HTTP descartado, e as consultas saíam sem o cabeçalho `chave-api-dados` ("Chave de API não informada"); corrigido com teste pelo caminho da coleta — 2026-10-09. Falta conferir na próxima coleta que `pol-emendas` pela API deixa de falhar. As emendas da API não aparecem no site enquanto houver as do arquivo (`api/politicos.py`).
 - [x] T-003 Ranking Fiscal v1.1 (D1 a D7): ADR-0017, `metodologia_v1_1.toml`, código, testes e página Metodologia — PR #24, aprovado pelo Fabio em 2026-10-09

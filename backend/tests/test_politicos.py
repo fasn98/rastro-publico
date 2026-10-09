@@ -401,3 +401,37 @@ def test_api_listas_por_ano_e_emendas_sem_coleta(api):
 def test_coleta_registra_municipio_na_tabela_ibge(api, session):
     # pré-condição dos testes de representantes: o município existe na base do IBGE
     assert session.get(Municipio, 3550308).nome == "São Paulo"
+
+
+@respx.mock
+def test_coleta_de_emendas_envia_a_chave_em_toda_consulta(session, monkeypatch):
+    """T-005: pelo caminho da coleta (`rastro politicos --fontes emendas-api`), a consulta
+    chega à API com o cabeçalho `chave-api-dados`. Antes, a chave ia para um cliente
+    descartado e a API respondia "Chave de API não informada"."""
+    from contextlib import nullcontext
+
+    monkeypatch.setenv(transparencia.VARIAVEL_CHAVE, " valor-de-teste\n")  # com espaços
+    # sem arquivo bruto nem banco de produção: o cliente-base é um httpx.Client simples
+    monkeypatch.setattr(coletar, "novo_cliente", lambda: httpx.Client())
+    monkeypatch.setattr(coletar, "get_sessionmaker", lambda: lambda: nullcontext(session))
+    # resposta real da API (gravada em 06/10/2026); aqui importa o que foi ENVIADO
+    rota = respx.get(f"{transparencia.API}/emendas").respond(
+        401,
+        content=_json("transparencia_emendas_sem_chave.json"),
+        headers={"content-type": "application/json;charset=ISO-8859-1"},
+    )
+    assert coletar.main(["--uf", "SP", "--anos", "2025", "--fontes", "emendas-api"]) == 1
+    assert rota.call_count >= 1
+    for chamada in rota.calls:
+        assert chamada.request.headers["chave-api-dados"] == "valor-de-teste"
+        # a chave vai no cabeçalho, nunca na URL (que é o que o arquivo bruto guarda)
+        assert "valor-de-teste" not in str(chamada.request.url)
+
+
+def test_so_as_emendas_recebem_a_chave(monkeypatch):
+    monkeypatch.setenv(transparencia.VARIAVEL_CHAVE, "valor-de-teste")
+    for fonte in ("camara", "senado", "emendas", "tse"):
+        with coletar.cliente_da_fonte(fonte, base=httpx.Client)() as client:
+            assert "chave-api-dados" not in client.headers
+    with coletar.cliente_da_fonte("emendas-api", base=httpx.Client)() as client:
+        assert client.headers["chave-api-dados"] == "valor-de-teste"

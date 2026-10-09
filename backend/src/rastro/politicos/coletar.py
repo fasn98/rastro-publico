@@ -11,6 +11,7 @@ não interrompe os outros: a coleta fica `parcial`, com os erros registrados.
 import argparse
 import logging
 import sys
+from collections.abc import Callable
 
 import httpx
 from sqlalchemy import select
@@ -34,6 +35,27 @@ def _tentar(erros: list[str], rotulo: str, funcao, *args) -> int:
         log.warning("%s: %s", rotulo, exc)
         erros.append(f"{rotulo}: {type(exc).__name__}: {exc}")
         return 0
+
+
+def cliente_da_fonte(
+    fonte: str, base: Callable[[], httpx.Client] | None = None
+) -> Callable[[], httpx.Client]:
+    """Fábrica de clientes HTTP da fonte, usada em cada tentativa da coleta.
+
+    A API do Portal da Transparência exige o cabeçalho `chave-api-dados` em toda consulta:
+    cada cliente das emendas já sai com ele. Antes, a chave ia para um cliente descartado e
+    as consultas saíam sem ela ("Chave de API não informada", 401).
+    """
+    base = base or novo_cliente
+    if fonte != "emendas-api":
+        return base
+
+    def com_chave() -> httpx.Client:
+        client = base()
+        transparencia.preparar_cliente(client)
+        return client
+
+    return com_chave
 
 
 def coletor_camara(uf: str, anos: list[int]):
@@ -202,9 +224,8 @@ def main(argv: list[str] | None = None) -> int:
         for fonte in args.fontes:
             nome, fabrica = coletores[fonte]
             if fonte == "emendas-api":
-                with novo_cliente() as client:
-                    print(f"emendas: acesso por {transparencia.preparar_cliente(client)}")
-            coleta = executar_com_esperas(session, nome, fabrica(uf, anos), novo_cliente)
+                print(f"emendas: acesso por {transparencia.modo_de_acesso()}")
+            coleta = executar_com_esperas(session, nome, fabrica(uf, anos), cliente_da_fonte(fonte))
             print(f"{nome}: {coleta.status} ({coleta.registros or 0} registros)")
             if coleta.erro:
                 print(coleta.erro, file=sys.stderr)
