@@ -112,6 +112,14 @@ sai `parcial`, com o motivo.
 - TSE 2022 e 2024: 31 s.
 - Emendas: 8 s.
 
+**Tempos medidos em 09/10/2026, as 27 UFs** (banco local, `--uf TODAS --anos 2023-2026`):
+- Câmara, 1ª passada: cerca de 90 min (6.758 s, contando três recomeços depois de HTTP 504
+  na lista de deputados). 648 deputados, 1.873.995 registros, pico de 1,05 GB de memória,
+  +615 MB no banco.
+- Câmara, 2ª passada (anos fechados reaproveitados): 3.291 s (55 min, com um recomeço
+  depois de 504), pico de 958 MB.
+- Senado: 751 s, pico de 96 MB. TSE: 234 s, pico de 733 MB.
+
 ## Fontes
 
 | Dado | Fonte oficial | Tabela |
