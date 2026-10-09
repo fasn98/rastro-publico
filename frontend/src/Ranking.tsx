@@ -68,6 +68,8 @@ export default function RankingPagina() {
   );
   const comNota = itens.filter((i) => i.nota !== null);
   const linhas = (semNota ? itens : comNota).slice(0, limite);
+  // coluna só existe quando a exportação traz o dado (trava pol_publicar_gestoes, ADR-0018)
+  const comPrefeitos = itens.some((i) => i.prefeitos_no_periodo);
   const posicao = faixa ? "posicao_faixa" : "posicao_geral";
 
   if (erro) return <p className="erro">{erro}</p>;
@@ -130,6 +132,7 @@ export default function RankingPagina() {
                 </th>
               ))}
               <th title="indicadores sem dado (não reportados)">Faltam</th>
+              {comPrefeitos && <th className="esq">Prefeitos eleitos no período da nota</th>}
             </tr>
           </thead>
           <tbody>
@@ -145,6 +148,7 @@ export default function RankingPagina() {
                   <td key={k}>{nota10(i.notas[k])}</td>
                 ))}
                 <td>{i.indicadores_faltantes}</td>
+                {comPrefeitos && <td className="esq prefeitos">{i.prefeitos_no_periodo ?? "—"}</td>}
               </tr>
             ))}
           </tbody>

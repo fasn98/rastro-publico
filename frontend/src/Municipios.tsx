@@ -8,6 +8,7 @@ import {
 } from "./api";
 import { AUDITORIA_ATIVA, urlAuditoria } from "./dados";
 import Indicadores from "./Indicadores";
+import { PrefeitosEleitos } from "./Politicos";
 
 const formatarCnpj = (c: string) =>
   c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
@@ -254,6 +255,7 @@ export default function Municipios({ cod }: { cod: number | null }) {
             <a href={`#/representantes/${detalhe.cod_ibge}`}>Representantes e emendas recebidas</a>
           </p>
           {detalhe.ente_siconfi && <Indicadores cod={detalhe.cod_ibge} />}
+          <PrefeitosEleitos cod={detalhe.cod_ibge} municipio={`${detalhe.nome}/${detalhe.uf}`} />
         </article>
       )}
 
