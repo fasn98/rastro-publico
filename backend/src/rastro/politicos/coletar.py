@@ -239,15 +239,22 @@ def coletor_tse(uf: str, eleicoes: list[int], hoje: datetime | None = None):
     def coletar(session: Session, client: httpx.Client) -> int:
         from rastro.models import Municipio
 
-        codigos = set(session.scalars(select(Municipio.cod_ibge).where(Municipio.uf == uf)))
-        if not codigos:
-            raise RuntimeError("Tabela de municípios vazia: rode `rastro coletar ibge-municipios`.")
         ano_corrente = (hoje or datetime.now(UTC)).year
         total = 0
         for ano in eleicoes:
+            municipal = ano in tse.ELEICOES_MUNICIPAIS
+            if municipal and uf in tse.UFS_SEM_ELEICAO_MUNICIPAL:
+                log.info("TSE %s %s: sem eleição municipal", ano, uf)
+                continue
             if ano < ano_corrente and reuso.tse_recente(session, ano, uf):
                 log.info("TSE %s %s: arquivo da semana reaproveitado", ano, uf)
                 continue
+            # o código IBGE dos municípios só entra no cruzamento da eleição municipal
+            codigos = set(session.scalars(select(Municipio.cod_ibge).where(Municipio.uf == uf)))
+            if municipal and not codigos:
+                raise RuntimeError(
+                    "Tabela de municípios vazia: rode `rastro coletar ibge-municipios`."
+                )
             r = tse.coletar_eleitos(session, client, ano, uf, codigos)
             log.info("TSE %s: %s", ano, r)
             total += r["eleitos"]
@@ -262,6 +269,9 @@ def coletor_prefeitos(uf: str):
     def coletar(session: Session, client: httpx.Client) -> int:
         from rastro.models import Municipio
 
+        if uf in tse.UFS_SEM_ELEICAO_MUNICIPAL:
+            log.info("TSE prefeitos %s: sem eleição municipal", uf)
+            return 0
         codigos = set(session.scalars(select(Municipio.cod_ibge).where(Municipio.uf == uf)))
         if not codigos:
             raise RuntimeError("Tabela de municípios vazia: rode `rastro coletar ibge-municipios`.")

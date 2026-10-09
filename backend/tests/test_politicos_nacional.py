@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 import respx
+from sqlalchemy import select
 from test_cota_emendas import _zip_cota
 from test_politicos import JSON, _json, _mock_camara
 from test_tse import AMOSTRA_IBGE
@@ -17,6 +18,8 @@ from test_tse import _mock as _mock_tse
 from rastro.coletores.arquivo import ArquivoBruto
 from rastro.coletores.base import ColetaParcial, novo_cliente
 from rastro.politicos import camara, coletar, reuso, tse
+from rastro.politicos.comum import upsert_politico
+from rastro.politicos.modelos import DEPUTADO_FEDERAL, PolPolitico
 
 # com "hoje" em 2027, 2025 é ano fechado; em 2026, não
 EM_2027 = datetime(2027, 1, 10, tzinfo=UTC)
@@ -155,3 +158,31 @@ def test_uf_desconhecida_e_recusada(capsys):
     with pytest.raises(SystemExit):
         coletar.main(["--uf", "XX", "--fontes", "tse"])
     assert "UF desconhecida: XX" in capsys.readouterr().err
+
+
+@respx.mock  # sem rotas: qualquer download falharia
+def test_df_nao_tem_eleicao_municipal(session, cliente):
+    assert coletar.coletor_tse("DF", [2024], hoje=EM_2026)(session, cliente) == 0
+    assert coletar.coletor_prefeitos("DF")(session, cliente) == 0
+    assert not respx.calls
+
+
+def test_partido_de_quem_passou_por_varios_partidos(session):
+    # deputado do CE na lista da legislatura 57 (API da Câmara, 09/10/2026): 36 caracteres
+    upsert_politico(
+        session,
+        {
+            "fonte": "camara",
+            "id_fonte": "234673",
+            "cargo": DEPUTADO_FEDERAL,
+            "nome": "Vanderlan Alves",
+            "partido": "UNIÃO / REPUBLICANOS / SOLIDARIEDADE",
+            "uf": "CE",
+            "legislatura": 57,
+            "em_exercicio": False,
+            "url_fonte": "https://dadosabertos.camara.leg.br/api/v2/deputados/234673",
+            "url_pagina": "https://www.camara.leg.br/deputados/234673",
+        },
+    )
+    session.commit()
+    assert session.scalar(select(PolPolitico.partido)) == "UNIÃO / REPUBLICANOS / SOLIDARIEDADE"
