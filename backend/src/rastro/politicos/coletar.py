@@ -21,11 +21,13 @@ from rastro.coletores.base import ColetaParcial, novo_cliente
 from rastro.coletores.siconfi_lote import interpretar_anos
 from rastro.db import get_sessionmaker
 from rastro.fontes import executar_com_esperas
-from rastro.politicos import camara, senado, transparencia, tse
+from rastro.politicos import camara, gestoes, senado, transparencia, tse
 from rastro.politicos.modelos import DEPUTADO_FEDERAL, SENADOR, PolPolitico
 
 log = logging.getLogger(__name__)
-FONTES = ("camara", "senado", "emendas", "emendas-api", "tse")
+FONTES = ("camara", "senado", "emendas", "emendas-api", "tse", "prefeitos")
+# "prefeitos" (eleições de prefeito 2020 e 2024, ADR-0018) só roda quando pedida
+PADRAO = ("camara", "senado", "emendas", "emendas-api", "tse")
 
 
 def _tentar(erros: list[str], rotulo: str, funcao, *args) -> int:
@@ -195,11 +197,30 @@ def coletor_tse(uf: str, eleicoes: list[int]):
     return coletar
 
 
+def coletor_prefeitos(uf: str):
+    """Eleições de prefeito (ordinária e suplementares) de 2020 e 2024, com prefeito e vice."""
+
+    def coletar(session: Session, client: httpx.Client) -> int:
+        from rastro.models import Municipio
+
+        codigos = set(session.scalars(select(Municipio.cod_ibge).where(Municipio.uf == uf)))
+        if not codigos:
+            raise RuntimeError("Tabela de municípios vazia: rode `rastro coletar ibge-municipios`.")
+        total = 0
+        for ano in gestoes.MANDATOS:
+            r = gestoes.coletar(session, client, ano, uf, codigos)
+            log.info("TSE prefeitos %s: %s", ano, r)
+            total += r["eleicoes"]
+        return total
+
+    return coletar
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="rastro politicos", description=__doc__.split("\n\n")[0])
     p.add_argument("--uf", default="SP")
     p.add_argument("--anos", help="anos de atuação, ex.: 2023-2026 (câmara, senado, emendas)")
-    p.add_argument("--fontes", nargs="+", choices=FONTES, default=list(FONTES))
+    p.add_argument("--fontes", nargs="+", choices=FONTES, default=list(PADRAO))
     p.add_argument(
         "--eleicoes",
         default="2022,2024,2026",
@@ -208,7 +229,7 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    if not args.anos and set(args.fontes) - {"tse"}:
+    if not args.anos and set(args.fontes) - {"tse", "prefeitos"}:
         p.error("--anos é obrigatório para câmara, senado e emendas")
     uf, anos = args.uf.upper(), interpretar_anos(args.anos) if args.anos else []
 
@@ -218,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
         "emendas": ("pol-emendas", coletor_emendas_arquivo),
         "emendas-api": ("pol-emendas", coletor_emendas),
         "tse": ("pol-tse", lambda uf, _anos: coletor_tse(uf, interpretar_anos(args.eleicoes))),
+        "prefeitos": ("pol-tse-prefeitos", lambda uf, _anos: coletor_prefeitos(uf)),
     }
     status = 0
     with get_sessionmaker()() as session:

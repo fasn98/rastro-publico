@@ -291,3 +291,34 @@ class PolEventoMandato(Base):
     partido: Mapped[str | None] = mapped_column(String(30))
     url_fonte: Mapped[str] = mapped_column(Text)
     resposta_id: Mapped[int | None] = _resposta()
+
+
+class PolEleicaoPrefeito(Base):
+    """Uma eleição de prefeito no município (ordinária, 2º turno ou suplementar), como está
+    no arquivo atual do TSE, com o prefeito e o vice eleitos (nulos se não houver eleito).
+
+    `eleicao_ano` é o ano da eleição ordinária do arquivo (2020 ou 2024); as suplementares
+    do mesmo mandato vêm no mesmo arquivo. Só o nome de urna e o partido da eleição (LGPD).
+    """
+
+    __tablename__ = "pol_eleicao_prefeito"
+    __table_args__ = (UniqueConstraint("cod_ibge", "cd_eleicao", name="uq_pol_eleicao_prefeito"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uf: Mapped[str] = mapped_column(String(2))
+    cod_ibge: Mapped[int] = mapped_column(Integer, index=True)
+    eleicao_ano: Mapped[int]
+    mandato_inicio: Mapped[int]
+    mandato_fim: Mapped[int]
+    cd_eleicao: Mapped[str] = mapped_column(String(10))
+    ds_eleicao: Mapped[str] = mapped_column(Text)
+    data_eleicao: Mapped[date] = mapped_column(Date)
+    suplementar: Mapped[bool] = mapped_column(Boolean)
+    turno: Mapped[int]
+    prefeito: Mapped[str | None] = mapped_column(String(120))
+    prefeito_partido: Mapped[str | None] = mapped_column(String(30))
+    vice: Mapped[str | None] = mapped_column(String(120))
+    vice_partido: Mapped[str | None] = mapped_column(String(30))
+    data_divulgacao: Mapped[date | None] = mapped_column(Date)  # DT_GERACAO do arquivo
+    url_fonte: Mapped[str] = mapped_column(Text)
+    resposta_id: Mapped[int | None] = _resposta()

@@ -24,6 +24,7 @@ aprovadas pelo Fabio.
 | [0015](0015-testes-com-respostas-reais.md) | Testes só com respostas reais gravadas | Aceito retroativo |
 | [0016](0016-onde-roda-a-coleta-agendada.md) | Coleta agendada no Replit; Actions só manual | Aceito |
 | [0017](0017-ranking-fiscal-v1-1.md) | Ranking Fiscal v1.1 (D1 a D7) | Aceito |
+| [0018](0018-prefeitos-eleitos-por-exercicio.md) | Prefeitos eleitos em cada exercício do ranking (TSE) | Proposto |
 
 O status fica numa linha `- **Status:** <valor>`, sem parênteses: o painel War Room lê essa
 linha, e todo status que começa com "Propos" aparece como pendente de aprovação.

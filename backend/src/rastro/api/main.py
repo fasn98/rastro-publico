@@ -357,6 +357,9 @@ class ItemRanking(BaseModel):
     posicao_geral: int | None
     posicao_faixa: int | None
     notas: dict[str, float | None]
+    # prefeito e vice eleitos em cada exercício da nota, como no TSE (ADR-0018); nulo com a
+    # trava pol_publicar_gestoes desligada
+    prefeitos_no_periodo: str | None = None
 
 
 class Ranking(BaseModel):
@@ -415,8 +418,25 @@ def _consultar_ranking(session, uf, faixa, busca, versao):
     return session.execute(q).all()
 
 
-def _item(n: NotaRanking, nome: str) -> dict:
+def _prefeitos(session: Session, uf: str, linhas) -> dict[int, str | None]:
+    """Texto "Prefeitos eleitos no período da nota" por município (só com a trava ligada)."""
+    from rastro.politicos import gestoes, publicacao
+
+    if not publicacao.gestoes():
+        return {}
+    por_municipio = gestoes.eleicoes_da_uf(session, uf.upper())
     return {
+        n.cod_ibge: gestoes.resumo_do_periodo(
+            gestoes.mandatos(por_municipio.get(n.cod_ibge, [])),
+            [int(a) for a in n.exercicios.split(",")],
+        )
+        for n, _ in linhas
+    }
+
+
+def _item(n: NotaRanking, nome: str, prefeitos: str | None = None) -> dict:
+    return {
+        "prefeitos_no_periodo": prefeitos,
         "cod_ibge": n.cod_ibge,
         "nome": nome,
         "populacao": n.populacao,
@@ -442,12 +462,13 @@ def obter_ranking(
     if not linhas:
         raise HTTPException(404, "Nenhum município encontrado")
     primeira = linhas[0][0]
+    prefeitos = _prefeitos(session, uf, linhas)
     return {
         "versao": primeira.versao,
         "hash_metodologia": primeira.hash_metodologia,
         "calculado_em": primeira.calculado_em,
         "exercicios": primeira.exercicios,
-        "itens": [_item(n, nome) for n, nome in linhas],
+        "itens": [_item(n, nome, prefeitos.get(n.cod_ibge)) for n, nome in linhas],
     }
 
 
@@ -463,19 +484,23 @@ def exportar_ranking(
     versao: str | None = None,
 ):
     linhas = _consultar_ranking(session, uf, faixa, busca, versao)
+    # coluna só existe com a trava pol_publicar_gestoes ligada (ADR-0018)
+    prefeitos = _prefeitos(session, uf, linhas)
+    extra = ["prefeitos_eleitos_no_periodo"] if prefeitos else []
     saida = io.StringIO()
     w = csv.writer(saida, delimiter=";")
     w.writerow(
         ["posicao_geral", "posicao_faixa", "cod_ibge", "municipio", "populacao", "faixa", "nota",
          "indicadores_faltantes", *[f"nota_{c}" for c in COLUNAS_CSV],
-         "versao_metodologia", "hash_metodologia", "exercicios"]
+         "versao_metodologia", "hash_metodologia", "exercicios", *extra]
     )  # fmt: skip
     for n, nome in linhas:
         notas = {k: v["nota"] for k, v in n.componentes.items()}
         w.writerow(
             [n.posicao_geral, n.posicao_faixa, n.cod_ibge, nome, n.populacao, n.faixa, n.nota,
              n.indicadores_faltantes, *[notas.get(c) for c in COLUNAS_CSV],
-             n.versao, n.hash_metodologia, n.exercicios]
+             n.versao, n.hash_metodologia, n.exercicios,
+             *([prefeitos.get(n.cod_ibge)] if extra else [])]
         )  # fmt: skip
     # BOM: o Excel abre o CSV em UTF-8 sem estragar os acentos
     return Response(
