@@ -113,6 +113,11 @@ def coletor_camara(ufs: str | list[str], anos: list[int], prazo: Prazo = SEM_PRA
             nonlocal total
             if prazo.esgotado():
                 raise _PrazoEsgotado
+            # fecha a transação das consultas de reaproveitamento antes de ir à rede: o
+            # banco de produção encerra a conexão parada em transação por 5 min
+            # (idle_in_transaction_session_timeout). Nada está pendente: cada item grava
+            # com commit.
+            session.commit()
             total += _tentar(erros, rotulo, funcao, session, client, *args)
 
         try:
@@ -255,6 +260,7 @@ def coletor_tse(uf: str, eleicoes: list[int], hoje: datetime | None = None):
                 raise RuntimeError(
                     "Tabela de municípios vazia: rode `rastro coletar ibge-municipios`."
                 )
+            session.commit()  # sem transação aberta durante o download (transação ociosa)
             r = tse.coletar_eleitos(session, client, ano, uf, codigos)
             log.info("TSE %s: %s", ano, r)
             total += r["eleitos"]

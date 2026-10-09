@@ -186,3 +186,49 @@ def test_partido_de_quem_passou_por_varios_partidos(session):
     )
     session.commit()
     assert session.scalar(select(PolPolitico.partido)) == "UNIÃO / REPUBLICANOS / SOLIDARIEDADE"
+
+
+@respx.mock
+def test_sem_transacao_ociosa_entre_o_reaproveitamento_e_a_rede(engine):
+    """Em produção, o banco encerra a conexão parada em transação (5 min). Aqui o limite é de
+    1 s, e a 1ª página de proposições demora 1,5 s depois da consulta de reaproveitamento."""
+    import time
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from conftest import URL_TESTE
+
+    sep = "&" if "?" in URL_TESTE else "?"
+    limitado = create_engine(
+        f"{URL_TESTE}{sep}options=-c%20idle_in_transaction_session_timeout%3D1000"
+    )
+    _mock_camara_com_cota()
+    resposta = respx.routes[1].return_value  # proposições (ver _mock_camara)
+
+    def lenta(request):
+        time.sleep(1.5)
+        return resposta
+
+    respx.routes[1].side_effect = lenta
+    itens = 0
+
+    def relogio():  # libera os históricos e a 1ª proposição; depois, prazo esgotado
+        nonlocal itens
+        itens += 1
+        return 0 if itens <= 2 + len(_deputados_sp()) else 999
+
+    with Session(limitado) as s, novo_cliente(req_por_segundo=0, arquivo=ArquivoBruto(engine)) as c:
+        with pytest.raises(ColetaParcial) as erro:
+            coletar.coletor_camara(["SP"], [2025], coletar.Prazo(1, relogio), EM_2027)(s, c)
+    assert erro.value.erros == ["limite de tempo de 1 min atingido"]
+    limitado.dispose()
+
+
+def _deputados_sp() -> list:
+    import json
+
+    from test_politicos import POL
+
+    paginas = ("camara_deputados_sp_leg57_p1.json", "camara_deputados_sp_leg57_p2.json")
+    return list({d["id"] for p in paginas for d in json.loads((POL / p).read_text())["dados"]})
