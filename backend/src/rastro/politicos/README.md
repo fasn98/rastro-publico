@@ -69,6 +69,7 @@ uv run alembic upgrade head
 uv run rastro coletar ibge-municipios                          # pré-requisito
 uv run rastro politicos --uf SP --anos 2023-2026 --fontes camara senado
 uv run rastro politicos --uf SP --anos 2023-2026 --fontes emendas   # arquivo em lote, sem chave
+uv run rastro politicos --uf SP AC --anos 2023-2026 --fontes emendas  # várias UFs: uma passada só
 uv run rastro politicos --fontes tse                           # eleitos 2022 e 2024
 uv run rastro politicos --fontes tse --eleicoes 2024           # só um ano
 uv run rastro redigir-respostas    # uma vez, em bancos coletados antes da redação LGPD
