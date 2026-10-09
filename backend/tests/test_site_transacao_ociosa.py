@@ -31,9 +31,15 @@ def banco_com_limite(monkeypatch):
     fabrica = sessionmaker(bind=engine, expire_on_commit=False)
     monkeypatch.setattr(db, "get_engine", lambda: engine)
     monkeypatch.setattr(db, "get_sessionmaker", lambda: fabrica)
+    # como em produção, a API interna abre a própria sessão a cada requisição; outros
+    # testes de exportação deixam a API presa à sessão deles (site._cliente)
+    from rastro.api.main import app
+
+    app.dependency_overrides.clear()
     with engine.connect() as con:
         assert con.exec_driver_sql("SHOW idle_in_transaction_session_timeout").scalar() == "1s"
     yield engine
+    app.dependency_overrides.clear()
     engine.dispose()
 
 
