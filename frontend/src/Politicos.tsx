@@ -14,6 +14,7 @@ import {
   obterEmendasMunicipio,
   obterEleito,
   obterPolitico,
+  obterPrefeitos,
   obterRepresentantes,
   type Contagem,
   type ContagemValor,
@@ -22,6 +23,7 @@ import {
   type Fonte,
   type Lista,
   type PoliticoDetalhe,
+  type PrefeitosEleitos as Prefeitos,
   type Presenca,
   type Proposicao,
   type Representantes,
@@ -751,5 +753,67 @@ function TabelaEmendas({ emendas, mostrarAutor = false }: { emendas: Emendas; mo
         </ul>
       </details>
     </>
+  );
+}
+
+// ------------------------------------------------------------- Prefeitos eleitos (ADR-0018)
+// O TSE registra quem foi eleito, não quem exerceu o cargo. Partido só como texto ao lado do
+// nome: nenhum agrupamento, filtro, cor ou comparação por partido.
+
+function usePrefeitos(cod: number) {
+  const [p, setP] = useState<Prefeitos | null>(null);
+  useEffect(() => {
+    setP(null);
+    obterPrefeitos(cod)
+      .then(setP)
+      .catch(() => setP(null));
+  }, [cod]);
+  return p;
+}
+
+/** Linha do tempo: prefeito e vice eleitos para cada mandato, com a eleição e a fonte. */
+export function PrefeitosEleitos({ cod, municipio }: { cod: number; municipio: string }) {
+  const p = usePrefeitos(cod);
+  if (!p) return null;
+  return (
+    <section className="prefeitos-eleitos" aria-labelledby="titulo-prefeitos">
+      <h3 id="titulo-prefeitos">Prefeitos eleitos (TSE)</h3>
+      <p className="nota">
+        Prefeito(a) e vice eleitos para cada mandato, como estão no arquivo atual do TSE. O TSE
+        registra quem foi eleito, não quem exerceu o cargo: renúncia, morte, afastamento e
+        interinidade não aparecem (ver <a href="#/metodologia">Metodologia</a>).
+      </p>
+      <ul className="mandatos-prefeito">
+        {p.mandatos.map((m) => (
+          <li key={m.inicio}>
+            <strong>
+              Mandato {m.inicio}–{m.fim}
+            </strong>
+            {" — "}
+            {m.situacao === "ordinaria" ? `eleito(a) para o mandato: ${m.texto}` : m.texto}
+            {m.eleicao && (
+              <div className="sub">
+                {m.eleicao.descricao}, {data(m.eleicao.data)}
+                {m.eleicao.turno === 2 && " (2º turno)"}{" "}
+                <LinkFonte url={m.eleicao.url_fonte} sha256={m.eleicao.sha256} />
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+      <Contestar titulo={`prefeitos eleitos de ${municipio}`} />
+    </section>
+  );
+}
+
+/** Quem foi eleito(a) para o mandato no exercício mostrado nos indicadores. */
+export function PrefeitoDoExercicio({ cod, exercicio }: { cod: number; exercicio: number }) {
+  const p = usePrefeitos(cod);
+  const x = p?.exercicios.find((e) => e.ano === exercicio);
+  if (!x) return null;
+  return (
+    <p className="sub prefeito-exercicio">
+      Eleito(a) para o mandato {x.mandato}, segundo o TSE (exercício {exercicio}): {x.texto}
+    </p>
   );
 }

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from rastro.db import get_session
 from rastro.models import Coleta, Municipio, RespostaBruta
-from rastro.politicos import publicacao
+from rastro.politicos import gestoes, publicacao
 from rastro.politicos.modelos import (
     CARGOS_ESTADUAIS,
     CARGOS_MUNICIPAIS,
@@ -748,4 +748,90 @@ def _secao_2026(session: Session, uf: str) -> SecaoRepresentantes | None:
         "mandato a partir de 2027, sujeito a alterações até a diplomação",
         nota=nota,
         grupos=grupos,
+    )
+
+
+# ------------------------------------------------- prefeitos eleitos por exercício (ADR-0018)
+
+AVISO_GESTOES = "Prefeitos eleitos por exercício ainda não publicados: dados do TSE em validação."
+
+
+class Candidato(BaseModel):
+    nome: str  # nome de urna, como no TSE
+    partido: str  # partido da eleição, como no TSE
+
+
+class EleicaoPrefeito(BaseModel):
+    descricao: str
+    data: date
+    suplementar: bool
+    turno: int
+    prefeito: Candidato | None
+    vice: Candidato | None
+    data_divulgacao: date | None  # data de geração do arquivo do TSE
+    url_fonte: str
+    resposta_id: int | None
+
+
+class MandatoPrefeito(BaseModel):
+    inicio: int
+    fim: int
+    # "ordinaria" | "suplementar" | "sem_eleito" (nenhuma eleição do mandato tem eleito)
+    situacao: str
+    texto: str  # como fica o mandato depois da última eleição com eleito
+    eleicao: EleicaoPrefeito | None  # a eleição que vale (a mais recente com eleito)
+
+
+class ExercicioPrefeito(BaseModel):
+    ano: int
+    mandato: str
+    texto: str
+
+
+class PrefeitosEleitos(BaseModel):
+    publicados: bool
+    aviso: str | None
+    mandatos: list[MandatoPrefeito]
+    exercicios: list[ExercicioPrefeito]
+
+
+def _eleicao(e) -> EleicaoPrefeito:
+    return EleicaoPrefeito(
+        descricao=e.ds_eleicao,
+        data=e.data_eleicao,
+        suplementar=e.suplementar,
+        turno=e.turno,
+        prefeito=Candidato(nome=e.prefeito, partido=e.prefeito_partido) if e.prefeito else None,
+        vice=Candidato(nome=e.vice, partido=e.vice_partido) if e.vice else None,
+        data_divulgacao=e.data_divulgacao,
+        url_fonte=e.url_fonte,
+        resposta_id=e.resposta_id,
+    )
+
+
+@router.get("/municipios/{cod_ibge}/prefeitos", response_model=PrefeitosEleitos)
+def prefeitos_eleitos(cod_ibge: int, session: SessionDep):
+    """Prefeito e vice eleitos para cada mandato e exercício, como registrados pelo TSE.
+
+    O TSE registra quem foi eleito, não quem exerceu o cargo (ADR-0018).
+    """
+    _municipio(session, cod_ibge)
+    if not publicacao.gestoes():
+        return PrefeitosEleitos(publicados=False, aviso=AVISO_GESTOES, mandatos=[], exercicios=[])
+    ms = gestoes.mandatos(gestoes.eleicoes_do_municipio(session, cod_ibge))
+    anos = [a for m in ms for a in range(m["inicio"], m["fim"] + 1)]
+    return PrefeitosEleitos(
+        publicados=True,
+        aviso=None,
+        mandatos=[
+            MandatoPrefeito(
+                inicio=m["inicio"],
+                fim=m["fim"],
+                situacao=m["situacao"],
+                texto=gestoes.texto_do_exercicio(m, m["fim"]),
+                eleicao=_eleicao(m["eleicao"]) if m["eleicao"] else None,
+            )
+            for m in ms
+        ],
+        exercicios=gestoes.por_exercicio(ms, anos) or [],
     )

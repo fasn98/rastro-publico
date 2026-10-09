@@ -9,6 +9,7 @@ import {
 import { AUDITORIA_ATIVA, urlAuditoria } from "./dados";
 import { nota10 } from "./Ranking";
 import Evolucao from "./Evolucao";
+import { PrefeitoDoExercicio } from "./Politicos";
 
 const num = (v: string | null) => (v === null ? null : Number(v));
 
@@ -228,6 +229,8 @@ export default function Indicadores({ cod }: { cod: number }) {
           </a>
         )}
       </p>
+
+      <PrefeitoDoExercicio cod={cod} exercicio={dados.exercicio} />
 
       <NotaRanking cod={cod} />
 

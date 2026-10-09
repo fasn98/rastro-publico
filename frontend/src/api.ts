@@ -49,6 +49,8 @@ export type ArquivoMunicipio = {
     secoes: (Representantes["secoes"][number] | { ref: string })[];
   };
   emendas: unknown;
+  /** prefeitos eleitos por mandato e exercício (ADR-0018); ausente em exportações antigas */
+  prefeitos?: unknown;
 };
 
 export const arquivoMunicipio = (cod: number) =>
@@ -237,6 +239,9 @@ export type ItemRanking = {
   posicao_geral: number | null;
   posicao_faixa: number | null;
   notas: Partial<Record<IndicadorRanking, number | null>>;
+  /** Prefeito e vice eleitos em cada exercício da nota, como no TSE (ADR-0018). Ausente ou
+   * null quando a trava de publicação está desligada. */
+  prefeitos_no_periodo?: string | null;
 };
 
 export type Ranking = {

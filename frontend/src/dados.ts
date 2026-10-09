@@ -64,6 +64,8 @@ export type Manifesto = {
   mapeamento: { versao: number; hash: string };
   contagens: Record<string, number>;
   fontes?: SituacaoFonte[];
+  /** travas de publicação no momento da exportação (Settings.pol_publicar_*) */
+  travas?: Record<string, boolean>;
 };
 
 export const obterManifesto = () => lerJson<Manifesto>("manifesto.json", true);

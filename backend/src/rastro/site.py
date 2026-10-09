@@ -10,8 +10,8 @@ Estrutura gerada em `<saida>/` (formato 3):
     indice.json                         SHA-256 de cada arquivo e impressão digital de cada
                                         grupo (exportação incremental e verificação)
     municipios.json                     lista para a busca (feita no navegador)
-    municipios/{cod}.json               detalhe, série de indicadores, nota, emendas e os
-                                        representantes do município
+    municipios/{cod}.json               detalhe, série de indicadores, nota, emendas, os
+                                        representantes e os prefeitos eleitos do município
     representantes/{hash}.json          seção de representantes repetida em vários municípios
                                         (estado, federal, eleitos 2026): um arquivo por
                                         conteúdo distinto, referenciado como {"ref": ...}
@@ -609,6 +609,12 @@ def exportar(
                 secoes_gravadas.add(ref)
             return {"ref": ref}
 
+        def prefeitos(cod: int) -> dict:
+            """Prefeito e vice eleitos por mandato e exercício (ADR-0018). Só entra no arquivo
+            com a trava ligada: desligada, o arquivo do município fica como antes."""
+            p = get(f"/api/municipios/{cod}/prefeitos")
+            return {"prefeitos": arquivados.trocar(p)} if p["publicados"] else {}
+
         lista = []
         for m in municipios:
             cod = m.cod_ibge
@@ -637,6 +643,7 @@ def exportar(
                         "secoes": [secao(sec) for sec in rep["secoes"]],
                     },
                     "emendas": arquivados.trocar(get(f"/api/municipios/{cod}/emendas")),
+                    **prefeitos(cod),
                 },
             )
         out.json("municipios.json", lista)
@@ -1035,5 +1042,26 @@ def _conferir_travas(saida: Path, travas: dict) -> list[str]:
                 problemas.append(
                     f"{arq.relative_to(saida)}: emendas exportadas com pol_publicar_emendas "
                     "desligada"
+                )
+    if not travas.get("pol_publicar_gestoes"):
+        # prefeitos eleitos por exercício (ADR-0018): nem na página do município nem no ranking
+        for arq in (saida / "municipios").glob("*.json"):
+            p = json.loads(arq.read_bytes()).get("prefeitos") or {}
+            if p.get("publicados") or p.get("mandatos") or p.get("exercicios"):
+                problemas.append(
+                    f"{arq.relative_to(saida)}: prefeitos exportados com pol_publicar_gestoes "
+                    "desligada"
+                )
+        if (saida / "ranking.json").exists():
+            itens = json.loads((saida / "ranking.json").read_bytes()).get("itens", [])
+            if any(i.get("prefeitos_no_periodo") for i in itens):
+                problemas.append(
+                    "ranking.json: prefeitos exportados com pol_publicar_gestoes desligada"
+                )
+        if (saida / "ranking.csv").exists():
+            cabecalho = (saida / "ranking.csv").read_text(encoding="utf-8-sig").split("\n", 1)[0]
+            if "prefeitos" in cabecalho:
+                problemas.append(
+                    "ranking.csv: prefeitos exportados com pol_publicar_gestoes desligada"
                 )
     return problemas
