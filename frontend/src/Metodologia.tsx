@@ -280,6 +280,52 @@ export default function Metodologia() {
         </>
       )}
 
+      <h3>Todas as UFs: portão de qualidade, estados e casos especiais</h3>
+      <p>
+        A mesma metodologia (v1.1.0) vale para os municípios de todas as UFs. Cada UF só entra no
+        site depois de passar num portão de qualidade:
+      </p>
+      <ul>
+        <li>
+          todos os entes da UF com o extrato de entregas lido nos exercícios do ranking (cada
+          município aparece com dado ou como “não reportado”);
+        </li>
+        <li>uma amostra das respostas guardadas conferida pelo SHA-256;</li>
+        <li>
+          três entes sorteados com o último RREO baixado de novo do SICONFI e comparado, célula
+          por célula, com o que está publicado.
+        </li>
+      </ul>
+      <p>
+        Uma UF que não passa fica fora do site, ou com a versão publicada antes, sem atrasar as
+        demais. O resultado de cada UF fica no arquivo <code>manifesto.json</code> do site.
+      </p>
+      <ul>
+        <li>
+          <strong>Ranking:</strong> a posição de cada município aparece na UF e no Brasil, entre as
+          UFs já no site. As âncoras da v1.1 foram calibradas com os municípios de SP e valem sem
+          mudança para as outras UFs.
+        </li>
+        <li>
+          <strong>Estados e Distrito Federal:</strong> mostram pessoal, liquidez e investimento,
+          sem nota e sem ranking. A autonomia não aparece: a fórmula soma as cotas-parte de ICMS,
+          IPVA e ITR que o município recebe, e no estado o ICMS já está inteiro na receita
+          tributária, então o número não seria comparável.
+        </li>
+        <li>
+          <strong>Brasília:</strong> consta no SICONFI como município, mas sem nenhuma entrega; as
+          contas são as do Distrito Federal. Fica fora do ranking municipal e leva à página do DF.
+        </li>
+        <li>
+          <strong>Fernando de Noronha:</strong> é distrito estadual de Pernambuco, não município;
+          as contas estão nas do estado.
+        </li>
+        <li>
+          <strong>Boa Esperança do Norte/MT</strong> (instalado em 2025): não tem desenho na
+          malha mínima do IBGE. Aparece na tabela do ranking e fica fora do mapa.
+        </li>
+      </ul>
+
       <h3>Limitações conhecidas</h3>
       <ul>
         <li>Os dados são declarados pelos entes e podem ser retificados depois: a nota muda quando os relatórios mudam.</li>
@@ -292,7 +338,7 @@ export default function Metodologia() {
         <li>A liquidez considera só o Executivo; o caixa da Câmara não entra.</li>
         <li>Os limites das normalizações (“pior” e “melhor”) são escolhas desta versão, registradas no arquivo de regras.</li>
         <li>A transparência mede presença dos relatórios, não pontualidade nem qualidade: em SP, 99,3% dos casos têm 100%.</li>
-        <li>Municípios ainda não coletados aparecem sem nota.</li>
+        <li>Municípios ainda não coletados aparecem sem nota; UFs que não passaram no portão de qualidade ainda não aparecem.</li>
       </ul>
 
       <h3>Auditoria: de cada número até a resposta original</h3>
