@@ -46,6 +46,19 @@ Em 2026-10-08 havia uma execução de teste do workflow "Coleta" em andamento no
   Causa provável: milhares de consultas pequenas ao banco, que fica em São Paulo
   (`sa-east-1`), a partir das máquinas do GitHub.
 
+## Primeira execução completa no Replit (run 6qmcl, 09/10/2026)
+
+- Run now às 09:11 (horário de Brasília), depois do Pull + Republish com os PRs #26 a #28.
+- Terminou em **7.803 s (2 h 10 min)**, com `Fontes com falha: nenhuma` e
+  `Site publicado: site-20261009-142118`: 3.058 arquivos, 645 municípios, 8.043 políticos,
+  1.826 arquivos regravados.
+- Sem `IdleInTransactionSessionTimeout`, a falha da execução 6pfw6 (PR #28). As emendas
+  vieram pela API do Portal da Transparência, com a chave (1.711 registros, PR #27). A
+  Câmara respondeu HTTP 504 uma vez e passou na nova tentativa.
+- Essa duração, com a base já coletada, é cerca de 20% do limite de 11 h do Replit. Mesmo
+  assim, uma coleta inteira no Actions não caberia: a etapa de RREO/RGF sozinha levou 4h02
+  lá, contra cerca de 54 min no Replit.
+
 ## Decisão
 
 **B) Replit Scheduled continua como coleta oficial.** O workflow "Coleta" do Actions fica

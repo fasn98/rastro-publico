@@ -143,6 +143,19 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
    - o rodapé com a data da coleta.
 5. Volte ao passo 6.5 e troque para o agendamento **semanal**.
 
+## Duração e execuções de referência
+
+| Execução | Data | Resultado | Duração |
+|---|---|---|---|
+| 6qmcl (Run now) | 09/10/2026, início 09:11 (horário de Brasília) | **primeira execução de produção completa**: `Fontes com falha: nenhuma`; `Site publicado: site-20261009-142118` (3.058 arquivos, 645 municípios, 8.043 políticos, 1.826 regravados); sem `IdleInTransactionSessionTimeout`; emendas pela API do Portal da Transparência (1.711 registros); a Câmara respondeu HTTP 504 uma vez e passou na nova tentativa | 7.803 s (2 h 10 min) |
+
+- **Duração de referência:** cerca de **2 h 10 min** para SP, com a base já coletada. É uma
+  única medida; esta tabela é atualizada com as próximas execuções semanais. Fica perto de
+  20% do limite de 11 h do Scheduled.
+- A primeira coleta do zero é mais longa (passo 6.2).
+- Uma fonte que falha alonga a execução em até 7 minutos de espera por tentativa
+  (1, 2 e 4 minutos), além do tempo de cada tentativa.
+
 ## Operação
 
 > **Nunca faça Republish nem Run now enquanto houver execução em andamento. Confira a aba
