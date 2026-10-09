@@ -249,6 +249,7 @@ def test_travas_desligadas_nao_vao_para_o_site(
         "pol_publicar_tse": tse_ == "1",
         "pol_publicar_tse_2026": tse_2026 == "1",
         "pol_publicar_emendas": emendas == "1",
+        "pol_publicar_gestoes": False,  # padrão (ADR-0018): desligada até a aprovação
     }
     texto = "".join(p.read_text() for p in dados.rglob("*.json"))
     vereador = coletado.get(PolPolitico, min(tse_2024))

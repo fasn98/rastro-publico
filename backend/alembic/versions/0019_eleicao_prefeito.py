@@ -41,9 +41,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("cod_ibge", "cd_eleicao", name="uq_pol_eleicao_prefeito"),
     )
     op.create_index("ix_pol_eleicao_prefeito_cod_ibge", "pol_eleicao_prefeito", ["cod_ibge"])
-    op.create_index(
-        "ix_pol_eleicao_prefeito_resposta_id", "pol_eleicao_prefeito", ["resposta_id"]
-    )
+    op.create_index("ix_pol_eleicao_prefeito_resposta_id", "pol_eleicao_prefeito", ["resposta_id"])
 
 
 def downgrade() -> None:
