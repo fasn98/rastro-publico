@@ -187,6 +187,36 @@ def test_emendas_do_arquivo_com_codigo_ibge_oficial(session, cliente, deputados)
 
 
 @respx.mock
+def test_emendas_do_arquivo_fora_de_sp(session, cliente):
+    """Antes, só SP tinha nome no recorte (KeyError 'AC'). Linha real da Bahia na amostra."""
+    respx.get(transparencia.URL_ARQUIVO).respond(content=_zip_emendas())
+    r = transparencia.coletar_arquivo(session, cliente, "BA", 2023, {})
+    assert r["linhas"] == 1
+    emenda = session.scalars(select(PolEmenda)).one()
+    assert emenda.codigo_emenda == "202528710001" and emenda.cod_ibge_destino == 2924405
+
+
+@respx.mock
+def test_emendas_de_varias_ufs_numa_passada(session, cliente):
+    """A gravação substitui as linhas do arquivo: as UFs vão juntas, sem apagar uma à outra."""
+    respx.get(transparencia.URL_ARQUIVO).respond(content=_zip_emendas())
+    linhas = {
+        uf: transparencia.coletar_arquivo(session, cliente, uf, 2023, {})["linhas"]
+        for uf in ("SP", "BA")
+    }
+    # coletar a BA depois de SP apaga SP: por isso as UFs vão numa passada só
+    assert session.scalar(select(func.count()).select_from(PolEmenda)) == linhas["BA"] == 1
+    r = transparencia.coletar_arquivo(session, cliente, ["SP", "BA"], 2023, {})
+    assert r["linhas"] == linhas["SP"] + linhas["BA"]
+    assert session.scalar(select(func.count()).select_from(PolEmenda)) == r["linhas"]
+
+
+def test_nomes_de_todas_as_ufs():
+    # 26 estados e o DF, sem nome repetido (um nome levaria a duas UFs)
+    assert len(transparencia.NOMES_UF) == len(set(transparencia.NOMES_UF.values())) == 27
+
+
+@respx.mock
 def test_api_emendas_so_publica_com_a_trava_ligada(session, cliente, deputados, monkeypatch):
     from rastro.coletores.base import executar
 
