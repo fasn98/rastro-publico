@@ -13,7 +13,7 @@
 #   rotulo     (opcional) lista de rótulos
 #   colunas    (opcional) lista de colunas; terminado em "*" = prefixo; omitido = todas
 
-versao: 1
+versao: 2
 
 regras:
   # --- RREO Anexo 1: execução orçamentária, autonomia, investimento
@@ -85,7 +85,9 @@ regras:
     usado_por: [divida, liquidez]
 
   # --- RGF Anexo 5: caixa (a linha vem no texto da conta; o código é a coluna)
+  # "TOTAL (IV)": a API omite linhas com valor zero; sem a linha (I), I = IV - II - III
+  # (metodologia v1.1, D2). Versão 2 do mapeamento.
   - anexo: RGF-Anexo 05
     cod_conta: [DisponibilidadeDeCaixaLiquidaAposRP]
-    conta: ["TOTAL DOS RECURSOS*"]
+    conta: ["TOTAL DOS RECURSOS*", "TOTAL (IV)*"]
     usado_por: [liquidez]

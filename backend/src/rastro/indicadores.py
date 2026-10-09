@@ -10,12 +10,14 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from rastro.coletores.ibge import FONTE_POPULACAO
 from rastro.models import (
     ContaDemonstrativo,
     DemonstrativoSiconfi,
     EnteSiconfi,
     EntregaSiconfi,
     ExtratoColetado,
+    PopulacaoIbge,
 )
 
 NOME_PODER = {
@@ -84,8 +86,24 @@ def periodo_final(d: DemonstrativoSiconfi) -> bool:
     return (d.periodicidade, d.periodo) in {("B", 6), ("Q", 3), ("S", 2)}
 
 
+def _prioridade(instituicao: str | None) -> int:
+    """Ordem das instituições que entregam com o código do município: a Prefeitura primeiro.
+
+    Consórcios públicos podem entregar RREO e RGF com o código do município-sede (ex.:
+    Votuporanga/SP). Os indicadores do município são os do relatório da Prefeitura; os
+    consórcios ficam por último (metodologia v1.1, decisão D1).
+    """
+    nome = (instituicao or "").strip().lower()
+    if nome.startswith("prefeitura"):
+        return 0
+    if nome.startswith(("consórcio", "consorcio")):
+        return 2
+    return 1
+
+
 def _ultimo(session: Session, cod_ibge: int, exercicio: int, prefixo: str):
-    """Demonstrativos do último período disponível (RREO ou RGF, completo ou simplificado)."""
+    """Demonstrativos do último período disponível (RREO ou RGF, completo ou simplificado),
+    por poder e com a Prefeitura antes das demais instituições (ver `_prioridade`)."""
     base = select(DemonstrativoSiconfi).where(
         DemonstrativoSiconfi.cod_ibge == cod_ibge,
         DemonstrativoSiconfi.exercicio == exercicio,
@@ -94,12 +112,16 @@ def _ultimo(session: Session, cod_ibge: int, exercicio: int, prefixo: str):
     ultimo = session.scalars(base.order_by(DemonstrativoSiconfi.periodo.desc()).limit(1)).first()
     if not ultimo:
         return []
-    return session.scalars(
+    demonstrativos = session.scalars(
         base.where(
             DemonstrativoSiconfi.periodo == ultimo.periodo,
             DemonstrativoSiconfi.periodicidade == ultimo.periodicidade,
-        ).order_by(DemonstrativoSiconfi.poder, DemonstrativoSiconfi.instituicao)
+        )
     ).all()
+    return sorted(
+        demonstrativos,
+        key=lambda d: (d.poder or "", _prioridade(d.instituicao), d.instituicao or ""),
+    )
 
 
 def _referencia(d: DemonstrativoSiconfi) -> dict:
@@ -109,6 +131,7 @@ def _referencia(d: DemonstrativoSiconfi) -> dict:
         "periodicidade": d.periodicidade,
         "periodo": d.periodo,
         "periodo_final": periodo_final(d),
+        "instituicao": d.instituicao,
     }
 
 
@@ -269,12 +292,24 @@ def liquidez(session: Session, cod_ibge: int, exercicio: int) -> dict | None:
     a5 = _celulas(session, d.id, "RGF-Anexo 05")
     cod = "DisponibilidadeDeCaixaLiquidaAposRP"
     nao_vinculados = a5.get_conta("TOTAL DOS RECURSOS NÃO VINCULADOS*", cod)
-    vinculados = None
+    vinculados = rpps = total = None
     for _rot, c, txt, _col, valor in a5.linhas:
-        # (II) vinculados exceto RPPS; o RPPS (III) fica de fora
-        if c == cod and txt.startswith("TOTAL DOS RECURSOS VINCULADOS") and "AO RPPS (" not in txt:
-            vinculados = valor
-            break
+        if c != cod:
+            continue
+        # (II) vinculados exceto RPPS; o RPPS (III) fica de fora da liquidez
+        if txt.startswith("TOTAL DOS RECURSOS VINCULADOS") and "AO RPPS (" not in txt:
+            vinculados = valor if vinculados is None else vinculados
+        elif txt.startswith("TOTAL DOS RECURSOS VINCULADOS AO RPPS"):
+            rpps = valor if rpps is None else rpps
+        elif txt.startswith("TOTAL (IV)"):
+            total = valor if total is None else total
+    # A API não devolve linhas com valor zero. Sem a linha (I) mas com o total (IV), a
+    # própria soma do relatório dá o valor: I = IV - II - III (metodologia v1.1, D2).
+    derivado = nao_vinculados is None and total is not None
+    if derivado:
+        nao_vinculados = total - (vinculados or 0) - (rpps or 0)
+        if nao_vinculados == 0:
+            nao_vinculados = abs(nao_vinculados)  # sem "-0,00"
     unidade = "Quadrimestre" if d.periodicidade == "Q" else "Semestre"
     rcl = _celulas(session, d.id, "RGF-Anexo 02").get(
         "RGF2ReceitaCorrenteLiquida", f"Até o {d.periodo}º {unidade}"
@@ -284,6 +319,8 @@ def liquidez(session: Session, cod_ibge: int, exercicio: int) -> dict | None:
         **_referencia(d),
         "caixa_liquido_nao_vinculado": nao_vinculados,
         "caixa_liquido_vinculado": vinculados,
+        # a linha (I) não veio na API e foi calculada pelo total do próprio relatório
+        "nao_vinculados_derivado": derivado,
         "rcl": rcl,
         "percentual": _razao(nao_vinculados, rcl, 100),
         # contexto, fora da nota: não vinculados + vinculados (exceto RPPS)
@@ -318,7 +355,8 @@ LIMITE_POPULACAO_SEMESTRAL = 50_000
 
 def transparencia(session: Session, cod_ibge: int, exercicio: int) -> dict | None:
     """Relatórios obrigatórios disponíveis na API ÷ esperados, em 4 blocos de peso igual:
-    RREO (6 bimestres), RGF do Executivo, RGF do Legislativo e DCA. PROVISÓRIO.
+    RREO (6 bimestres), RGF do Executivo, RGF do Legislativo e DCA. Desde a metodologia v1.1,
+    multiplica a média dos indicadores fiscais no ranking.
 
     "Disponível" = o ente entregou e a API devolveu as linhas. Retificações não penalizam
     e a pontualidade não é medida (a data do extrato muda quando o ente retifica).
@@ -379,7 +417,7 @@ def transparencia(session: Session, cod_ibge: int, exercicio: int) -> dict | Non
         "periodicidade_rgf": periodicidade,
         "blocos": blocos,
         "indice": round(indice, 4),
-        "provisorio": True,
+        "provisorio": False,  # composição e uso aprovados na metodologia v1.1
     }
 
 
@@ -394,17 +432,48 @@ def exercicios_disponiveis(session: Session, cod_ibge: int) -> list[int]:
     )
 
 
+def per_capita(
+    session: Session, cod_ibge: int, exercicio: int, aut: dict | None, inv: dict | None
+) -> dict | None:
+    """Receita local e investimento liquidado por habitante, com a população oficial do IBGE
+    mais recente até o ano do exercício (2024 e 2025: estimativas da tabela 6579; 2023:
+    Censo 2022, tabela 4709). Só contexto: fora da nota do ranking (metodologia v1.1, D6).
+    """
+    pop = session.scalars(
+        select(PopulacaoIbge)
+        .where(PopulacaoIbge.cod_ibge == cod_ibge, PopulacaoIbge.ano <= exercicio)
+        .order_by(PopulacaoIbge.ano.desc())
+    ).first()
+    if pop is None or not pop.populacao:
+        return None
+
+    def por_hab(valor: Decimal | None) -> Decimal | None:
+        return None if valor is None else round(valor / pop.populacao, 2)
+
+    return {
+        "populacao": pop.populacao,
+        "ano_populacao": pop.ano,
+        "fonte_populacao": FONTE_POPULACAO.get(pop.tabela),
+        "resposta_id_populacao": pop.resposta_id,
+        "receita_local": por_hab(aut and aut["receita_local"]),
+        "investimento_liquidado": por_hab(inv and inv["liquidado"]),
+    }
+
+
 def indicadores(session: Session, cod_ibge: int, exercicio: int) -> dict:
+    aut = autonomia(session, cod_ibge, exercicio)
+    inv = investimento(session, cod_ibge, exercicio)
     return {
         "cod_ibge": cod_ibge,
         "exercicio": exercicio,
         "pessoal": pessoal(session, cod_ibge, exercicio),
         "divida": divida(session, cod_ibge, exercicio),
         "execucao": execucao(session, cod_ibge, exercicio),
-        "autonomia": autonomia(session, cod_ibge, exercicio),
+        "autonomia": aut,
         "liquidez": liquidez(session, cod_ibge, exercicio),
-        "investimento": investimento(session, cod_ibge, exercicio),
+        "investimento": inv,
         "transparencia": transparencia(session, cod_ibge, exercicio),
+        "per_capita": per_capita(session, cod_ibge, exercicio, aut, inv),
     }
 
 

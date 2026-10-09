@@ -15,6 +15,7 @@ from rastro import indicadores as ind
 from rastro import ranking as rk
 from rastro.api.auditoria import router as auditoria_router
 from rastro.api.politicos import router as politicos_router
+from rastro.coletores.ibge import FONTE_POPULACAO, TABELA_POPULACAO
 from rastro.db import get_session
 from rastro.models import (
     Coleta,
@@ -151,7 +152,7 @@ def obter_municipio(cod_ibge: int, session: SessionDep):
     ente = session.get(EnteSiconfi, cod_ibge)
     pop = session.scalars(
         select(PopulacaoIbge)
-        .where(PopulacaoIbge.cod_ibge == cod_ibge)
+        .where(PopulacaoIbge.cod_ibge == cod_ibge, PopulacaoIbge.tabela == TABELA_POPULACAO)
         .order_by(PopulacaoIbge.ano.desc())
     ).first()
     populacao_ibge = None
@@ -160,7 +161,7 @@ def obter_municipio(cod_ibge: int, session: SessionDep):
         populacao_ibge = PopulacaoIbgeOut(
             ano=pop.ano,
             populacao=pop.populacao,
-            fonte="IBGE, Estimativas de População (SIDRA, tabela 6579)",
+            fonte=FONTE_POPULACAO[pop.tabela],
             url_fonte=resposta.url if resposta else None,
             resposta_id=pop.resposta_id,
         )
@@ -220,12 +221,13 @@ class Referencia(BaseModel):
     periodicidade: str
     periodo: int
     periodo_final: bool
+    # instituição que entregou o relatório (v1.1: sempre a Prefeitura, se houver)
+    instituicao: str | None = None
 
 
 class Pessoal(Referencia):
     poder: str | None
     nome_poder: str | None
-    instituicao: str | None
     despesa_total_pessoal: Decimal | None
     rcl_ajustada: Decimal | None
     percentual: Decimal | None
@@ -270,6 +272,8 @@ class Autonomia(Referencia):
 class Liquidez(Referencia):
     caixa_liquido_nao_vinculado: Decimal | None
     caixa_liquido_vinculado: Decimal | None
+    # a linha (I) não veio na API: calculada como IV - II - III (metodologia v1.1, D2)
+    nao_vinculados_derivado: bool = False
     rcl: Decimal | None
     percentual: Decimal | None
     percentual_com_vinculados: Decimal | None
@@ -281,6 +285,15 @@ class Investimento(Referencia):
     restos_a_pagar_nao_processados: Decimal | None
     receita_realizada: Decimal | None
     percentual: Decimal | None
+
+
+class PerCapita(BaseModel):
+    populacao: int
+    ano_populacao: int
+    fonte_populacao: str | None
+    resposta_id_populacao: int | None
+    receita_local: Decimal | None
+    investimento_liquidado: Decimal | None
 
 
 class BlocoTransparencia(BaseModel):
@@ -306,6 +319,7 @@ class IndicadoresAno(BaseModel):
     liquidez: Liquidez | None
     investimento: Investimento | None
     transparencia: Transparencia | None
+    per_capita: PerCapita | None = None
 
 
 class Indicadores(IndicadoresAno):
@@ -336,6 +350,7 @@ class ItemRanking(BaseModel):
     cod_ibge: int
     nome: str
     populacao: int | None
+    ano_populacao: int | None
     faixa: str | None
     nota: Decimal | None
     indicadores_faltantes: int
@@ -358,6 +373,8 @@ class DetalheRanking(BaseModel):
     hash_metodologia: str
     calculado_em: datetime
     exercicios: str
+    populacao: int | None
+    ano_populacao: int | None
     faixa: str | None
     nota: Decimal | None
     indicadores_faltantes: int
@@ -403,6 +420,7 @@ def _item(n: NotaRanking, nome: str) -> dict:
         "cod_ibge": n.cod_ibge,
         "nome": nome,
         "populacao": n.populacao,
+        "ano_populacao": n.ano_populacao,
         "faixa": n.faixa,
         "nota": n.nota,
         "indicadores_faltantes": n.indicadores_faltantes,

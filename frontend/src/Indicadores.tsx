@@ -134,6 +134,7 @@ function NotaRanking({ cod }: { cod: number }) {
           <span className="sub">
             {nota.posicao_geral}º de {nota.total_com_nota} em SP · {nota.posicao_faixa}º de {nota.total_faixa} na
             faixa “{nota.faixa}”
+            {nota.ano_populacao && ` (população IBGE ${nota.ano_populacao})`}
             {nota.indicadores_faltantes > 0 && ` · ${nota.indicadores_faltantes} indicador(es) não reportado(s)`}
           </span>
         </div>
@@ -147,7 +148,8 @@ function NotaRanking({ cod }: { cod: number }) {
         ))}
       </ul>
       <p className="sub">
-        <a href="#/ranking">Ver ranking</a> · <a href="#/metodologia">metodologia</a> · *provisório
+        <a href="#/ranking">Ver ranking</a> · <a href="#/metodologia">metodologia</a> · *multiplica a
+        média dos 4 indicadores fiscais
       </p>
     </div>
   );
@@ -187,6 +189,9 @@ export default function Indicadores({ cod }: { cod: number }) {
     );
 
   const { pessoal, divida, execucao, autonomia, liquidez, investimento, transparencia } = dados;
+  const pc = dados.per_capita ?? null;
+  const porHab = (v: string | null | undefined) =>
+    pc && v != null ? `${reais(v)} por habitante` : null;
   const ref = pessoal[0] ?? divida;
 
   return (
@@ -257,6 +262,12 @@ export default function Indicadores({ cod }: { cod: number }) {
                   <Status situacao={p.situacao} />
                   <LegendaLimites limites={limites} />
                 </div>
+                {(num(p.percentual) ?? 0) > 100 && (
+                  <p className="nota">
+                    Valor declarado acima de 100% da RCL ajustada: mostrado como está no relatório
+                    entregue ao SICONFI; pode ser erro de preenchimento na fonte.
+                  </p>
+                )}
               </div>
             );
           })}
@@ -353,6 +364,7 @@ export default function Indicadores({ cod }: { cod: number }) {
             <span className="sub">
               receita local {reais(autonomia?.receita_local ?? null)} ÷ estrutura administrativa{" "}
               {reais(autonomia?.custo_estrutura ?? null)}
+              {porHab(pc?.receita_local) && <> · receita local: {porHab(pc?.receita_local)}</>}
             </span>
           </div>
           <div className="tile">
@@ -372,10 +384,11 @@ export default function Indicadores({ cod }: { cod: number }) {
               da receita · {reais(investimento?.liquidado ?? null)} liquidados; empenhados{" "}
               {reais(investimento?.empenhado ?? null)}, restos a pagar não processados{" "}
               {reais(investimento?.restos_a_pagar_nao_processados ?? null)}
+              {porHab(pc?.investimento_liquidado) && <> · {porHab(pc?.investimento_liquidado)}</>}
             </span>
           </div>
           <div className="tile">
-            <span className="tile-rotulo">Transparência (provisório)</span>
+            <span className="tile-rotulo">Transparência (relatórios entregues)</span>
             <span className="tile-valor">
               {transparencia ? pct(Number(transparencia.indice) * 100) : "—"}
             </span>
@@ -386,6 +399,26 @@ export default function Indicadores({ cod }: { cod: number }) {
             </span>
           </div>
         </div>
+        {pc && (pc.receita_local != null || pc.investimento_liquidado != null) && (
+          <p className="sub">
+            Por habitante: população de {pc.populacao.toLocaleString("pt-BR")} ({pc.fonte_populacao},{" "}
+            {pc.ano_populacao}). Só contexto: não entra na nota do ranking.
+            {AUDITORIA_ATIVA && pc.resposta_id_populacao && (
+              <>
+                {" "}
+                <a href={urlAuditoria(`/api/respostas/${pc.resposta_id_populacao}/bruto`)} target="_blank" rel="noreferrer">
+                  cópia arquivada
+                </a>
+              </>
+            )}
+          </p>
+        )}
+        {liquidez?.nao_vinculados_derivado && (
+          <p className="nota">
+            A linha “recursos não vinculados (I)” não veio na API do SICONFI, que omite linhas com
+            valor zero. O valor foi calculado pelo total do próprio relatório: (I) = (IV) − (II) − (III).
+          </p>
+        )}
         {liquidez && Number(liquidez.percentual) < 0 && (
           <p className="nota">
             Caixa líquido negativo nos recursos não vinculados: as obrigações a pagar com recursos

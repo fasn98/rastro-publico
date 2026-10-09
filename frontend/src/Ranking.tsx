@@ -156,7 +156,8 @@ export default function RankingPagina() {
         </button>
       )}
       <p className="nota-rodape">
-        * Transparência: indicador provisório. "—" = não reportado. Notas por indicador de 0 a 10.
+        * Transparência: multiplica a média dos 4 indicadores fiscais. "—" = não reportado. Notas
+        por indicador de 0 a 10. Faixas pela estimativa de população do IBGE.
       </p>
     </section>
   );

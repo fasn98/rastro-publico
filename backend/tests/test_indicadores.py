@@ -116,6 +116,7 @@ def test_ente_sem_dados(session):
     assert ind.indicadores(session, 1234567, 2025) == {
         "cod_ibge": 1234567, "exercicio": 2025, "pessoal": [], "divida": None, "execucao": None,
         "autonomia": None, "liquidez": None, "investimento": None, "transparencia": None,
+        "per_capita": None,
     }  # fmt: skip
 
 

@@ -105,13 +105,21 @@ def test_populacao_ibge_grava_e_aparece_no_municipio(session):
     respx.get(ibge.URL_MUNICIPIOS).respond(json=carregar("ibge_municipios.json"))
     # resposta real da API de agregados do IBGE (tabela 6579), gravada
     respx.get(url__startswith=ibge.URL_POPULACAO.split("?")[0]).respond(
-        json=carregar("ibge_populacao_6579.json")
+        json=carregar("ibge_populacao_6579_3anos.json")
+    )
+    # Censo 2022 (tabela 4709), resposta real gravada
+    respx.get(url__startswith=ibge.URL_CENSO_2022.split("?")[0]).respond(
+        json=carregar("ibge_censo2022_4709.json")
     )
     with novo_cliente(req_por_segundo=0, arquivo=ArquivoBruto(session.get_bind())) as client:
         ibge.coletar(session, client)
-        assert ibge.coletar_populacao(session, client) == 3
-        assert ibge.coletar_populacao(session, client) == 3  # upsert, sem duplicar
+        # 3 municípios x (3 estimativas + Censo 2022)
+        assert ibge.coletar_populacao(session, client) == 12
+        assert ibge.coletar_populacao(session, client) == 12  # upsert, sem duplicar
     assert session.get(PopulacaoIbge, (3500105, 2026)).populacao == 35701
+    assert session.get(PopulacaoIbge, (3500105, 2024)).populacao == 35642
+    censo = session.get(PopulacaoIbge, (3500105, 2022))
+    assert (censo.populacao, censo.tabela) == (34687, 4709)
     app.dependency_overrides[get_session] = lambda: session
     try:
         d = TestClient(app).get("/api/municipios/3500105").json()

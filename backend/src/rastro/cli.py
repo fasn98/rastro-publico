@@ -101,6 +101,12 @@ def main(argv: list[str] | None = None) -> int:
     am.add_argument(
         "--podar", action="store_true", help="apaga linhas fora do mapeamento (ficam no bruto)"
     )
+    am.add_argument("--tipo", help='só um tipo de relatório: "RGF" (RGF e RGF Simplificado)')
+    am.add_argument(
+        "--se-mudou",
+        action="store_true",
+        help="não faz nada se esta versão do mapeamento já foi aplicada a esse tipo",
+    )
     r = sub.add_parser("ranking", help="calcula e grava o Ranking Fiscal de uma UF")
     r.add_argument("--uf", required=True)
     sub.add_parser(
@@ -143,7 +149,12 @@ def main(argv: list[str] | None = None) -> int:
         from rastro import reconstrucao
 
         with get_sessionmaker()() as session:
-            resumo = reconstrucao.aplicar_mapeamento(session, podar=args.podar)
+            resumo = reconstrucao.aplicar_mapeamento(
+                session, podar=args.podar, tipo=args.tipo, se_mudou=args.se_mudou
+            )
+        if resumo["pulado"]:
+            print(f"mapeamento {resumo['mapeamento']} já aplicado ({args.tipo or 'todos'})")
+            return 0
         print(
             f"mapeamento {resumo['mapeamento']}: {resumo['reconstruidas']} linhas reconstruídas "
             f"do arquivo bruto, {resumo['podadas']} podadas"
