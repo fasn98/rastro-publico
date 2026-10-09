@@ -163,6 +163,13 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 > andamento sem traceback no log; um Run now abre uma segunda execução, que sai na hora
 > sem fazer nada (ver "Duas execuções em Running" abaixo).
 
+> **No painel Git do Replit, use apenas Pull; nunca Sync Changes nem Push. Os commits locais
+> do Replit são registros de publicação e configuração do app e não devem ir para o
+> GitHub.** Cada Publish cria commits locais ("Published your App", "Update Replit
+> configuration settings"), que aparecem como "Sync Changes N↑". Eles são de cada app: o
+> rastro-coleta (Scheduled) e o rastro-auditoria (Autoscale) usam o mesmo repositório, e a
+> configuração de publicação de um não serve para o outro. O `main` só recebe mudanças por PR.
+
 | Situação | O que fazer |
 |---|---|
 | Ver publicações guardadas | Shell do rastro-coleta: `cd backend && uv run rastro listar-publicacoes` |
@@ -175,7 +182,7 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 | `IdleInTransactionSessionTimeout` (terminating connection due to idle-in-transaction timeout) | O banco de produção encerra a conexão que fica com uma transação aberta e ociosa além de `idle_in_transaction_session_timeout`; o valor aparece no início do log, na linha `Banco de produção: idle_in_transaction_session_timeout = ...` (`rastro conferir-producao`). Em 09/10/2026 (execução 6pfw6) a exportação falhava assim, perto do fim (cerca de 5.000 a 5.500 s). Corrigido no código: a exportação lê em autocommit, e os coletores fecham a transação antes de ir à rede. **Não** se resolve aumentando o limite no servidor. Se voltar a acontecer, o traceback mostra o comando; teste novo em `tests/test_site_transacao_ociosa.py`. |
 | `npm error Exit handler never called!` ou `tsc: not found` no log | A instalação das dependências do frontend quebrou. Elas são instaladas no **build** do deployment (Republish), e a coleta só reinstala se faltar algo, com até 3 tentativas; o npm pode quebrar e ainda sair com código 0, por isso o script confere se `tsc` e `vite` ficaram instalados. Nada é publicado quando isso falha (o site continua como estava). Se o erro aparecer no build, faça o Republish de novo; se aparecer na coleta, a próxima execução tenta de novo. |
 | Execução terminou com erro | Só acontece quando algo crítico falha: banco, migrações, verificação do arquivo bruto, exportação ou verificação do site, ou o envio ao GitHub. Nesses casos nada é publicado e o site continua como estava; veja a última mensagem de erro no log. |
-| Código novo no `main` | nos dois apps: Git → **Pull**, depois **Publish** |
+| Código novo no `main` | nos dois apps: Git → **Pull** (nunca Sync Changes nem Push), depois **Publish** |
 | Token vencendo | passo 1.4 |
 | App reiniciando sem parar (*crash loop*) | Publishing → **Logs**. Se aparecer `ERRO: RASTRO_PAPEL` ou `ERRO: o Secret RASTRO_PAPEL não está definido`, corrija o Secret em Publishing → Production app secrets (`coleta` ou `auditoria`) e publique de novo. Os Secrets de produção não aparecem no Shell do editor: para testar um valor lá, rode `RASTRO_PAPEL=<valor> bash backend/scripts/replit.sh --validar-papel` |
 | Forçar exportação do zero | a coleta parte do `dados/` publicado e só regrava o que mudou; para refazer tudo, rode `uv run rastro exportar-site --uf SP --saida <pasta> --completa` |
