@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  baixarCsvRankingUF,
   buscarRanking,
   INDICADORES_RANKING,
+  daUf,
+  NOME_UF,
   obterMetodologia,
-  baixarCsvRanking,
+  ufsNoSite,
   type Metodologia,
   type Ranking,
 } from "./api";
@@ -23,7 +26,13 @@ const ABREV: Record<string, string> = {
   transparencia: "Transp.*",
 };
 
-export default function RankingPagina() {
+export default function RankingPagina({ uf }: { uf: string }) {
+  const brasil = uf === "BR";
+  const nomeUf = brasil ? "Brasil" : (NOME_UF[uf] ?? uf);
+  const [ufs, setUfs] = useState<{ ufs: string[]; nacional: boolean }>({ ufs: ["SP"], nacional: false });
+  useEffect(() => {
+    ufsNoSite().then(setUfs).catch(() => undefined);
+  }, []);
   const [faixa, setFaixa] = useState("");
   const [busca, setBusca] = useState("");
   const [semNota, setSemNota] = useState(false);
@@ -35,14 +44,20 @@ export default function RankingPagina() {
 
   useEffect(() => {
     obterMetodologia().then(setMet).catch((e: Error) => setErro(e.message));
-    buscarRanking({ uf: "SP", faixa: "", busca: "" })
-      .then(setTodos)
-      .catch((e: Error) => setErro(e.message));
   }, []);
 
   useEffect(() => {
+    setTodos(null);
+    setErro(null);
+    setLimite(100);
+    buscarRanking({ uf, faixa: "", busca: "" })
+      .then(setTodos)
+      .catch((e: Error) => setErro(e.message));
+  }, [uf]);
+
+  useEffect(() => {
     const t = setTimeout(() => {
-      buscarRanking({ uf: "SP", faixa, busca: busca.trim() })
+      buscarRanking({ uf, faixa, busca: busca.trim() })
         .then((r) => {
           setDados(r);
           setErro(null);
@@ -50,7 +65,7 @@ export default function RankingPagina() {
         .catch(() => setDados(null));
     }, 250);
     return () => clearTimeout(t);
-  }, [faixa, busca]);
+  }, [uf, faixa, busca]);
 
   const { notas, nomes } = useMemo(() => {
     const notas = new Map<number, number | null>();
@@ -78,20 +93,57 @@ export default function RankingPagina() {
   const linhas = (semNota ? itens : comNota).slice(0, limite);
   const posicao = faixa ? "posicao_faixa" : "posicao_geral";
 
-  if (erro) return <p className="erro">{erro}</p>;
+  const seletor = (
+    <select
+      value={uf}
+      onChange={(e) => (location.hash = `#/ranking/${e.target.value}`)}
+      aria-label="Unidade da Federação"
+    >
+      {ufs.nacional && <option value="BR">Brasil (todas as UFs no site)</option>}
+      {ufs.ufs
+        .filter((u) => u !== "DF")
+        .map((u) => (
+          <option key={u} value={u}>
+            {NOME_UF[u] ?? u}
+          </option>
+        ))}
+    </select>
+  );
+
+  if (erro)
+    return (
+      <section>
+        <h2>Ranking Fiscal</h2>
+        <div className="filtros">{seletor}</div>
+        <p className="erro">{erro}</p>
+      </section>
+    );
 
   return (
     <section>
-      <h2>Ranking Fiscal — municípios de SP</h2>
+      <h2>Ranking Fiscal — municípios {brasil ? "do Brasil" : daUf(uf)}</h2>
       {todos && (
         <p className="sub">
           Metodologia v{todos.versao} · média dos exercícios {todos.exercicios.replace(/,/g, ", ")} ·
           notas de 0 a 10 · {todos.itens.filter((i) => i.nota !== null).length} de{" "}
           {todos.itens.length} municípios com nota · <a href="#/metodologia">como a nota é calculada</a>
+          {!brasil && uf !== "DF" && (
+            <>
+              {" · "}
+              <a href={`#/estado/${uf}`}>governo do estado (indicadores, sem ranking)</a>
+            </>
+          )}
+        </p>
+      )}
+      {brasil && todos?.ufs && (
+        <p className="sub">
+          UFs no ranking: {todos.ufs.join(", ")}. As demais ainda não passaram no portão de
+          qualidade e entram quando forem aprovadas. O Distrito Federal não tem ranking municipal.
         </p>
       )}
 
       <div className="filtros">
+        {seletor}
         <select value={faixa} onChange={(e) => setFaixa(e.target.value)} aria-label="Faixa populacional">
           <option value="">Todas as faixas populacionais</option>
           {met?.faixas.map((f) => (
@@ -104,14 +156,27 @@ export default function RankingPagina() {
         <button
           className="botao"
           onClick={() =>
-            baixarCsvRanking(visiveis, `ranking-fiscal-sp${faixa ? "-" + faixa.replace(/\W+/g, "-") : ""}.csv`)
+            baixarCsvRankingUF(
+              uf,
+              visiveis,
+              `ranking-fiscal-${uf.toLowerCase()}${faixa ? "-" + faixa.replace(/\W+/g, "-") : ""}.csv`,
+            )
           }
         >
           Exportar CSV
         </button>
       </div>
 
-      <Mapa notas={notas} nomes={nomes} visiveis={visiveis} aoClicar={(c) => (location.hash = `#/municipio/${c}`)} />
+      {!brasil && (
+        <Mapa
+          uf={uf}
+          nomeUf={nomeUf}
+          notas={notas}
+          nomes={nomes}
+          visiveis={visiveis}
+          aoClicar={(c) => (location.hash = `#/municipio/${c}`)}
+        />
+      )}
 
       <div className="ranking-cabecalho">
         <p className="total">
@@ -128,8 +193,10 @@ export default function RankingPagina() {
         <table className="tabela-ranking">
           <thead>
             <tr>
-              <th>{faixa ? "Pos. na faixa" : "Posição"}</th>
+              <th>{faixa ? (brasil ? "Pos. na faixa (Brasil)" : "Pos. na faixa") : brasil ? "Posição no Brasil" : "Posição"}</th>
               <th className="esq">Município</th>
+              {brasil && <th>UF</th>}
+              {brasil && <th title="posição entre os municípios da própria UF">Pos. na UF</th>}
               <th>Nota</th>
               <th className="esq">Faixa</th>
               {INDICADORES_RANKING.map((k) => (
@@ -154,6 +221,8 @@ export default function RankingPagina() {
                     </a>
                   )}
                 </td>
+                {brasil && <td>{i.uf}</td>}
+                {brasil && <td>{i.posicao_uf ?? "—"}</td>}
                 <td className="nota-final">{i.nota === null ? "sem nota" : nota10(i.nota)}</td>
                 <td className="esq">{i.faixa}</td>
                 {INDICADORES_RANKING.map((k) => (

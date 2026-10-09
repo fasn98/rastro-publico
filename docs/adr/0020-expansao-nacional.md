@@ -70,10 +70,12 @@ Projeção nacional:
    - Uma UF reprovada que já estava no site fica com a versão anterior (grupo `uf:XX`
      do índice); senão, fica fora.
    - A verificação antes de publicar recusa arquivo fiscal de UF fora do site.
-   - SP: até o PR das telas, os arquivos de sempre (`municipios.json`, `ranking.json`,
-     `municipios/35*.json`, com os políticos) continuam saindo como antes, para o site
-     atual não quebrar; o portão vale para os arquivos novos de SP. No PR das telas, SP
-     passa para os mesmos arquivos por UF.
+   - SP: os arquivos de sempre (`municipios.json`, `ranking.json`, `ranking.csv` e
+     `municipios/35*.json`, com os políticos) continuam saindo como antes. A tela de
+     políticos (só SP) lê o `municipios.json`, e o CSV de SP sai do `ranking.csv`. O
+     portão vale para os arquivos novos de SP (`ranking/SP.json`, `estados/SP.json`, a
+     busca e o ranking do Brasil). As telas (PR 3) leem os arquivos por UF e, sem eles
+     (exportação antiga), voltam aos de SP.
 7. **Arquivos novos do site:** `busca`, `ranking/{UF}`, `ranking/BR`, `geo/{UF}` e
    `estados/{UF}`, aprovados como parte da expansão (ADR-0019). O formato de
    `municipios/{cod}.json` não muda.
