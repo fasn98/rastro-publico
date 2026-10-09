@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   obterIndicadores,
   obterNota,
+  ufDoCodigo,
   type DetalheRanking,
   type Indicadores as Dados,
   type Situacao,
@@ -11,12 +12,12 @@ import { nota10 } from "./Ranking";
 import Evolucao from "./Evolucao";
 import { PrefeitoDoExercicio } from "./Politicos";
 
-const num = (v: string | null) => (v === null ? null : Number(v));
+export const num = (v: string | null) => (v === null ? null : Number(v));
 
-const pct = (v: number | null) =>
+export const pct = (v: number | null) =>
   v === null ? "—" : `${v.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
 
-const reais = (v: string | null) =>
+export const reais = (v: string | null) =>
   v === null
     ? "—"
     : Number(v).toLocaleString("pt-BR", {
@@ -26,7 +27,7 @@ const reais = (v: string | null) =>
         maximumFractionDigits: 1,
       });
 
-const PERIODO = { B: "bimestre", Q: "quadrimestre", S: "semestre" } as const;
+export const PERIODO = { B: "bimestre", Q: "quadrimestre", S: "semestre" } as const;
 
 const ROTULO: Record<Situacao, { icone: string; texto: string }> = {
   regular: { icone: "✓", texto: "Dentro dos limites" },
@@ -35,7 +36,7 @@ const ROTULO: Record<Situacao, { icone: string; texto: string }> = {
   acima_maximo: { icone: "✕", texto: "Acima do limite máximo" },
 };
 
-function Status({ situacao }: { situacao: Situacao | null }) {
+export function Status({ situacao }: { situacao: Situacao | null }) {
   if (!situacao) return null;
   const r = ROTULO[situacao];
   return (
@@ -51,7 +52,7 @@ function Status({ situacao }: { situacao: Situacao | null }) {
 type Limite = { nome: string; valor: number | null };
 
 /** Medidor de um percentual contra os limites legais (ticks na trilha). */
-function Medidor({
+export function Medidor({
   valor,
   limites,
   situacao,
@@ -94,7 +95,7 @@ function Medidor({
   );
 }
 
-function LegendaLimites({ limites }: { limites: Limite[] }) {
+export function LegendaLimites({ limites }: { limites: Limite[] }) {
   return (
     <p className="legenda-limites">
       Limites da LRF:{" "}
@@ -133,7 +134,7 @@ function NotaRanking({ cod }: { cod: number }) {
         <div className="nota-linha">
           <span className="nota-grande">{nota10(nota.nota)}</span>
           <span className="sub">
-            {nota.posicao_geral}º de {nota.total_com_nota} em SP · {nota.posicao_faixa}º de {nota.total_faixa} na
+            {nota.posicao_geral}º de {nota.total_com_nota} em {ufDoCodigo(cod)} · {nota.posicao_faixa}º de {nota.total_faixa} na
             faixa “{nota.faixa}”
             {nota.ano_populacao && ` (população IBGE ${nota.ano_populacao})`}
             {nota.indicadores_faltantes > 0 && ` · ${nota.indicadores_faltantes} indicador(es) não reportado(s)`}
@@ -149,7 +150,7 @@ function NotaRanking({ cod }: { cod: number }) {
         ))}
       </ul>
       <p className="sub">
-        <a href="#/ranking">Ver ranking</a> · <a href="#/metodologia">metodologia</a> · *multiplica a
+        <a href={`#/ranking/${ufDoCodigo(cod)}`}>Ver ranking</a> · <a href="#/metodologia">metodologia</a> · *multiplica a
         média dos 4 indicadores fiscais
       </p>
     </div>

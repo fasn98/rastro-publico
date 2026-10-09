@@ -36,18 +36,19 @@ export type MunicipioDetalhe = Municipio & {
 export type Pagina<T> = { total: number; itens: T[] };
 
 import type { Representantes } from "./apiPoliticos";
-import { lerJson, normalizar, urlDados } from "./dados";
+import { expandir, lerJson, normalizar, urlDados, type Compacto } from "./dados";
 
 /** Arquivo estático de um município: detalhe, série, nota, representantes, emendas. */
 export type ArquivoMunicipio = {
   detalhe: MunicipioDetalhe;
   serie: IndicadoresAno[];
   nota: DetalheRanking | null;
+  /** null fora da UF dos políticos: representantes ainda não coletados (ADR-0020) */
   representantes: {
     municipio: Representantes["municipio"];
     // seção inteira, ou referência ao arquivo de uma seção repetida entre municípios
     secoes: (Representantes["secoes"][number] | { ref: string })[];
-  };
+  } | null;
   emendas: unknown;
   /** prefeitos eleitos por mandato e exercício (ADR-0018); ausente em exportações antigas */
   prefeitos?: unknown;
@@ -57,6 +58,66 @@ export const arquivoMunicipio = (cod: number) =>
   lerJson<ArquivoMunicipio>(`municipios/${cod}.json`);
 
 const listaMunicipios = () => lerJson<Municipio[]>("municipios.json");
+
+export const NOME_UF: Record<string, string> = {
+  AC: "Acre", AL: "Alagoas", AM: "Amazonas", AP: "Amapá", BA: "Bahia", CE: "Ceará",
+  DF: "Distrito Federal", ES: "Espírito Santo", GO: "Goiás", MA: "Maranhão",
+  MG: "Minas Gerais", MS: "Mato Grosso do Sul", MT: "Mato Grosso", PA: "Pará", PB: "Paraíba",
+  PE: "Pernambuco", PI: "Piauí", PR: "Paraná", RJ: "Rio de Janeiro", RN: "Rio Grande do Norte",
+  RO: "Rondônia", RR: "Roraima", RS: "Rio Grande do Sul", SC: "Santa Catarina", SE: "Sergipe",
+  SP: "São Paulo", TO: "Tocantins",
+};
+
+const SIGLA_POR_CODIGO: Record<string, string> = {
+  "11": "RO", "12": "AC", "13": "AM", "14": "RR", "15": "PA", "16": "AP", "17": "TO",
+  "21": "MA", "22": "PI", "23": "CE", "24": "RN", "25": "PB", "26": "PE", "27": "AL",
+  "28": "SE", "29": "BA", "31": "MG", "32": "ES", "33": "RJ", "35": "SP", "41": "PR",
+  "42": "SC", "43": "RS", "50": "MS", "51": "MT", "52": "GO", "53": "DF",
+};
+/** UF de um código IBGE (os dois primeiros dígitos). */
+export const ufDoCodigo = (cod: number) => SIGLA_POR_CODIGO[String(cod).slice(0, 2)] ?? "";
+
+// "do Acre", "da Bahia", "de São Paulo": a preposição que cada nome pede
+const PREPOSICAO: Record<string, string> = {
+  AC: "do", AL: "de", AM: "do", AP: "do", BA: "da", CE: "do", DF: "do", ES: "do", GO: "de",
+  MA: "do", MG: "de", MS: "de", MT: "de", PA: "do", PB: "da", PE: "de", PI: "do", PR: "do",
+  RJ: "do", RN: "do", RO: "de", RR: "de", RS: "do", SC: "de", SE: "de", SP: "de", TO: "do",
+};
+/** "do Acre", "de São Paulo" (para "municípios do Acre"). */
+export const daUf = (uf: string) => `${PREPOSICAO[uf] ?? "de"} ${NOME_UF[uf] ?? uf}`;
+
+/** Item da busca nacional (busca.json, ADR-0020). */
+export type ItemBusca = Municipio & {
+  tipo: "municipio" | "estado" | "distrito_federal" | "ver_df" | "distrito_estadual";
+};
+
+/** Para onde leva cada item da busca. */
+export const linkBusca = (b: ItemBusca) =>
+  b.tipo === "municipio"
+    ? `#/municipio/${b.cod_ibge}`
+    : b.tipo === "distrito_estadual"
+      ? `#/estado/${b.uf}/noronha`
+      : `#/estado/${b.uf}`;
+
+let busca: Promise<{ ufs: string[]; nacional: boolean; itens: ItemBusca[] }> | null = null;
+/** Busca nacional; sem busca.json (exportação só de SP), a lista de municipios.json. */
+const listaBusca = () =>
+  (busca ??= lerJson<Compacto & { ufs: string[] }>("busca.json", true).then(async (b) =>
+    b
+      ? { ufs: b.ufs, nacional: true, itens: expandir<ItemBusca>(b) }
+      : {
+          ufs: ["SP"],
+          nacional: false,
+          itens: (await listaMunicipios()).map((m) => ({ ...m, tipo: "municipio" as const })),
+        },
+  ));
+
+/** UFs com a parte fiscal no site (aprovadas no portão de qualidade) e se há os arquivos
+ * nacionais (busca e ranking do Brasil). */
+export const ufsNoSite = async () => {
+  const { ufs, nacional } = await listaBusca();
+  return { ufs, nacional };
+};
 
 export const ufsDisponiveis = async () =>
   [...new Set((await listaMunicipios()).map((m) => m.uf))].sort();
@@ -71,11 +132,11 @@ export async function buscarMunicipios(uf: string, nome: string): Promise<Pagina
 
 /** Sugestões para a busca: sem diferenciar acentos e maiúsculas; quem começa com o termo
  * vem primeiro, depois quem tem uma palavra começando com ele, depois quem o contém. */
-export async function sugerirMunicipios(texto: string, limite = 10): Promise<Municipio[]> {
+export async function sugerirMunicipios(texto: string, limite = 10): Promise<ItemBusca[]> {
   const termo = normalizar(texto.trim());
   if (!termo) return [];
-  const pontuados: [number, Municipio][] = [];
-  for (const m of await listaMunicipios()) {
+  const pontuados: [number, ItemBusca][] = [];
+  for (const m of (await listaBusca()).itens) {
     const nome = normalizar(m.nome);
     const i = nome.indexOf(termo);
     if (i < 0) continue;
@@ -93,6 +154,9 @@ export async function sugerirMunicipios(texto: string, limite = 10): Promise<Mun
 }
 
 export const todosMunicipios = () => listaMunicipios();
+
+/** Todos os itens da busca nacional (ou os municípios de SP, sem busca.json). */
+export const todosDaBusca = async () => (await listaBusca()).itens;
 
 export const obterMunicipio = async (cod: number) => (await arquivoMunicipio(cod)).detalhe;
 
@@ -244,9 +308,11 @@ export type ItemRanking = {
 export type Ranking = {
   versao: string;
   hash_metodologia: string;
-  calculado_em: string;
+  calculado_em?: string;
   exercicios: string;
-  itens: ItemRanking[];
+  /** só no ranking do Brasil: as UFs incluídas */
+  ufs?: string[];
+  itens: (ItemRanking & { uf?: string; posicao_uf?: number | null })[];
 };
 
 type Componente = {
@@ -300,10 +366,41 @@ export type Metodologia = {
   indicadores: Record<IndicadorRanking, RegraIndicador>;
 };
 
-const rankingCompleto = () => lerJson<Ranking>("ranking.json");
+/** Item do ranking nacional (ranking/BR.json): posições no país, na UF e na faixa. */
+export type ItemRankingBR = Omit<ItemRanking, "posicao_geral" | "posicao_faixa"> & {
+  uf: string;
+  posicao_nacional: number | null;
+  posicao_faixa_nacional: number | null;
+  posicao_uf: number | null;
+  posicao_faixa_uf: number | null;
+};
+
+const rankings = new Map<string, Promise<Ranking>>();
+/** Ranking de uma UF (ranking/{UF}.json) ou do Brasil (uf = "BR"); para SP, sem o arquivo
+ * por UF (exportação antiga), o ranking.json. As posições do Brasil vão em posicao_geral e
+ * posicao_faixa, para a mesma tabela servir aos dois. */
+const rankingCompleto = (uf: string) => {
+  if (!rankings.has(uf)) {
+    const p =
+      uf === "BR"
+        ? lerJson<Compacto & Omit<Ranking, "itens">>("ranking/BR.json").then((r) => ({
+            ...r,
+            itens: expandir<ItemRankingBR>(r).map((i) => ({
+              ...i,
+              posicao_geral: i.posicao_nacional,
+              posicao_faixa: i.posicao_faixa_nacional,
+            })),
+          }))
+        : lerJson<Ranking>(`ranking/${uf}.json`, true).then(
+            (r) => r ?? (uf === "SP" ? lerJson<Ranking>("ranking.json") : Promise.reject(new Error(`Sem ranking publicado para ${uf}`))),
+          );
+    rankings.set(uf, p);
+  }
+  return rankings.get(uf)!;
+};
 
 export async function buscarRanking(f: { uf: string; faixa: string; busca: string }): Promise<Ranking> {
-  const r = await rankingCompleto();
+  const r = await rankingCompleto(f.uf);
   const termo = normalizar(f.busca);
   return {
     ...r,
@@ -332,3 +429,43 @@ export async function baixarCsvRanking(cods: Set<number> | null, nomeArquivo: st
 export const obterNota = async (cod: number) => (await arquivoMunicipio(cod)).nota;
 
 export const obterMetodologia = () => lerJson<Metodologia>("metodologia.json");
+
+/** Estado ou DF (estados/{UF}.json, ADR-0020): pessoal, liquidez e investimento, sem
+ * autonomia (fórmula municipal) e sem ranking. */
+export type ArquivoEstado = {
+  ente: { cod_ibge: number; nome: string; uf: string; esfera: "E" | "D" };
+  serie: { exercicio: number; pessoal: Pessoal[]; liquidez: Liquidez | null; investimento: Investimento | null }[];
+};
+
+export const obterEstado = (uf: string) => lerJson<ArquivoEstado>(`estados/${uf}.json`, true);
+
+/** CSV de um ranking por UF ou do Brasil, montado no navegador a partir do JSON publicado
+ * (as mesmas colunas do ranking.csv; para SP, o próprio ranking.csv). */
+export async function baixarCsvRankingUF(uf: string, cods: Set<number> | null, nomeArquivo: string) {
+  if (uf === "SP") return baixarCsvRanking(cods, nomeArquivo);
+  const r = await rankingCompleto(uf);
+  const cols = ["autonomia", "pessoal", "liquidez", "investimento", "transparencia"] as const;
+  const esc = (v: unknown) => (v === null || v === undefined ? "" : String(v).replace(/;/g, ","));
+  const linhas = r.itens
+    .filter((i) => !cods || cods.has(i.cod_ibge))
+    .map((i) =>
+      [
+        i.posicao_geral, i.posicao_faixa, ...(uf === "BR" ? [i.uf, i.posicao_uf] : []), i.cod_ibge,
+        i.nome, i.populacao, i.faixa, i.nota, i.indicadores_faltantes,
+        ...cols.map((c) => i.notas[c]), r.versao, r.hash_metodologia, r.exercicios,
+      ].map(esc).join(";"),
+    );
+  const cabecalho = [
+    "posicao_geral", "posicao_faixa", ...(uf === "BR" ? ["uf", "posicao_uf"] : []), "cod_ibge",
+    "municipio", "populacao", "faixa", "nota", "indicadores_faltantes",
+    ...cols.map((c) => `nota_${c}`), "versao_metodologia", "hash_metodologia", "exercicios",
+  ].join(";");
+  const blob = new Blob(["\uFEFF" + [cabecalho, ...linhas].join("\n") + "\n"], {
+    type: "text/csv;charset=utf-8",
+  });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = nomeArquivo;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}

@@ -1,9 +1,14 @@
 import { useEffect, useId, useRef, useState } from "react";
 import {
+  arquivoMunicipio,
+  linkBusca,
+  daUf,
+  NOME_UF,
   obterMunicipio,
   sugerirMunicipios,
-  todosMunicipios,
-  type Municipio,
+  todosDaBusca,
+  ufsNoSite,
+  type ItemBusca,
   type MunicipioDetalhe,
 } from "./api";
 import { AUDITORIA_ATIVA, urlAuditoria } from "./dados";
@@ -13,15 +18,19 @@ import { PrefeitosEleitos } from "./Politicos";
 const formatarCnpj = (c: string) =>
   c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
 
-const abrir = (c: number) => {
-  location.hash = `#/municipio/${c}`;
+// o que cada item da busca é, quando não é um município comum (ADR-0020)
+const TIPO: Partial<Record<ItemBusca["tipo"], string>> = {
+  estado: "governo do estado",
+  distrito_federal: "Distrito Federal",
+  ver_df: "contas no Distrito Federal",
+  distrito_estadual: "distrito estadual",
 };
 
 /** Campo de busca com sugestões (padrão combobox do WAI-ARIA): setas, Enter e Esc. */
 function BuscaMunicipio() {
   const id = useId();
   const [texto, setTexto] = useState("");
-  const [sugestoes, setSugestoes] = useState<Municipio[]>([]);
+  const [sugestoes, setSugestoes] = useState<ItemBusca[]>([]);
   const [ativa, setAtiva] = useState(-1);
   const [aberta, setAberta] = useState(false);
   const campo = useRef<HTMLInputElement>(null);
@@ -38,11 +47,11 @@ function BuscaMunicipio() {
     };
   }, [texto]);
 
-  const escolher = (m: Municipio) => {
+  const escolher = (m: ItemBusca) => {
     setTexto("");
     setAberta(false);
     campo.current?.blur();
-    abrir(m.cod_ibge);
+    location.hash = linkBusca(m);
   };
 
   const teclado = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -65,7 +74,7 @@ function BuscaMunicipio() {
   return (
     <div className="busca">
       <label htmlFor={`${id}-campo`} className="busca-rotulo">
-        Buscar município
+        Buscar município ou estado
       </label>
       <input
         id={`${id}-campo`}
@@ -112,6 +121,7 @@ function BuscaMunicipio() {
                 onMouseEnter={() => setAtiva(i)}
               >
                 {m.nome} <span className="uf">{m.uf}</span>
+                {TIPO[m.tipo] && <span className="sub"> · {TIPO[m.tipo]}</span>}
               </li>
             ))
           )}
@@ -121,21 +131,36 @@ function BuscaMunicipio() {
   );
 }
 
-/** Lista completa, recolhida: abre só quando pedida. */
+/** Lista completa da UF escolhida, recolhida: abre só quando pedida. */
 function ListaCompleta() {
   const [aberta, setAberta] = useState(false);
-  const [todos, setTodos] = useState<Municipio[] | null>(null);
+  const [ufs, setUfs] = useState<string[]>(["SP"]);
+  const [uf, setUf] = useState("SP");
+  const [todos, setTodos] = useState<ItemBusca[] | null>(null);
   useEffect(() => {
-    if (aberta && !todos) todosMunicipios().then(setTodos);
+    ufsNoSite().then((r) => setUfs(r.ufs.filter((u) => u !== "DF")));
+  }, []);
+  useEffect(() => {
+    if (aberta && !todos) todosDaBusca().then(setTodos);
   }, [aberta, todos]);
+  const daUfLista = (todos ?? []).filter((m) => m.uf === uf && m.tipo === "municipio");
   return (
     <details className="lista-completa" onToggle={(e) => setAberta(e.currentTarget.open)}>
-      <summary>Lista completa de municípios{todos ? ` (${todos.length})` : ""}</summary>
+      <summary>Lista completa de municípios{todos ? ` ${daUf(uf)} (${daUfLista.length})` : ""}</summary>
+      {ufs.length > 1 && (
+        <select value={uf} onChange={(e) => setUf(e.target.value)} aria-label="Unidade da Federação">
+          {ufs.map((u) => (
+            <option key={u} value={u}>
+              {NOME_UF[u] ?? u}
+            </option>
+          ))}
+        </select>
+      )}
       {!todos ? (
         <p className="sub">Carregando…</p>
       ) : (
         <ul className="lista">
-          {todos.map((m) => (
+          {daUfLista.map((m) => (
             <li key={m.cod_ibge}>
               <a href={`#/municipio/${m.cod_ibge}`}>
                 {m.nome} <span>{m.uf}</span>
@@ -197,6 +222,7 @@ function Populacao({ d }: { d: MunicipioDetalhe }) {
 
 export default function Municipios({ cod }: { cod: number | null }) {
   const [detalhe, setDetalhe] = useState<MunicipioDetalhe | null>(null);
+  const [comRepresentantes, setComRepresentantes] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   // o município aberto fica na URL (#/municipio/3550308), para links diretos
@@ -207,6 +233,11 @@ export default function Municipios({ cod }: { cod: number | null }) {
       return;
     }
     setDetalhe(null);
+    setComRepresentantes(false);
+    // fora da UF dos políticos o arquivo vem sem representantes (ADR-0020): sem link
+    arquivoMunicipio(cod)
+      .then((a) => setComRepresentantes(a.representantes !== null))
+      .catch(() => setComRepresentantes(false));
     obterMunicipio(cod)
       .then((d) => {
         setDetalhe(d);
@@ -251,9 +282,11 @@ export default function Municipios({ cod }: { cod: number | null }) {
               </>
             )}
           </dl>
-          <p>
-            <a href={`#/representantes/${detalhe.cod_ibge}`}>Representantes e emendas recebidas</a>
-          </p>
+          {comRepresentantes && (
+            <p>
+              <a href={`#/representantes/${detalhe.cod_ibge}`}>Representantes e emendas recebidas</a>
+            </p>
+          )}
           {detalhe.ente_siconfi && <Indicadores cod={detalhe.cod_ibge} />}
           <PrefeitosEleitos cod={detalhe.cod_ibge} municipio={`${detalhe.nome}/${detalhe.uf}`} />
         </article>

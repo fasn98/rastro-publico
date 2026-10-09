@@ -4,12 +4,15 @@ import StatusFontes, { AvisoFontes } from "./Fontes";
 import Metodologia from "./Metodologia";
 import Municipios from "./Municipios";
 import { PaginaPolitico, QuemRepresenta } from "./Politicos";
+import PaginaEstado from "./Estado";
 import RankingPagina from "./Ranking";
 
 type Rota = {
-  pagina: "municipios" | "ranking" | "metodologia" | "representantes" | "politico" | "fontes";
+  pagina: "municipios" | "ranking" | "metodologia" | "representantes" | "politico" | "fontes" | "estado";
   cod: number | null;
   eleito?: string; // eleito do TSE: arquivo do município (m-{cod}) ou da UF (uf-{UF}-{ano})
+  uf?: string; // ranking (#/ranking/MG, #/ranking/BR) e estado (#/estado/MG)
+  noronha?: boolean; // #/estado/PE/noronha: Fernando de Noronha, distrito estadual
 };
 
 function lerRota(): Rota {
@@ -22,7 +25,10 @@ function lerRota(): Rota {
   if (p) return { pagina: "politico", cod: Number(p[1]) };
   const e = h.match(/^#\/eleito\/(m-\d+|uf-[A-Z]{2}-\d{4})\/(\d+)/);
   if (e) return { pagina: "politico", cod: Number(e[2]), eleito: e[1] };
-  if (h.startsWith("#/ranking")) return { pagina: "ranking", cod: null };
+  const rk = h.match(/^#\/ranking(?:\/([A-Z]{2}))?/);
+  if (rk) return { pagina: "ranking", cod: null, uf: rk[1] };
+  const es = h.match(/^#\/estado\/([A-Z]{2})(\/noronha)?/);
+  if (es) return { pagina: "estado", cod: null, uf: es[1], noronha: !!es[2] };
   if (h.startsWith("#/metodologia")) return { pagina: "metodologia", cod: null };
   if (h.startsWith("#/fontes")) return { pagina: "fontes", cod: null };
   return { pagina: "municipios", cod: null };
@@ -78,7 +84,8 @@ export default function App() {
       </header>
       <AvisoFontes manifesto={manifesto} />
       {rota.pagina === "municipios" && <Municipios cod={rota.cod} />}
-      {rota.pagina === "ranking" && <RankingPagina />}
+      {rota.pagina === "ranking" && <RankingPagina uf={rota.uf ?? "SP"} />}
+      {rota.pagina === "estado" && rota.uf && <PaginaEstado uf={rota.uf} noronha={!!rota.noronha} />}
       {rota.pagina === "metodologia" && <Metodologia />}
       {rota.pagina === "fontes" && <StatusFontes manifesto={manifesto} />}
       {rota.pagina === "representantes" && <QuemRepresenta cod={rota.cod} />}

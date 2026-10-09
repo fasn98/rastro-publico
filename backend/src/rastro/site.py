@@ -73,8 +73,16 @@ from sqlalchemy.orm import Session
 from rastro import fontes
 from rastro import mapeamento as mp
 from rastro import ranking as rk
+from rastro.coletores.siconfi import UF_POR_CODIGO
 from rastro.config import get_settings
-from rastro.models import Coleta, Municipio, PayloadBruto, RespostaBruta
+from rastro.models import (
+    Coleta,
+    EnteSiconfi,
+    Municipio,
+    PayloadBruto,
+    PopulacaoIbge,
+    RespostaBruta,
+)
 
 log = logging.getLogger(__name__)
 
@@ -99,7 +107,13 @@ _CODIGO = ("site.py", "api/politicos.py", "politicos/publicacao.py", "politicos/
 _GERADOS = (
     "manifesto.json", "indice.json", "municipios.json", "municipios", "representantes",
     "ranking.json", "ranking.csv", "metodologia.json", "politicos", "eleitos", "catalogos",
+    "busca.json", "ranking", "estados",
 )  # fmt: skip
+# casos especiais da expansão nacional (ADR-0020)
+BRASILIA = 5300108  # município no SICONFI sem nenhuma entrega: as contas são do DF
+FERNANDO_DE_NORONHA = 2605459  # no IBGE; distrito estadual de PE, não é município no SICONFI
+# indicadores dos estados e do DF: a autonomia usa a fórmula municipal e fica de fora
+INDICADORES_ESTADO = ("pessoal", "liquidez", "investimento")
 
 
 class ErroExportacao(RuntimeError):
@@ -526,6 +540,191 @@ def _sem_vazios(d: dict) -> dict:
     return {k: v for k, v in d.items() if v not in (None, [], {})}
 
 
+# ------------------------------------------------------------------ parte fiscal por UF
+
+
+def _populacoes(s: Session, cods: list[int]) -> dict[int, int]:
+    """População do IBGE mais recente de cada código."""
+    saida: dict[int, tuple[int, int]] = {}
+    for cod, ano, pop in s.execute(
+        select(PopulacaoIbge.cod_ibge, PopulacaoIbge.ano, PopulacaoIbge.populacao).where(
+            PopulacaoIbge.cod_ibge.in_(cods)
+        )
+    ):
+        if cod not in saida or ano > saida[cod][0]:
+            saida[cod] = (ano, pop)
+    return {c: p for c, (_, p) in saida.items()}
+
+
+def _municipios_da_uf(s: Session, uf: str) -> list[tuple[int, str]]:
+    """Municípios do IBGE que são municípios no SICONFI (fora Brasília: ver o DF)."""
+    return list(
+        s.execute(
+            select(Municipio.cod_ibge, Municipio.nome)
+            .join(EnteSiconfi, EnteSiconfi.cod_ibge == Municipio.cod_ibge)
+            .where(
+                Municipio.uf == uf,
+                EnteSiconfi.esfera == "M",
+                Municipio.cod_ibge != BRASILIA,
+            )
+            .order_by(Municipio.nome)
+        ).all()
+    )
+
+
+def _exportar_fiscal(
+    s: Session,
+    get,
+    out: "_Escritor",
+    portao: dict,
+    grupos_ant: dict,
+    grupos: dict,
+    uf_politicos: str,
+    sem_ranking: bool,
+    saida: Path,
+) -> dict:
+    """Arquivos fiscais por UF (ADR-0020), só das UFs aprovadas no portão.
+
+    Cada UF é um grupo do índice (`uf:XX`). Reprovada, ela fica com a versão publicada
+    antes, se houver, ou fora do site. Os municípios da UF dos políticos (SP) continuam nos
+    arquivos de sempre, com representantes e emendas; nas outras UFs, esses campos vão
+    nulos (políticos ainda não coletados lá).
+    """
+    situacao: dict[str, dict] = {}
+    for uf in sorted(portao):
+        r = portao[uf]
+        nome = f"uf:{uf}"
+        ant = grupos_ant.get(nome)
+        if r.get("aprovada"):
+            antes = set(out.arquivos)
+            if uf != uf_politicos:
+                for cod, _ in _municipios_da_uf(s, uf):
+                    out.json(
+                        f"municipios/{cod}.json",
+                        {
+                            "detalhe": get(f"/api/municipios/{cod}"),
+                            "serie": get(f"/api/entes/{cod}/indicadores/serie"),
+                            "nota": None
+                            if sem_ranking
+                            else get(f"/api/ranking/{cod}", opcional=True),
+                            "representantes": None,
+                            "emendas": None,
+                        },
+                    )
+            estado = s.scalars(
+                select(EnteSiconfi).where(EnteSiconfi.uf == uf, EnteSiconfi.esfera.in_(("E", "D")))
+            ).first()
+            if estado:
+                serie = get(f"/api/entes/{estado.cod_ibge}/indicadores/serie")
+                out.json(
+                    f"estados/{uf}.json",
+                    {
+                        "ente": {
+                            "cod_ibge": estado.cod_ibge,
+                            "nome": estado.nome,
+                            "uf": uf,
+                            "esfera": estado.esfera,
+                        },
+                        "serie": [
+                            {
+                                "exercicio": a["exercicio"],
+                                **{k: a.get(k) for k in INDICADORES_ESTADO},
+                            }
+                            for a in serie
+                        ],
+                    },
+                )
+            if uf != "DF" and not sem_ranking:
+                ranking_uf = get(f"/api/ranking?uf={uf}", opcional=True)
+                if ranking_uf:
+                    out.json(f"ranking/{uf}.json", ranking_uf)
+            grupos[nome] = {"impressao": None, "arquivos": sorted(set(out.arquivos) - antes)}
+            publicada = "atual"
+        elif ant and out.intactos(ant["arquivos"]):
+            out.manter(ant["arquivos"])
+            grupos[nome] = ant
+            publicada = "anterior"
+        else:
+            publicada = "fora"
+        situacao[uf] = {
+            "fiscal": {
+                "aprovada": bool(r.get("aprovada")),
+                "publicada": publicada,
+                "motivos": r.get("motivos", []),
+                **{k: r[k] for k in ("completude", "arquivo_bruto", "sorteados") if k in r},
+            }
+        }
+
+    no_site = sorted(u for u, x in situacao.items() if x["fiscal"]["publicada"] != "fora")
+
+    # busca nacional: municípios, estados e os casos especiais das UFs no site
+    busca: list[dict] = []
+    for uf in no_site:
+        if uf != "DF":
+            busca += [
+                {"cod_ibge": c, "nome": n, "uf": uf, "tipo": "municipio"}
+                for c, n in _municipios_da_uf(s, uf)
+            ]
+        for e in s.scalars(
+            select(EnteSiconfi).where(EnteSiconfi.uf == uf, EnteSiconfi.esfera.in_(("E", "D")))
+        ):
+            busca.append(
+                {
+                    "cod_ibge": e.cod_ibge,
+                    "nome": e.nome,
+                    "uf": uf,
+                    "tipo": "estado" if e.esfera == "E" else "distrito_federal",
+                }
+            )
+        if uf == "DF":
+            # Brasília leva ao DF: fora do ranking municipal (ADR-0020)
+            busca.append({"cod_ibge": BRASILIA, "nome": "Brasília", "uf": "DF", "tipo": "ver_df"})
+        if uf == "PE":
+            busca.append(
+                {
+                    "cod_ibge": FERNANDO_DE_NORONHA,
+                    "nome": "Fernando de Noronha",
+                    "uf": "PE",
+                    "tipo": "distrito_estadual",
+                }
+            )
+    pops = _populacoes(s, [b["cod_ibge"] for b in busca])
+    for b in busca:
+        b["populacao"] = pops.get(b["cod_ibge"])
+    busca.sort(key=lambda b: (b["nome"], b["uf"]))
+    out.json("busca.json", {"ufs": no_site, **compactar(busca)})
+
+    # ranking nacional: as notas de cada UF no site, com a posição no país e na faixa
+    if not sem_ranking:
+        itens, cabecalho = [], None
+        for uf in no_site:
+            arquivo = saida / "ranking" / f"{uf}.json"
+            if uf == "DF" or f"ranking/{uf}.json" not in out.arquivos or not arquivo.is_file():
+                continue
+            dados = json.loads(arquivo.read_bytes())
+            cabecalho = cabecalho or {
+                k: dados[k] for k in ("versao", "hash_metodologia", "exercicios")
+            }
+            for i in dados["itens"]:
+                item = {**i, "uf": uf, "posicao_uf": i["posicao_geral"],
+                        "posicao_faixa_uf": i["posicao_faixa"]}  # fmt: skip
+                del item["posicao_geral"], item["posicao_faixa"]
+                item["_nota"] = None if i["nota"] is None else float(i["nota"])
+                itens.append(item)
+        if itens:
+            ordenaveis = [{**i, "nota": i["_nota"]} for i in itens]
+            rk._posicoes(ordenaveis, "posicao_nacional")
+            rk._posicoes(ordenaveis, "posicao_faixa_nacional", "faixa")
+            for i, o in zip(itens, ordenaveis, strict=True):
+                i["posicao_nacional"] = o.get("posicao_nacional")
+                i["posicao_faixa_nacional"] = o.get("posicao_faixa_nacional")
+                del i["_nota"]
+            itens.sort(key=lambda i: (i["posicao_nacional"] or math.inf, i["nome"], i["uf"]))
+            ufs_ranking = sorted({i["uf"] for i in itens})
+            out.json("ranking/BR.json", {**cabecalho, "ufs": ufs_ranking, **compactar(itens)})
+    return situacao
+
+
 # --------------------------------------------------------------------------- exportação
 
 
@@ -536,8 +735,12 @@ def exportar(
     hoje: date | None = None,
     completa: bool = False,
     sem_ranking: bool = False,
+    portao: dict | None = None,
 ) -> dict:
     """Gera (ou atualiza) os arquivos do site em `saida` e devolve o manifesto.
+
+    `portao` (resultado de `rastro portao`): exporta também a parte fiscal de cada UF
+    aprovada (ADR-0020; ver `_exportar_fiscal`).
 
     Se `saida` tiver uma exportação anterior no mesmo formato, os grupos sem mudança são
     reaproveitados e só os arquivos alterados são regravados (`completa` refaz tudo).
@@ -725,6 +928,12 @@ def exportar(
             out.json(caminho, {"chave": chave, **compactar(detalhes)})
             grupos[nome] = {"impressao": imp_eleitos[chave], "arquivos": [caminho]}
 
+        ufs = (
+            _exportar_fiscal(s, get, out, portao, grupos_ant, grupos, uf, sem_ranking, saida)
+            if portao is not None
+            else None
+        )
+
     met = rk.carregar_metodologia()
     mapa = mp.padrao()
     manifesto = {
@@ -738,6 +947,7 @@ def exportar(
         "travas": _travas(),
         "fontes": situacao_fontes,
         "cota_detalhada": list(anos_cota),
+        **({"ufs": ufs} if ufs is not None else {}),
         "contagens": {
             "municipios": len(municipios),
             "municipios_com_nota": sum(1 for i in (ranking or {}).get("itens", []) if i["nota"]),
@@ -919,6 +1129,7 @@ def verificar(saida: Path, anterior: dict | None = None) -> list[str]:
         )
     problemas += _conferir_listas(saida)
     problemas += _conferir_travas(saida, manifesto.get("travas", {}))
+    problemas += _conferir_ufs(saida, manifesto)
     for obrigatorio in ("metodologia.json",):
         if not (saida / obrigatorio).exists():
             problemas.append(f"arquivo obrigatório ausente: {obrigatorio}")
@@ -947,6 +1158,39 @@ def verificar(saida: Path, anterior: dict | None = None) -> list[str]:
                 problemas.append(f"{chave}: {agora} na nova versão, {antes} na publicada")
         if anterior.get("uf") and anterior["uf"] != manifesto["uf"]:
             problemas.append(f"UF mudou de {anterior['uf']} para {manifesto['uf']}")
+    return problemas
+
+
+def _conferir_ufs(saida: Path, manifesto: dict) -> list[str]:
+    """Segunda barreira do portão (ADR-0020): nenhum arquivo fiscal de UF fora do site.
+
+    Os municípios da UF dos políticos (SP) seguem nos arquivos de sempre e não entram
+    nesta conferência.
+    """
+    ufs = manifesto.get("ufs")
+    if ufs is None:
+        return []
+    problemas = []
+    fora = {uf for uf, x in ufs.items() if x["fiscal"]["publicada"] == "fora"}
+    prefixo = {sigla: str(cod) for cod, sigla in UF_POR_CODIGO.items()}
+    for uf in sorted(fora):
+        for caminho in (f"estados/{uf}.json", f"ranking/{uf}.json"):
+            if (saida / caminho).exists():
+                problemas.append(f"{uf} está fora do site (portão), mas há {caminho}")
+        if uf != manifesto.get("uf"):
+            n = len(list((saida / "municipios").glob(f"{prefixo[uf]}?????.json")))
+            if n:
+                problemas.append(
+                    f"{uf} está fora do site (portão), mas há {n} arquivos de município"
+                )
+    for caminho in ("busca.json", "ranking/BR.json"):
+        arq = saida / caminho
+        if not arq.exists():
+            continue
+        dados = json.loads(arq.read_bytes())
+        citadas = set(dados.get("ufs", [])) | {i["uf"] for i in expandir(dados)}
+        if citadas & fora:
+            problemas.append(f"{caminho} cita UF fora do site: {sorted(citadas & fora)}")
     return problemas
 
 

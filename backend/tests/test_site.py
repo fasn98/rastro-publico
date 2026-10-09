@@ -15,6 +15,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
+import httpx
 import pytest
 import respx
 from fastapi.testclient import TestClient
@@ -840,3 +841,125 @@ def test_verificacao_recusa_ranking_com_prefeitos(exportado):
     assert any(
         "ranking.json: o ranking não pode trazer prefeitos" in p for p in site.verificar(dados)
     )
+
+
+# --- expansão nacional: parte fiscal por UF com o portão (ADR-0020) ----------------------
+
+
+@pytest.fixture
+def nacional(banco):
+    """Cadastro real do SICONFI do fixture: SP (estado, capital e Adamantina), DF (com
+    Brasília como município) e a União; IBGE: Adamantina, São Paulo e Boa Esperança do
+    Norte/MT (sem ente no SICONFI)."""
+    from rastro.coletores import siconfi
+    from rastro.models import EnteSiconfi
+
+    banco.add_all(
+        EnteSiconfi(**siconfi.normalizar(e)) for e in carregar("siconfi_entes.json")["items"]
+    )
+    banco.commit()
+    return banco
+
+
+def _portao(**ufs):
+    return {
+        uf: {"aprovada": ok, "motivos": [] if ok else ["coleta incompleta (teste)"]}
+        for uf, ok in ufs.items()
+    }
+
+
+def test_exporta_so_as_ufs_aprovadas_no_portao(nacional, tmp_path):
+    dados = tmp_path / "dados"
+    manifesto = site.exportar(dados, "SP", nacional, portao=_portao(SP=True, DF=True, MT=False))
+    ufs = manifesto["ufs"]
+    assert {u: x["fiscal"]["publicada"] for u, x in ufs.items()} == {
+        "DF": "atual", "MT": "fora", "SP": "atual"
+    }  # fmt: skip
+    assert ufs["MT"]["fiscal"]["motivos"] == ["coleta incompleta (teste)"]
+
+    # estados: só pessoal, liquidez e investimento (a autonomia é fórmula municipal)
+    sp = json.loads((dados / "estados" / "SP.json").read_text())
+    assert sp["ente"] == {"cod_ibge": 35, "nome": "São Paulo", "uf": "SP", "esfera": "E"}
+    assert all(set(a) == {"exercicio", "pessoal", "liquidez", "investimento"} for a in sp["serie"])
+    assert (dados / "estados" / "DF.json").exists()
+    assert not (dados / "estados" / "MT.json").exists()
+    # Brasília fica fora do ranking municipal e não tem arquivo de município: leva ao DF
+    assert not (dados / "municipios" / "5300108.json").exists()
+    assert not (dados / "ranking" / "DF.json").exists()
+
+    busca = site.expandir(json.loads((dados / "busca.json").read_text()))
+    assert sorted((b["uf"], b["nome"], b["tipo"], b["cod_ibge"]) for b in busca) == [
+        ("DF", "Brasília", "ver_df", 5300108),
+        ("DF", "Distrito Federal", "distrito_federal", 53),
+        ("SP", "Adamantina", "municipio", 3500105),
+        ("SP", "São Paulo", "estado", 35),
+        ("SP", "São Paulo", "municipio", 3550308),
+    ]
+    assert json.loads((dados / "busca.json").read_text())["ufs"] == ["DF", "SP"]
+    assert site.verificar(dados) == []
+
+
+def test_verificacao_recusa_arquivo_de_uf_fora_do_site(nacional, tmp_path):
+    dados = tmp_path / "dados"
+    site.exportar(dados, "SP", nacional, portao=_portao(SP=True, DF=False))
+    # segunda barreira: o arquivo real do DF de outra exportação, copiado para esta
+    outra = tmp_path / "outra"
+    site.exportar(outra, "SP", nacional, portao=_portao(SP=True, DF=True))
+    shutil.copy(outra / "estados" / "DF.json", dados / "estados" / "DF.json")
+    assert any(
+        "DF está fora do site (portão), mas há estados/DF.json" in p for p in site.verificar(dados)
+    )
+
+
+def test_uf_reprovada_fica_com_a_versao_publicada_antes(nacional, tmp_path):
+    dados = tmp_path / "dados"
+    site.exportar(dados, "SP", nacional, portao=_portao(SP=True, DF=True))
+    antes = (dados / "estados" / "DF.json").read_bytes()
+    manifesto = site.exportar(dados, "SP", nacional, portao=_portao(SP=True, DF=False))
+    assert manifesto["ufs"]["DF"]["fiscal"]["publicada"] == "anterior"
+    assert (dados / "estados" / "DF.json").read_bytes() == antes
+    assert "DF" in json.loads((dados / "busca.json").read_text())["ufs"]
+    assert site.verificar(dados) == []
+
+
+def test_sem_portao_a_exportacao_fica_como_antes(nacional, tmp_path):
+    dados = tmp_path / "dados"
+    manifesto = site.exportar(dados, "SP", nacional)
+    assert "ufs" not in manifesto
+    assert not (dados / "busca.json").exists() and not (dados / "estados").exists()
+
+
+def test_ranking_nacional_junta_as_ufs_no_site(nacional, tmp_path):
+    """Adamantina/SP com as respostas reais de 2025 (RREO 6B e RGF 2Q) e a população do
+    IBGE gravada: a nota sai no ranking da UF e no nacional, com as posições de cada um."""
+    from test_indicadores_novos import _mock
+
+    from rastro import ranking as rk
+    from rastro.coletores import siconfi_demonstrativos as sd
+    from rastro.coletores.ibge import normalizar_populacao
+    from rastro.models import EnteSiconfi, PopulacaoIbge
+
+    nacional.add_all(
+        PopulacaoIbge(**p) for p in normalizar_populacao(carregar("ibge_populacao_6579.json"))
+    )
+    nacional.commit()
+    with respx.mock:
+        _mock()
+        with httpx.Client() as client:
+            sd.coletar_ente(nacional, client, nacional.get(EnteSiconfi, 3500105), 2025)
+    rk.calcular(nacional, "SP")
+    dados = tmp_path / "dados"
+    site.exportar(dados, "SP", nacional, portao=_portao(SP=True, DF=True))
+
+    assert json.loads((dados / "ranking" / "SP.json").read_text()) == json.loads(
+        (dados / "ranking.json").read_text()
+    )
+    br = json.loads((dados / "ranking" / "BR.json").read_text())
+    assert br["ufs"] == ["SP"] and br["versao"] == "1.1.0"  # o DF não tem ranking municipal
+    itens = {i["cod_ibge"]: i for i in site.expandir(br)}
+    adamantina = itens[3500105]
+    assert adamantina["uf"] == "SP" and adamantina["nota"] is not None
+    assert (adamantina["posicao_nacional"], adamantina["posicao_uf"]) == (1, 1)
+    assert adamantina["posicao_faixa_nacional"] == 1
+    assert itens[3550308]["nota"] is None and itens[3550308]["posicao_nacional"] is None
+    assert site.verificar(dados) == []
