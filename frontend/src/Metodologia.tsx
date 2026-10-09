@@ -283,6 +283,11 @@ export default function Metodologia() {
       <h3>Limitações conhecidas</h3>
       <ul>
         <li>Os dados são declarados pelos entes e podem ser retificados depois: a nota muda quando os relatórios mudam.</li>
+        <li>
+          Cada coleta relê os relatórios do exercício corrente e do anterior. Os exercícios mais
+          antigos são relidos em rodízio de 4 semanas (um quarto dos entes por semana). Por isso,
+          uma retificação de exercício antigo pode levar até 4 semanas para aparecer no site.
+        </li>
         <li>A API omite linhas com valor zero; nesses casos usamos o total declarado ou tratamos a parcela ausente como zero.</li>
         <li>A liquidez considera só o Executivo; o caixa da Câmara não entra.</li>
         <li>Os limites das normalizações (“pior” e “melhor”) são escolhas desta versão, registradas no arquivo de regras.</li>
