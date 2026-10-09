@@ -8,7 +8,8 @@ exercícios 2023 a 2025 (1.935 município-anos), baixado em 09/10/2026. O efeito
 do `ranking.json` publicado em `site-20261009-142118` (v1.1.0). A simulação reproduz a nota
 publicada sem diferença nos 645 municípios: média dos indicadores fiscais × transparência.
 
-Reproduzir: `bash baixar.sh` para cada `cod ano`, depois `python3 analisar.py ranking.json`.
+Reproduzir: `mkdir raw` e `bash baixar.sh <cod> <ano>` para cada código de `codigos.txt` (os 645
+municípios de SP, do IBGE) e cada ano; depois `python3 analisar.py ranking.json`.
 O resultado completo está em `resultado.md`.
 
 ## Prazos legais (Portaria STN nº 642/2019, texto atualizado no SICONFI)
