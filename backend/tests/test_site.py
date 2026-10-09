@@ -812,3 +812,12 @@ def test_prefeitos_eleitos_so_vao_para_o_site_com_a_trava(coletado, engine, tmp_
     assert any(
         "municipios/3550308.json: prefeitos exportados" in p for p in site.verificar(fechado)
     )
+
+
+def test_verificacao_recusa_ranking_com_prefeitos(exportado):
+    """ADR-0018, opção C: o ranking não traz prefeitos, com qualquer trava. Basta a chave."""
+    dados = exportado[0] / "dados"
+    (dados / "ranking.json").write_text(json.dumps({"itens": [{"prefeitos_no_periodo": None}]}))
+    assert any(
+        "ranking.json: o ranking não pode trazer prefeitos" in p for p in site.verificar(dados)
+    )

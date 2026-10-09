@@ -94,9 +94,16 @@ def coletados(session, cliente):
     return session
 
 
-def _resumo(session, nome: str) -> str | None:
+def _sup(data: str, chapa: str) -> str:
+    """Texto aprovado para o exercício a partir do ano da suplementar."""
+    return f"{gestoes.SEM_ELEITO}; a eleição suplementar de {data} elegeu {chapa}"
+
+
+def _textos(session, nome: str) -> dict[int, str] | None:
+    """Exercício -> texto "eleito(a) para o mandato" da janela da nota (2023 a 2025)."""
     eleicoes = gestoes.eleicoes_do_municipio(session, _codigos()[nome])
-    return gestoes.resumo_do_periodo(gestoes.mandatos(eleicoes), JANELA)
+    itens = gestoes.por_exercicio(gestoes.mandatos(eleicoes), JANELA)
+    return None if itens is None else {x["ano"]: x["texto"] for x in itens}
 
 
 def test_fixtures_tem_os_10_municipios_e_casam_com_a_tabela_oficial():
@@ -128,55 +135,78 @@ def test_coleta_grava_todas_as_eleicoes_sem_dados_pessoais(session, cliente):
     ("municipio", "esperado"),
     [
         # 2º turno em 2020; o TSE registra o eleito, não quem exerceu o cargo
-        ("SÃO PAULO", "2023–2024: BRUNO COVAS (PSDB), vice RICARDO NUNES (MDB); "
-                      "2025: RICARDO NUNES (MDB), vice CORONEL MELLO ARAUJO (PL)"),
+        ("SÃO PAULO", [
+            "BRUNO COVAS (PSDB), vice RICARDO NUNES (MDB)",
+            "BRUNO COVAS (PSDB), vice RICARDO NUNES (MDB)",
+            "RICARDO NUNES (MDB), vice CORONEL MELLO ARAUJO (PL)",
+        ]),
         # reeleito: dois mandatos, sem ligar a pessoa (o nome de urna muda)
-        ("CAMPINAS", "2023–2024: DARIO SAADI (REPUBLICANOS), vice WANDÃO DE ALMEIDA (PSB); "
-                     "2025: DÁRIO SAADI (REPUBLICANOS), vice WANDÃO ALMEIDA (PSB)"),
-        ("ADAMANTINA", "2023–2024: MARCIO CARDIM (DEM), vice DINHA (DEM); "
-                       "2025: JOSÉ TIVERON (NOVO), vice LÚCIA HAGA (PRD)"),
+        ("CAMPINAS", [
+            "DARIO SAADI (REPUBLICANOS), vice WANDÃO DE ALMEIDA (PSB)",
+            "DARIO SAADI (REPUBLICANOS), vice WANDÃO DE ALMEIDA (PSB)",
+            "DÁRIO SAADI (REPUBLICANOS), vice WANDÃO ALMEIDA (PSB)",
+        ]),
+        ("ADAMANTINA", [
+            "MARCIO CARDIM (DEM), vice DINHA (DEM)",
+            "MARCIO CARDIM (DEM), vice DINHA (DEM)",
+            "JOSÉ TIVERON (NOVO), vice LÚCIA HAGA (PRD)",
+        ]),
         # suplementar em dezembro de 2023: o eleito original cassado não é nomeado
-        ("ITUPEVA", "2023–2024: sem eleito válido no arquivo atual do TSE; a eleição "
-                    "suplementar de 03/12/2023 elegeu ROGÉRIO CAVALIN (MDB), vice ISAQUE "
-                    "MESSIAS (MDB); 2025: ROGÉRIO CAVALIN (MDB), vice ISAQUE MESSIAS (UNIÃO)"),
+        ("ITUPEVA", [
+            _sup("03/12/2023", "ROGÉRIO CAVALIN (MDB), vice ISAQUE MESSIAS (MDB)"),
+            _sup("03/12/2023", "ROGÉRIO CAVALIN (MDB), vice ISAQUE MESSIAS (MDB)"),
+            "ROGÉRIO CAVALIN (MDB), vice ISAQUE MESSIAS (UNIÃO)",
+        ]),
         # suplementar em 2024: o ano anterior fica só sem eleito
-        ("ANALÂNDIA", "2023: sem eleito válido no arquivo atual do TSE; 2024: sem eleito "
-                      "válido no arquivo atual do TSE; a eleição suplementar de 07/04/2024 "
-                      "elegeu SILVANA PERIN (SOLIDARIEDADE), vice VRÁ MASCIA (UNIÃO); "
-                      "2025: SILVANA PERIN (SOLIDARIEDADE), vice VRA MASCIA (UNIÃO)"),
+        ("ANALÂNDIA", [
+            gestoes.SEM_ELEITO,
+            _sup("07/04/2024", "SILVANA PERIN (SOLIDARIEDADE), vice VRÁ MASCIA (UNIÃO)"),
+            "SILVANA PERIN (SOLIDARIEDADE), vice VRA MASCIA (UNIÃO)",
+        ]),
         # duas suplementares: vale a mais recente com eleito (a de 2021 foi anulada)
-        ("LEME", "2023–2024: sem eleito válido no arquivo atual do TSE; a eleição "
-                 "suplementar de 11/12/2022 elegeu CLAUDEMIR BORGES (PSD), vice CHICO DA "
-                 "FARMACIA (PSD); 2025: CLAUDEMIR BORGES (PSD), vice RAUL NOGUEIRA - XUXU (MDB)"),
-        ("MONGAGUÁ", "2023–2024: MÁRCIO CABEÇA (REPUBLICANOS), vice RAFAEL REDÓ (DEM); 2025: "
-                     "sem eleito válido no arquivo atual do TSE; a eleição suplementar de "
-                     "08/06/2025 elegeu CRISTINA (PP), vice JULIO (PDT)"),
+        ("LEME", [
+            _sup("11/12/2022", "CLAUDEMIR BORGES (PSD), vice CHICO DA FARMACIA (PSD)"),
+            _sup("11/12/2022", "CLAUDEMIR BORGES (PSD), vice CHICO DA FARMACIA (PSD)"),
+            "CLAUDEMIR BORGES (PSD), vice RAUL NOGUEIRA - XUXU (MDB)",
+        ]),
+        ("MONGAGUÁ", [
+            "MÁRCIO CABEÇA (REPUBLICANOS), vice RAFAEL REDÓ (DEM)",
+            "MÁRCIO CABEÇA (REPUBLICANOS), vice RAFAEL REDÓ (DEM)",
+            _sup("08/06/2025", "CRISTINA (PP), vice JULIO (PDT)"),
+        ]),
         # sem eleito no mandato 2025–2028 (sem suplementar / suplementar sem resultado)
-        ("SARUTAIÁ", "2023–2024: ISNAR (PTB), vice SERGIO FERRAZZI (SOLIDARIEDADE); "
-                     "2025: sem eleito válido no arquivo atual do TSE"),
-        ("MACEDÔNIA", "2023–2024: REGINALDO MARCOMINI (PSD), vice VANJA (PL); "
-                      "2025: sem eleito válido no arquivo atual do TSE"),
+        ("SARUTAIÁ", [
+            "ISNAR (PTB), vice SERGIO FERRAZZI (SOLIDARIEDADE)",
+            "ISNAR (PTB), vice SERGIO FERRAZZI (SOLIDARIEDADE)",
+            gestoes.SEM_ELEITO,
+        ]),
+        ("MACEDÔNIA", [
+            "REGINALDO MARCOMINI (PSD), vice VANJA (PL)",
+            "REGINALDO MARCOMINI (PSD), vice VANJA (PL)",
+            gestoes.SEM_ELEITO,
+        ]),
         # partido da eleição, como no TSE (muda entre a suplementar e a ordinária)
-        ("UBARANA", "2023–2024: sem eleito válido no arquivo atual do TSE; a eleição "
-                    "suplementar de 03/12/2023 elegeu DELEI (SOLIDARIEDADE), vice NEI (PP); "
-                    "2025: DELEI (PSD), vice NEI (PP)"),
+        ("UBARANA", [
+            _sup("03/12/2023", "DELEI (SOLIDARIEDADE), vice NEI (PP)"),
+            _sup("03/12/2023", "DELEI (SOLIDARIEDADE), vice NEI (PP)"),
+            "DELEI (PSD), vice NEI (PP)",
+        ]),
     ],
 )  # fmt: skip
-def test_prefeitos_eleitos_no_periodo_da_nota(coletados, municipio, esperado):
-    assert _resumo(coletados, municipio) == esperado
+def test_eleitos_para_o_mandato_em_cada_exercicio_da_nota(coletados, municipio, esperado):
+    assert _textos(coletados, municipio) == dict(zip(JANELA, esperado, strict=True))
 
 
 def test_mandato_nao_coletado_fica_sem_texto(session, cliente):
-    """Sem o arquivo de 2024 no banco, a coluna não é montada pela metade."""
+    """Sem o arquivo de 2024 no banco, os exercícios não são montados pela metade."""
     with respx.mock:
         respx.get(tse.URL_MUNICIPIOS).respond(content=_zip_municipios())
         respx.get(tse.URL_CANDIDATOS.format(ano=2020)).respond(content=_zip(2020))
         gestoes.coletar(session, cliente, 2020, "SP", set(_codigos().values()))
-    assert _resumo(session, "ADAMANTINA") is None
+    assert _textos(session, "ADAMANTINA") is None
     eleicoes = gestoes.eleicoes_do_municipio(session, _codigos()["ADAMANTINA"])
-    assert gestoes.resumo_do_periodo(gestoes.mandatos(eleicoes), [2023, 2024]) == (
-        "2023–2024: MARCIO CARDIM (DEM), vice DINHA (DEM)"
-    )
+    itens = gestoes.por_exercicio(gestoes.mandatos(eleicoes), [2023, 2024])
+    assert [x["texto"] for x in itens] == ["MARCIO CARDIM (DEM), vice DINHA (DEM)"] * 2
 
 
 def test_chapa_sem_vice_eleito_falha_sem_gravar(session, cliente):
@@ -225,31 +255,24 @@ def test_api_mostra_mandatos_e_exercicios(api, monkeypatch):
     assert anos[2025]["mandato"] == "2025–2028"
 
 
-def test_ranking_traz_os_prefeitos_so_com_a_trava(
+def test_ranking_nunca_traz_prefeitos(
     coletados,
     coletado,  # noqa: F811
     populacao_ibge,  # noqa: F811
     monkeypatch,
 ):
+    """Decisão de 09/10/2026 (opção C): nenhum nome de prefeito no ranking, nem com a trava
+    ligada; o site liga cada município à página dele ("ver gestões")."""
     rk.calcular(coletados, "SP")
     app.dependency_overrides[get_session] = lambda: coletados
     try:
         api = TestClient(app)
-        _trava(monkeypatch, "RASTRO_POL_PUBLICAR_GESTOES", "0")
-        item = api.get("/api/ranking").json()["itens"][0]
-        # trava desligada: a chave nem aparece (o ranking.json fica como antes)
-        assert item["cod_ibge"] == COD and "prefeitos_no_periodo" not in item
-        cabecalho = api.get("/api/ranking.csv").content.decode("utf-8-sig").splitlines()[0]
-        assert "prefeitos" not in cabecalho
-
-        _trava(monkeypatch, "RASTRO_POL_PUBLICAR_GESTOES", "1")
-        item = api.get("/api/ranking").json()["itens"][0]
-        assert item["prefeitos_no_periodo"] == (
-            "2023–2024: MARCIO CARDIM (DEM), vice DINHA (DEM); "
-            "2025: JOSÉ TIVERON (NOVO), vice LÚCIA HAGA (PRD)"
-        )
-        texto = api.get("/api/ranking.csv").content.decode("utf-8-sig")
-        linha = next(csv.DictReader(io.StringIO(texto), delimiter=";"))
-        assert linha["prefeitos_eleitos_no_periodo"] == item["prefeitos_no_periodo"]
+        for trava in ("0", "1"):
+            _trava(monkeypatch, "RASTRO_POL_PUBLICAR_GESTOES", trava)
+            r = api.get("/api/ranking")
+            assert r.json()["itens"][0]["cod_ibge"] == COD
+            assert "prefeito" not in r.text.lower() and "MARCIO CARDIM" not in r.text
+            csv_ = api.get("/api/ranking.csv").content.decode("utf-8-sig")
+            assert "prefeito" not in csv_.lower() and "MARCIO CARDIM" not in csv_
     finally:
         app.dependency_overrides.clear()

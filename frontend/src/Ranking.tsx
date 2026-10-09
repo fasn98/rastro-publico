@@ -7,6 +7,7 @@ import {
   type Metodologia,
   type Ranking,
 } from "./api";
+import { obterManifesto } from "./dados";
 import Mapa from "./Mapa";
 
 export const nota10 = (v: number | string | null | undefined) =>
@@ -61,6 +62,13 @@ export default function RankingPagina() {
     return { notas, nomes };
   }, [todos]);
 
+  // link "ver gestões" só quando os prefeitos eleitos estão publicados (pol_publicar_gestoes)
+  const [gestoes, setGestoes] = useState(false);
+  useEffect(() => {
+    obterManifesto()
+      .then((m) => setGestoes(!!m?.travas?.pol_publicar_gestoes))
+      .catch(() => setGestoes(false));
+  }, []);
   const itens = dados?.itens ?? [];
   const visiveis = useMemo(
     () => (faixa || busca ? new Set(itens.map((i) => i.cod_ibge)) : null),
@@ -68,8 +76,6 @@ export default function RankingPagina() {
   );
   const comNota = itens.filter((i) => i.nota !== null);
   const linhas = (semNota ? itens : comNota).slice(0, limite);
-  // coluna só existe quando a exportação traz o dado (trava pol_publicar_gestoes, ADR-0018)
-  const comPrefeitos = itens.some((i) => i.prefeitos_no_periodo);
   const posicao = faixa ? "posicao_faixa" : "posicao_geral";
 
   if (erro) return <p className="erro">{erro}</p>;
@@ -132,7 +138,6 @@ export default function RankingPagina() {
                 </th>
               ))}
               <th title="indicadores sem dado (não reportados)">Faltam</th>
-              {comPrefeitos && <th className="esq">Prefeitos eleitos no período da nota</th>}
             </tr>
           </thead>
           <tbody>
@@ -141,6 +146,13 @@ export default function RankingPagina() {
                 <td>{i[posicao] ?? "—"}</td>
                 <td className="esq">
                   <a href={`#/municipio/${i.cod_ibge}`}>{i.nome}</a>
+                  {gestoes && (
+                    // ADR-0018: nenhum nome de prefeito na linha da nota; só o caminho para a
+                    // página do município, onde ficam os eleitos de cada mandato
+                    <a className="ver-gestoes" href={`#/municipio/${i.cod_ibge}/prefeitos`}>
+                      ver gestões
+                    </a>
+                  )}
                 </td>
                 <td className="nota-final">{i.nota === null ? "sem nota" : nota10(i.nota)}</td>
                 <td className="esq">{i.faixa}</td>
@@ -148,7 +160,6 @@ export default function RankingPagina() {
                   <td key={k}>{nota10(i.notas[k])}</td>
                 ))}
                 <td>{i.indicadores_faltantes}</td>
-                {comPrefeitos && <td className="esq prefeitos">{i.prefeitos_no_periodo ?? "—"}</td>}
               </tr>
             ))}
           </tbody>

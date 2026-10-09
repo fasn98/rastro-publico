@@ -239,9 +239,6 @@ export type ItemRanking = {
   posicao_geral: number | null;
   posicao_faixa: number | null;
   notas: Partial<Record<IndicadorRanking, number | null>>;
-  /** Prefeito e vice eleitos em cada exercício da nota, como no TSE (ADR-0018). Ausente ou
-   * null quando a trava de publicação está desligada. */
-  prefeitos_no_periodo?: string | null;
 };
 
 export type Ranking = {
