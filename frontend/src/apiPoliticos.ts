@@ -212,26 +212,11 @@ export type Lista<T> = Pagina<T> & { mais: boolean };
 // O que uma trava de publicação (Settings.pol_publicar_*) deixa de fora não é exportado:
 // o arquivo traz o mesmo aviso que a API daria, ou não existe.
 import { arquivoMunicipio } from "./api";
-import { lerJson } from "./dados";
+import { expandir, lerJson, type Compacto } from "./dados";
 
 type Secao = Representantes["secoes"][number];
 
-/** Lista compacta: campos iguais em todos os itens em `comum`; textos repetidos em
- * `indices` (o item guarda a posição). Ver rastro/site.py. */
-type Compacto = {
-  comum?: Record<string, unknown>;
-  indices?: Record<string, unknown[]>;
-  itens: Record<string, unknown>[];
-};
-
-export function expandir<T>(c: Compacto): T[] {
-  const indices = Object.entries(c.indices ?? {});
-  return c.itens.map((x) => {
-    const y: Record<string, unknown> = { ...c.comum, ...x };
-    for (const [campo, lista] of indices) y[campo] = lista[x[campo] as number];
-    return y as T;
-  });
-}
+export { expandir };
 
 const TAM_PAGINA = 500;
 const semEmendas: Emendas = {
@@ -243,8 +228,10 @@ const semEmendas: Emendas = {
   itens: [],
 };
 
-export async function obterRepresentantes(cod: number): Promise<Representantes> {
+/** null: representantes do município ainda não coletados (fora da UF dos políticos). */
+export async function obterRepresentantes(cod: number): Promise<Representantes | null> {
   const { representantes } = await arquivoMunicipio(cod);
+  if (representantes === null) return null;
   // seções iguais em todos os municípios (estado, federal) ficam num arquivo só
   const secoes = await Promise.all(
     representantes.secoes.map((s) => ("ref" in s ? lerJson<Secao>(s.ref) : Promise.resolve(s))),

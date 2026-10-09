@@ -5,11 +5,18 @@ type Geometria =
   | { type: "MultiPolygon"; coordinates: number[][][][] };
 type Feicao = { properties: { codarea: string }; geometry: Geometria };
 
-let malha: Promise<Feicao[]> | null = null;
-const carregarMalha = () =>
-  (malha ??= fetch(`${import.meta.env.BASE_URL}geo/sp-municipios.json`)
-    .then((r) => r.json())
-    .then((g) => g.features as Feicao[]));
+// malha mínima do IBGE de cada UF (public/geo/{UF}.json; ver scripts/baixar-malha.sh)
+const malhas = new Map<string, Promise<Feicao[]>>();
+const carregarMalha = (uf: string) => {
+  if (!malhas.has(uf))
+    malhas.set(
+      uf,
+      fetch(`${import.meta.env.BASE_URL}geo/${uf}.json`)
+        .then((r) => r.json())
+        .then((g) => g.features as Feicao[]),
+    );
+  return malhas.get(uf)!;
+};
 
 const L = 800;
 
@@ -25,11 +32,15 @@ const classe = (nota: number) => Math.min(4, Math.floor(nota * 5));
 const fmt = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 export default function Mapa({
+  uf,
+  nomeUf,
   notas,
   nomes,
   visiveis,
   aoClicar,
 }: {
+  uf: string;
+  nomeUf: string;
   notas: Map<number, number | null>;
   nomes: Map<number, string>;
   visiveis: Set<number> | null; // null = todos; os demais ficam esmaecidos
@@ -39,8 +50,9 @@ export default function Mapa({
   const [dica, setDica] = useState<{ x: number; y: number; cod: number } | null>(null);
 
   useEffect(() => {
-    carregarMalha().then(setFeicoes);
-  }, []);
+    setFeicoes(null);
+    carregarMalha(uf).then(setFeicoes);
+  }, [uf]);
 
   const desenho = useMemo(() => {
     if (!feicoes) return null;
@@ -67,13 +79,17 @@ export default function Mapa({
 
   if (!desenho) return <p className="sub">Carregando mapa…</p>;
 
+  // municípios da tabela sem desenho na malha mínima do IBGE (ex.: Boa Esperança do Norte/MT)
+  const desenhados = new Set(desenho.caminhos.map((c) => c.cod));
+  const semDesenho = [...nomes].filter(([cod]) => !desenhados.has(cod)).map(([, n]) => n);
+
   const notaDica = dica ? notas.get(dica.cod) : undefined;
   return (
     <div className="mapa">
       <svg
         viewBox={`0 0 ${L} ${desenho.altura.toFixed(0)}`}
         role="img"
-        aria-label="Mapa dos municípios de São Paulo colorido pela nota do Ranking Fiscal. A tabela abaixo traz os mesmos dados."
+        aria-label={`Mapa dos municípios de ${nomeUf} colorido pela nota do Ranking Fiscal. A tabela abaixo traz os mesmos dados.`}
         onMouseLeave={() => setDica(null)}
       >
         {desenho.caminhos.map(({ cod, d }) => {
@@ -114,6 +130,12 @@ export default function Mapa({
           sem nota
         </span>
       </div>
+      {semDesenho.length > 0 && (
+        <p className="sub">
+          Fora do mapa (sem desenho na malha mínima do IBGE): {semDesenho.join(", ")}. Aparece
+          normalmente na tabela.
+        </p>
+      )}
     </div>
   );
 }

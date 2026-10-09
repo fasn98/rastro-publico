@@ -69,3 +69,20 @@ export type Manifesto = {
 };
 
 export const obterManifesto = () => lerJson<Manifesto>("manifesto.json", true);
+
+/** Lista compacta: campos iguais em todos os itens em `comum`; textos repetidos em
+ * `indices` (o item guarda a posição). Ver `compactar` em rastro/site.py. */
+export type Compacto = {
+  comum?: Record<string, unknown>;
+  indices?: Record<string, unknown[]>;
+  itens: Record<string, unknown>[];
+};
+
+export function expandir<T>(c: Compacto): T[] {
+  const indices = Object.entries(c.indices ?? {});
+  return c.itens.map((x) => {
+    const y: Record<string, unknown> = { ...c.comum, ...x };
+    for (const [campo, lista] of indices) y[campo] = lista[x[campo] as number];
+    return y as T;
+  });
+}

@@ -113,6 +113,7 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
   const [busca, setBusca] = useState("");
   const [municipios, setMunicipios] = useState<Municipio[]>([]);
   const [rep, setRep] = useState<Representantes | null>(null);
+  const [semRepresentantes, setSemRepresentantes] = useState(false);
   const [emendas, setEmendas] = useState<Emendas | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [fontes, setFontes] = useState<SituacaoFonte[]>([]);
@@ -137,8 +138,11 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
   useEffect(() => {
     setRep(null);
     setEmendas(null);
+    setSemRepresentantes(false);
     if (cod === null) return;
-    obterRepresentantes(cod).then(setRep).catch((e: Error) => setErro(e.message));
+    obterRepresentantes(cod)
+      .then((r) => (r === null ? setSemRepresentantes(true) : setRep(r)))
+      .catch((e: Error) => setErro(e.message));
     obterEmendasMunicipio(cod).then(setEmendas).catch((e: Error) => setErro(e.message));
   }, [cod]);
 
@@ -170,6 +174,9 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
         </select>
       </div>
       {erro && <p className="erro">{erro}</p>}
+      {semRepresentantes && (
+        <p className="sub">Representantes deste município ainda não coletados.</p>
+      )}
 
       {rep && (
         <>

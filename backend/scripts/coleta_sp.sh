@@ -12,8 +12,8 @@
 # falha: banco, migrações, verificação do arquivo bruto, exportação/verificação do site ou
 # o envio ao GitHub.
 #
-# O RREO/RGF é coletado para todas as UFs (ADR-0020); o ranking, os políticos e o site
-# continuam só com SP até o portão de qualidade por UF.
+# O RREO/RGF é coletado para todas as UFs (ADR-0020). A parte fiscal de cada UF entra no
+# site só depois de aprovada no portão de qualidade; os políticos continuam só de SP.
 #
 # Variáveis (Secrets do Replit):
 #   DATABASE_URL           banco de produção (criado pelo Replit)
@@ -63,10 +63,24 @@ uv run rastro politicos --uf SP --anos "2023-$ANO_ATUAL" \
   || echo "AVISO: coleta de políticos com falhas; seguem os dados anteriores (resumo no fim)"
 
 echo "== ranking e verificação do arquivo bruto"
-uv run rastro ranking --uf SP
+# cada UF com o seu ranking (o DF fica fora: Brasília não entrega como município)
+uv run rastro ranking --uf TODAS
 uv run rastro verificar-respostas --amostra 50
 
+echo "== portão de qualidade por UF (ADR-0020)"
+# completude, SHA-256 de uma amostra do bruto e 3 entes sorteados conferidos na fonte;
+# só as UFs aprovadas entram no site (a reprovada fica com a versão anterior ou fora).
+# Se o portão em si falhar, o site sai como antes (só SP), com aviso.
+PORTAO="$(mktemp --suffix=.json)"
+rm -f "$PORTAO"
+uv run rastro portao --saida "$PORTAO" \
+  || { echo "AVISO: o portão de qualidade falhou; o site sai só com SP, como antes" >&2; rm -f "$PORTAO"; }
+
 echo "== site estático (incremental: parte do que está publicado no gh-pages)"
+ARGS_PORTAO=()
+if [ -f "$PORTAO" ]; then
+  ARGS_PORTAO=(--portao "$PORTAO")
+fi
 DIST="$RAIZ/frontend/dist"
 # os dados ficam fora do dist: o build do frontend apaga a pasta de saída dele
 DADOS="$RAIZ/site-dados"
@@ -76,7 +90,7 @@ rm -rf "$DIST" "$DADOS"
 uv run rastro baixar-site --saida "$DADOS"
 # commit do manifesto: o que a conferência identificou (o Replit não tem .git) ou o do Git
 RASTRO_COMMIT="${COMMIT_PUBLICADO:-$(git -C "$RAIZ" rev-parse HEAD 2>/dev/null || true)}" \
-  uv run rastro exportar-site --uf SP --saida "$DADOS"
+  uv run rastro exportar-site --uf SP --saida "$DADOS" ${ARGS_PORTAO[@]+"${ARGS_PORTAO[@]}"}
 # as dependências vêm do build do deployment; só reinstala se faltar alguma coisa
 bash scripts/frontend_deps.sh
 (

@@ -206,7 +206,7 @@ uv run rastro ranking --uf SP   # calcula, grava e mostra a distribuição da tr
   (fórmulas, pesos, fontes, escolhas, alternativas descartadas e limitações).
 - **API:** `GET /api/ranking?uf=SP&faixa=...&busca=...`, `GET /api/ranking.csv`,
   `GET /api/ranking/{cod_ibge}`, `GET /api/metodologia`.
-- Mapa: malha municipal do IBGE em `frontend/public/geo/sp-municipios.json`
+- Mapas: malhas mínimas do IBGE em `frontend/public/geo/{UF}.json` (`frontend/scripts/baixar-malha.sh`)
   (`frontend/scripts/baixar-malha.sh` para baixar de novo).
 
 **Antes de publicar:** os limites de autonomia (teto 10), liquidez (20%) e investimento
