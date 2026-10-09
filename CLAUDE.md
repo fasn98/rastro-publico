@@ -60,3 +60,61 @@ verde de novo antes de mesclar.
 - `docs/deploy-replit.md`: deploy (Replit + GitHub Pages), operação e riscos aceitos.
 - Página **Metodologia** do site (`frontend/src/Metodologia.tsx`, rota `#/metodologia`):
   indicadores, ranking, auditoria e fontes.
+
+## Fluxo do squad (desde 2026-10-08)
+
+O projeto usa o fluxo do squad de `~/.claude/CLAUDE.md` e os agentes de `~/.claude/agents/`.
+Onde as regras se chocam, **este arquivo vale** sobre o global.
+
+### Artefatos
+
+- `docs/backlog.md`: tarefas priorizadas (dono: `command`).
+- `docs/adr/NNNN-slug.md`: uma decisão por arquivo (dono: `keystone`). Os ADRs 0001 a 0015
+  registram decisões que já estavam no código ("Aceito retroativo"). Decisão nova começa
+  em "Proposto". Índice em `docs/adr/README.md`.
+- `docs/overview.md`: mapa do sistema em cinco minutos.
+- `docs/handoffs/AAAA-MM-DD-<de>-para-<para>.md`: passagem de bastão entre agentes.
+- A linha de status do ADR é `- **Status:** <valor>`, sem parênteses, para o painel War
+  Room conseguir ler.
+
+### Como as regras do squad se encaixam nas regras deste projeto
+
+- **Portão de aprovação.** Os itens de "Pare e peça aprovação do Fabio" (mapeamento de
+  contas, regra de cruzamento, exceção, publicação de dado novo, mudança de formato)
+  exigem ADR "Aceito" ou aprovação explícita do Fabio antes do código. O mesmo vale para
+  metodologia do ranking, travas, LGPD e segurança.
+- **Git.** O `main` só recebe por PR, um por vez, com CI verde. Isso vale também para
+  `docs/adr/`, `docs/handoffs/` e `docs/backlog.md`: eles são escritos no checkout
+  principal (`/home/fasn98/rastro-publico`), nunca dentro de uma worktree, e chegam ao
+  `main` por PR. Push e abertura de PR passam pelo Fabio (`permissions.ask`).
+- **Worktrees.** `.claude/worktrees/<tarefa>`, branch `feat/<tarefa>` ou `fix/<tarefa>`
+  (ignoradas pelo Git). Tarefas que criam migração do Alembic são serializadas (ADR-0003).
+- **Papéis neste projeto.**
+  - `node-runner`: backend Python (coletores, FastAPI, Alembic, CLI `rastro`, scripts,
+    GitHub Actions, Replit). Não há Node no backend.
+  - `feather`: frontend React (`frontend/src/`). Toda tela lê por `lerJson`, nunca da API.
+  - `scalpel`: pytest com respostas reais em `backend/tests/fixtures/` (ADR-0015).
+    Nenhum dado fictício. Fixture de fonte com dado pessoal entra já redigida.
+  - `reviewer`: além de código e segurança, confere LGPD, rótulos neutros, fonte e link
+    de auditoria de cada número, e travas.
+  - `lexicon`: README, READMEs de módulo, `docs/*.md` e a página Metodologia (o texto; o
+    código da página é de `feather`).
+
+### Testes
+
+- Backend: `cd backend && uv run pytest -q && uv run ruff check . && uv run ruff format --check .`.
+  Sem o banco `rastro_teste`, os testes de banco são **pulados**: pulado não é passou. A
+  referência é o CI (`.github/workflows/ci.yml`, com PostgreSQL 16).
+- Frontend: só `npm run build` (`tsc -b` + `vite build`); ainda não há testes.
+
+## Estado em 2026-10-08
+
+- **Stack:** Python 3.12 + uv, FastAPI, SQLAlchemy 2, Alembic (migrações 0001 a 0017),
+  PostgreSQL 16; React 19 + TypeScript + Vite; site no GitHub Pages; API de auditoria e
+  coleta agendada no Replit.
+- **Em produção, em prévia** (faixa + `noindex`): municípios de SP, indicadores fiscais,
+  Ranking Fiscal v1.0, políticos de SP (Câmara, Senado, cota, TSE 2022/2024/2026, emendas).
+- **CI:** `ci.yml` (backend: ruff + pytest com Postgres; frontend: build) em todo push e
+  PR. `coleta.yml`: coleta no Actions, só manual, em fase de teste.
+- **Em aberto:** ADR-0016 (Actions ou Replit) e PR #24 (proposta do ranking v1.1, draft).
+- **Backlog:** `docs/backlog.md`.

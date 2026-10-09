@@ -11,3 +11,6 @@ dist/
 *.tsbuildinfo
 frontend/public/dados/
 site-dados/
+
+# worktrees dos agentes do squad
+.claude/worktrees/
