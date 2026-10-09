@@ -12,11 +12,15 @@
 # falha: banco, migrações, verificação do arquivo bruto, exportação/verificação do site ou
 # o envio ao GitHub.
 #
+# O RREO/RGF é coletado para todas as UFs (ADR-0020); o ranking, os políticos e o site
+# continuam só com SP até o portão de qualidade por UF.
+#
 # Variáveis (Secrets do Replit):
 #   DATABASE_URL           banco de produção (criado pelo Replit)
 #   RASTRO_GITHUB_TOKEN    token fine-grained, só este repositório, Contents: read and write
 #   RASTRO_URL_AUDITORIA   URL pública da API de auditoria (ex.: https://rastro-auditoria.replit.app)
 #   RASTRO_SIMULAR=1       (opcional) coleta, exporta e verifica, mas não publica o site
+#   RASTRO_LOTE_LIMITE_MIN (opcional) minutos do lote RREO/RGF por execução (padrão 480)
 set -euo pipefail
 # qualquer etapa que falhar diz qual foi e com que código (137 = processo morto pelo
 # sistema, em geral por falta de memória; 143 = encerrado pelo agendador)
@@ -44,8 +48,15 @@ uv run rastro aplicar-mapeamento --tipo RGF --se-mudou
 uv run rastro coletar ibge-municipios ibge-populacao siconfi-entes \
   || echo "AVISO: cadastros com falha; seguem os dados anteriores (resumo no fim)"
 
-echo "== RREO/RGF (código 1 = algum item falhou; fica para a próxima execução)"
-uv run python -m rastro.coletores.siconfi_lote --uf SP --anos "2022-$ANO_ATUAL" || [ $? -eq 1 ]
+echo "== RREO/RGF de todas as UFs (código 1 = algum item falhou; fica para a próxima execução)"
+# Lote nacional (ADR-0020): municípios, estados e DF; primeiro 2023-2025 (os exercícios do
+# ranking v1.1), UF por UF, das UFs com menos municípios para as com mais; depois os demais
+# exercícios. Não começa item novo depois de RASTRO_LOTE_LIMITE_MIN minutos (padrão 480):
+# o que faltar continua na próxima execução, e o resto desta coleta roda dentro do limite
+# de 11 h do Replit. Num lote novo, os exercícios antigos entram em rodízio de 4 semanas.
+uv run python -m rastro.coletores.siconfi_lote --uf TODAS --esfera M E D \
+  --anos "2022-$ANO_ATUAL" --prioridade 2023-2025 \
+  --limite-minutos "${RASTRO_LOTE_LIMITE_MIN:-480}" --rodizio || [ $? -eq 1 ]
 
 echo "== políticos (falha de uma fonte não apaga dados já coletados)"
 uv run rastro politicos --uf SP --anos "2023-$ANO_ATUAL" \

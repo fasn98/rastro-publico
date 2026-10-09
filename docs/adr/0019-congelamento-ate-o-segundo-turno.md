@@ -40,6 +40,12 @@ Até 25/10/2026, inclusive:
 
 A partir de 26/10/2026, os branches congelados voltam à fila normal de PRs, um por vez.
 
+## Adendo (09/10/2026): arquivos novos da expansão nacional
+
+O Fabio aprovou, como parte da expansão nacional (a exceção acima), os arquivos novos do
+site: `busca`, `ranking/{UF}`, `ranking/BR`, `geo/{UF}` e `estados/{UF}`. O formato de
+`municipios/{cod}.json` não muda. Detalhes e demais decisões no ADR-0020.
+
 ## Consequências
 
 - Mais fácil: o que estiver no ar durante a eleição é a v1.1.0, auditável e estável.

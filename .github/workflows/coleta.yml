@@ -52,6 +52,8 @@ jobs:
           RASTRO_URL_AUDITORIA: ${{ vars.RASTRO_URL_AUDITORIA || secrets.RASTRO_URL_AUDITORIA }}
           RASTRO_GITHUB_TOKEN: ${{ github.token }}
           RASTRO_SIMULAR: ${{ inputs.publicar && '0' || '1' }}
+          # o lote RREO/RGF para a tempo de o resto da coleta caber nos 350 min do job
+          RASTRO_LOTE_LIMITE_MIN: "180"
         run: |
           uv run rastro conferir-producao
           uv run rastro coleta-exclusiva bash scripts/coleta_sp.sh
