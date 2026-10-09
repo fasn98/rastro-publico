@@ -254,9 +254,10 @@ export default function Metodologia() {
       {prefeitos && (
         <>
           <p>
-            A coluna “Prefeitos eleitos no período da nota” e a página de cada município mostram o
-            prefeito e o vice <strong>eleitos para o mandato</strong> de cada exercício, como estão
-            no arquivo atual de candidatos do TSE (eleições de 2020 e 2024, com as suplementares).
+            A página de cada município (link “ver gestões” no ranking) mostra o prefeito e o vice
+            <strong> eleitos para o mandato</strong> de cada exercício, como estão no arquivo atual
+            de candidatos do TSE (eleições de 2020 e 2024, com as suplementares). A tabela do
+            ranking não traz nomes: na mesma linha da nota, o nome pareceria uma nota para a pessoa.
             O TSE registra quem foi eleito, não quem exerceu o cargo: renúncia, morte, afastamento
             e interinidade não aparecem. Em São Paulo, por exemplo, o arquivo registra Bruno Covas
             (PSDB) como eleito para 2021–2024; o vice eleito, Ricardo Nunes (MDB), assumiu o cargo

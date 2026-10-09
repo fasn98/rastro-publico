@@ -831,3 +831,12 @@ def test_exportacao_sem_aviso_de_deprecacao_do_starlette():
         text=True,
     )
     assert r.returncode == 0, r.stderr
+
+
+def test_verificacao_recusa_ranking_com_prefeitos(exportado):
+    """ADR-0018, opção C: o ranking não traz prefeitos, com qualquer trava. Basta a chave."""
+    dados = exportado[0] / "dados"
+    (dados / "ranking.json").write_text(json.dumps({"itens": [{"prefeitos_no_periodo": None}]}))
+    assert any(
+        "ranking.json: o ranking não pode trazer prefeitos" in p for p in site.verificar(dados)
+    )
