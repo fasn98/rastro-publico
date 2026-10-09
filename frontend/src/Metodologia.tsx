@@ -260,7 +260,15 @@ export default function Metodologia() {
             O TSE registra quem foi eleito, não quem exerceu o cargo: renúncia, morte, afastamento
             e interinidade não aparecem. Em São Paulo, por exemplo, o arquivo registra Bruno Covas
             (PSDB) como eleito para 2021–2024; o vice eleito, Ricardo Nunes (MDB), assumiu o cargo
-            em 2021, após a morte do titular.
+            em maio de 2021, após a morte do titular (fonte:{" "}
+            <a
+              href="https://www.saopaulo.sp.leg.br/blog/camara-de-sp-empossa-o-prefeito-ricardo-nunes/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Câmara Municipal de São Paulo, 01/01/2025
+            </a>
+            ).
           </p>
           <p>
             Quando uma eleição é anulada, o TSE reescreve o resultado e ela fica sem eleito. Nesses

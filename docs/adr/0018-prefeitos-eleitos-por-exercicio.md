@@ -20,8 +20,8 @@ baixados em 09/10/2026):
   arquivos de 2021, 2023 nem 2025.
 - O TSE registra quem foi **eleito**, não quem exerceu o cargo. Em São Paulo, o arquivo
   traz Bruno Covas (PSDB) para 2021–2024; o vice eleito, Ricardo Nunes (MDB), assumiu
-  em 2021, após a morte do titular. Renúncia, morte, afastamento e interinidade não
-  aparecem.
+  em maio de 2021, após a morte do titular ([Câmara Municipal de São Paulo, 01/01/2025](https://www.saopaulo.sp.leg.br/blog/camara-de-sp-empossa-o-prefeito-ricardo-nunes/)).
+  Renúncia, morte, afastamento e interinidade não aparecem.
 - Na cassação ou no indeferimento, o TSE **reescreve** o resultado original: o vencedor
   passa a "INAPTO / NÃO ELEITO" e a eleição ordinária fica sem eleito. Não há datas de
   posse nem de afastamento (o conjunto "motivo de cassação" também não tem datas).
