@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { INDICADORES_RANKING, obterMetodologia, type Metodologia as Met, type RegraIndicador } from "./api";
+import { obterManifesto } from "./dados";
 
 const n = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 
@@ -65,8 +66,13 @@ function Regra({ chave, r }: { chave: string; r: RegraIndicador }) {
 export default function Metodologia() {
   const [met, setMet] = useState<Met | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [prefeitos, setPrefeitos] = useState(false);
   useEffect(() => {
     obterMetodologia().then(setMet).catch((e: Error) => setErro(e.message));
+    // a explicação da coluna de prefeitos só aparece quando ela está publicada (ADR-0018)
+    obterManifesto()
+      .then((m) => setPrefeitos(!!m?.travas?.pol_publicar_gestoes))
+      .catch(() => setPrefeitos(false));
   }, []);
   if (erro) return <p className="erro">{erro}</p>;
   if (!met) return <p className="sub">Carregando…</p>;
@@ -235,6 +241,35 @@ export default function Metodologia() {
         A v1.0 continua registrada no repositório (<code>metodologia_v1.toml</code>), com a proposta e a
         simulação da mudança em <code>docs/metodologia-v1.1/</code>.
       </p>
+
+      <h3>A nota e as gestões municipais</h3>
+      <p>
+        A nota é a média de vários exercícios ({met.exercicios.join(", ")}) e pode refletir mais de
+        uma gestão: o mandato municipal muda em 1º de janeiro do ano seguinte à eleição, e uma
+        eleição suplementar pode trocar o prefeito no meio do mandato. Os indicadores também
+        dependem de fatores fora do controle do prefeito, como transferências de outros entes, a
+        economia local e compromissos assumidos por gestões anteriores. A nota descreve as contas
+        do município, não o desempenho de uma pessoa ou de um partido.
+      </p>
+      {prefeitos && (
+        <>
+          <p>
+            A coluna “Prefeitos eleitos no período da nota” e a página de cada município mostram o
+            prefeito e o vice <strong>eleitos para o mandato</strong> de cada exercício, como estão
+            no arquivo atual de candidatos do TSE (eleições de 2020 e 2024, com as suplementares).
+            O TSE registra quem foi eleito, não quem exerceu o cargo: renúncia, morte, afastamento
+            e interinidade não aparecem. Em São Paulo, por exemplo, o arquivo registra Bruno Covas
+            (PSDB) como eleito para 2021–2024; o vice eleito, Ricardo Nunes (MDB), assumiu o cargo
+            em 2021, após a morte do titular.
+          </p>
+          <p>
+            Quando uma eleição é anulada, o TSE reescreve o resultado e ela fica sem eleito. Nesses
+            casos o site mostra “sem eleito válido no arquivo atual do TSE” e, a partir do ano da
+            eleição suplementar, quem ela elegeu. O partido é o da eleição, como registrado no TSE,
+            e aparece só ao lado do nome: o site não agrupa, filtra, colore nem compara partidos.
+          </p>
+        </>
+      )}
 
       <h3>Limitações conhecidas</h3>
       <ul>
