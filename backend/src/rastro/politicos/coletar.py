@@ -14,7 +14,9 @@ deputado ou ano não interrompe os outros: a coleta fica `parcial`, com os erros
 import argparse
 import logging
 import sys
+import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy import select
@@ -22,9 +24,10 @@ from sqlalchemy.orm import Session
 
 from rastro.coletores.base import ColetaParcial, novo_cliente
 from rastro.coletores.siconfi_lote import TODAS, interpretar_anos
+from rastro.config import get_settings
 from rastro.db import get_sessionmaker
 from rastro.fontes import executar_com_esperas
-from rastro.politicos import camara, gestoes, senado, transparencia, tse
+from rastro.politicos import camara, gestoes, reuso, senado, transparencia, tse
 from rastro.politicos.modelos import DEPUTADO_FEDERAL, SENADOR, PolPolitico
 
 log = logging.getLogger(__name__)
@@ -63,42 +66,78 @@ def cliente_da_fonte(
     return com_chave
 
 
-def coletor_camara(uf: str, anos: list[int]):
+class Prazo:
+    """Limite de tempo da coleta dos políticos (RASTRO_POLITICOS_LIMITE_MIN; 0 = sem limite).
+
+    Ao passar do limite, a coleta para antes do próximo item (deputado, ano, UF ou fonte):
+    o que já foi gravado fica, e a execução sai `parcial` com o motivo.
+    """
+
+    def __init__(self, minutos: float = 0, relogio: Callable[[], float] = time.monotonic):
+        self.minutos, self._relogio = minutos, relogio
+        self._fim = relogio() + minutos * 60 if minutos > 0 else None
+
+    def esgotado(self) -> bool:
+        return self._fim is not None and self._relogio() >= self._fim
+
+    @property
+    def motivo(self) -> str:
+        return f"limite de tempo de {self.minutos:g} min atingido"
+
+
+SEM_PRAZO = Prazo()
+
+
+class _PrazoEsgotado(Exception):
+    pass
+
+
+def coletor_camara(ufs: str | list[str], anos: list[int], prazo: Prazo = SEM_PRAZO, hoje=None):
+    """Deputados federais das UFs, numa passada só.
+
+    A lista de deputados vem por UF; os arquivos anuais (votos, presenças e cota) são
+    nacionais e são baixados uma vez para todas as UFs. Nos anos fechados, um arquivo já
+    baixado na semana, arquivado e que cobriu todas as UFs pedidas não é baixado de novo
+    (`reuso`); as proposições do deputado no ano fechado, idem.
+    """
+    ufs = [ufs] if isinstance(ufs, str) else list(ufs)
+
     def coletar(session: Session, client: httpx.Client) -> int:
         erros: list[str] = []
-        mapa = camara.coletar_deputados(session, client, uf)
+        mapa: dict[int, int] = {}
+        for uf in ufs:
+            mapa.update(camara.coletar_deputados(session, client, uf))
         total = len(mapa)
-        for id_camara, pid in sorted(mapa.items()):
-            total += _tentar(
-                erros,
-                f"histórico {id_camara}",
-                camara.coletar_historico,
-                session,
-                client,
-                id_camara,
-                pid,
-            )
-        for ano in anos:
+
+        def tentar(rotulo: str, funcao, *args) -> None:
+            nonlocal total
+            if prazo.esgotado():
+                raise _PrazoEsgotado
+            total += _tentar(erros, rotulo, funcao, session, client, *args)
+
+        try:
             for id_camara, pid in sorted(mapa.items()):
-                total += _tentar(
-                    erros,
-                    f"proposições {id_camara}/{ano}",
-                    camara.coletar_proposicoes,
-                    session,
-                    client,
-                    id_camara,
-                    pid,
-                    ano,
-                )
-            total += _tentar(
-                erros, f"votos {ano}", camara.coletar_votos, session, client, ano, mapa
-            )
-            total += _tentar(
-                erros, f"presenças {ano}", camara.coletar_presencas, session, client, ano, mapa
-            )
-            total += _tentar(
-                erros, f"cota {ano}", camara.coletar_cota, session, client, ano, uf, mapa
-            )
+                tentar(f"histórico {id_camara}", camara.coletar_historico, id_camara, pid)
+            for ano in anos:
+                fechado = reuso.ano_fechado(ano, hoje)
+                for id_camara, pid in sorted(mapa.items()):
+                    if fechado and reuso.url_recente(
+                        session, camara.url_proposicoes(id_camara, ano)
+                    ):
+                        continue
+                    rotulo = f"proposições {id_camara}/{ano}"
+                    tentar(rotulo, camara.coletar_proposicoes, id_camara, pid, ano)
+                for tipo, rotulo, funcao, extra in (
+                    ("votos", "votos", camara.coletar_votos, ()),
+                    ("presencas", "presenças", camara.coletar_presencas, ()),
+                    ("cota", "cota", camara.coletar_cota, (ufs,)),
+                ):
+                    if fechado and set(ufs) <= reuso.ufs_com_arquivo_recente(session, tipo, ano):
+                        log.info("%s %s: arquivo da semana reaproveitado", rotulo, ano)
+                        continue
+                    tentar(f"{rotulo} {ano}", funcao, ano, *extra, mapa)
+        except _PrazoEsgotado:
+            erros.append(prazo.motivo)
         if erros:
             raise ColetaParcial(total, erros)
         return total
@@ -106,12 +145,15 @@ def coletor_camara(uf: str, anos: list[int]):
     return coletar
 
 
-def coletor_senado(uf: str, anos: list[int]):
+def coletor_senado(uf: str, anos: list[int], prazo: Prazo = SEM_PRAZO):
     def coletar(session: Session, client: httpx.Client) -> int:
         erros: list[str] = []
         mapa = senado.coletar_senadores(session, client, uf)
         total = len(mapa)
         for codigo, pid in sorted(mapa.items()):
+            if prazo.esgotado():
+                erros.append(prazo.motivo)
+                break
             total += _tentar(
                 erros, f"comissões {codigo}", senado.coletar_comissoes, session, client, codigo, pid
             )
@@ -187,8 +229,12 @@ def coletor_emendas(uf: str, anos: list[int]):
     return coletar
 
 
-def coletor_tse(uf: str, eleicoes: list[int]):
-    """Eleitos do TSE (2024: prefeitos e vereadores; 2022: governador e dep. estaduais)."""
+def coletor_tse(uf: str, eleicoes: list[int], hoje: datetime | None = None):
+    """Eleitos do TSE (2024: prefeitos e vereadores; 2022: governador e dep. estaduais).
+
+    A eleição do ano corrente é sempre baixada; as anteriores, só se os eleitos da UF não
+    vierem de um download da semana, ainda arquivado (`reuso`).
+    """
 
     def coletar(session: Session, client: httpx.Client) -> int:
         from rastro.models import Municipio
@@ -196,8 +242,12 @@ def coletor_tse(uf: str, eleicoes: list[int]):
         codigos = set(session.scalars(select(Municipio.cod_ibge).where(Municipio.uf == uf)))
         if not codigos:
             raise RuntimeError("Tabela de municípios vazia: rode `rastro coletar ibge-municipios`.")
+        ano_corrente = (hoje or datetime.now(UTC)).year
         total = 0
         for ano in eleicoes:
+            if ano < ano_corrente and reuso.tse_recente(session, ano, uf):
+                log.info("TSE %s %s: arquivo da semana reaproveitado", ano, uf)
+                continue
             r = tse.coletar_eleitos(session, client, ano, uf, codigos)
             log.info("TSE %s: %s", ano, r)
             total += r["eleitos"]
@@ -247,9 +297,10 @@ def main(argv: list[str] | None = None) -> int:
         p.error(f"UF desconhecida: {', '.join(sorted(desconhecidas))}")
     anos = interpretar_anos(args.anos) if args.anos else []
 
+    prazo = Prazo(get_settings().politicos_limite_min)
     coletores = {
-        "camara": ("pol-camara", coletor_camara),
-        "senado": ("pol-senado", coletor_senado),
+        "camara": ("pol-camara", lambda alvo, anos: coletor_camara(alvo, anos, prazo)),
+        "senado": ("pol-senado", lambda alvo, anos: coletor_senado(alvo, anos, prazo)),
         "emendas": ("pol-emendas", coletor_emendas_arquivo),
         "emendas-api": ("pol-emendas", coletor_emendas),
         "tse": ("pol-tse", lambda uf, _anos: coletor_tse(uf, interpretar_anos(args.eleicoes))),
@@ -261,9 +312,16 @@ def main(argv: list[str] | None = None) -> int:
             nome, fabrica = coletores[fonte]
             if fonte == "emendas-api":
                 print(f"emendas: acesso por {transparencia.modo_de_acesso()}")
-            # emendas do arquivo: uma passada para todas as UFs; demais fontes: uma por UF
-            alvos = [(ufs, "/".join(ufs))] if fonte == "emendas" else [(u, u) for u in ufs]
+            # câmara e emendas do arquivo: uma passada para todas as UFs; demais: uma por UF
+            if fonte in ("camara", "emendas"):
+                alvos = [(ufs, "/".join(ufs))]
+            else:
+                alvos = [(u, u) for u in ufs]
             for alvo, rotulo in alvos:
+                if prazo.esgotado():
+                    print(f"{nome} {rotulo}: não coletada ({prazo.motivo})", file=sys.stderr)
+                    status = 1
+                    continue
                 coleta = executar_com_esperas(
                     session, nome, fabrica(alvo, anos), cliente_da_fonte(fonte)
                 )

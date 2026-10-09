@@ -13,6 +13,7 @@ import csv
 import io
 import logging
 import zipfile
+from collections.abc import Iterable
 from decimal import Decimal
 
 import httpx
@@ -27,6 +28,7 @@ from rastro.politicos.comum import (
     data_hora,
     get_json_com_origem,
     gravar,
+    gravar_em_lotes,
     upsert_politico,
 )
 from rastro.politicos.modelos import (
@@ -100,16 +102,25 @@ def coletar_deputados(
     return mapa
 
 
-def coletar_proposicoes(
-    session: Session, client: httpx.Client, id_camara: int, politico_id: int, ano: int
-) -> int:
-    params = {
+def _params_proposicoes(id_camara: int, ano: int) -> dict:
+    return {
         "idDeputadoAutor": id_camara,
         "ano": ano,
         "itens": 100,
         "ordem": "ASC",
         "ordenarPor": "id",
     }
+
+
+def url_proposicoes(id_camara: int, ano: int) -> str:
+    """Endereço da 1ª página das proposições, como fica no arquivo de respostas brutas."""
+    return str(httpx.URL(f"{API}/proposicoes", params=_params_proposicoes(id_camara, ano)))
+
+
+def coletar_proposicoes(
+    session: Session, client: httpx.Client, id_camara: int, politico_id: int, ano: int
+) -> int:
+    params = _params_proposicoes(id_camara, ano)
     linhas = []
     for itens, rid in paginas(client, f"{API}/proposicoes", params):
         for p in itens:
@@ -137,14 +148,14 @@ def coletar_votos(session: Session, client: httpx.Client, ano: int, mapa: dict[i
     votacoes, _, _ = baixar_csv(client, f"{ARQUIVOS}/votacoes/csv/votacoes-{ano}.csv")
     info = {v["id"]: v for v in votacoes}
     votos, rid, _ = baixar_csv(client, f"{ARQUIVOS}/votacoesVotos/csv/votacoesVotos-{ano}.csv")
-    linhas = []
-    for v in votos:
-        politico_id = mapa.get(int(v["deputado_id"]))
-        if politico_id is None:
-            continue
-        sobre = info.get(v["idVotacao"], {})
-        linhas.append(
-            {
+
+    def linhas():
+        for v in votos:
+            politico_id = mapa.get(int(v["deputado_id"]))
+            if politico_id is None:
+                continue
+            sobre = info.get(v["idVotacao"], {})
+            yield {
                 "politico_id": politico_id,
                 "id_votacao": v["idVotacao"],
                 "data": data(sobre.get("data") or v["dataHoraVoto"]),
@@ -156,8 +167,8 @@ def coletar_votos(session: Session, client: httpx.Client, ano: int, mapa: dict[i
                 "url_fonte": v["uriVotacao"],
                 "resposta_id": rid,
             }
-        )
-    n = gravar(session, PolVotacao, linhas, ["politico_id", "id_votacao"]) if linhas else 0
+
+    n = gravar_em_lotes(session, PolVotacao, linhas(), ["politico_id", "id_votacao"])
     session.commit()
     return n
 
@@ -167,7 +178,7 @@ def coletar_presencas(
 ) -> int:
     url = f"{ARQUIVOS}/eventosPresencaDeputados/csv/eventosPresencaDeputados-{ano}.csv"
     presencas, rid, _ = baixar_csv(client, url)
-    linhas = [
+    linhas = (
         {
             "politico_id": mapa[int(p["idDeputado"])],
             "id_evento": p["idEvento"],
@@ -177,8 +188,8 @@ def coletar_presencas(
         }
         for p in presencas
         if int(p["idDeputado"]) in mapa
-    ]
-    n = gravar(session, PolPresenca, linhas, ["politico_id", "id_evento"]) if linhas else 0
+    )
+    n = gravar_em_lotes(session, PolPresenca, linhas, ["politico_id", "id_evento"])
     session.commit()
     return n
 
@@ -227,18 +238,30 @@ URL_COTA = "https://www.camara.leg.br/cotas/Ano-{ano}.csv.zip"
 
 
 def coletar_cota(
-    session: Session, client: httpx.Client, ano: int, uf: str, mapa: dict[int, int]
+    session: Session, client: httpx.Client, ano: int, ufs: str | Iterable[str], mapa: dict[int, int]
 ) -> int:
-    """Despesas da cota parlamentar do ano dos deputados em `mapa` (substitui o ano)."""
+    """Despesas da cota parlamentar do ano dos deputados em `mapa` (substitui o ano).
+
+    O arquivo é nacional: várias UFs saem de um download só.
+    """
+    siglas = {ufs} if isinstance(ufs, str) else set(ufs)
     url = URL_COTA.format(ano=ano)
-    resp = client.get(url, extensions=com_redacao(lgpd.cota(ano, uf)), headers={"Accept": "*/*"})
+    resp = client.get(
+        url, extensions=com_redacao(lgpd.cota(ano, siglas)), headers={"Accept": "*/*"}
+    )
     resp.raise_for_status()
     rid = resposta_id(resp)
     with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
         texto = z.read(f"Ano-{ano}.csv").decode("utf-8-sig")
-    linhas = []
+    session.execute(
+        delete(PolDespesaCota).where(
+            PolDespesaCota.ano == ano, PolDespesaCota.politico_id.in_(set(mapa.values()))
+        )
+    )
+    # gravação em lotes: com todas as UFs, o ano inteiro não cabe numa lista
+    linhas, total = [], 0
     for n, r in enumerate(csv.DictReader(io.StringIO(texto), delimiter=";"), start=1):
-        if r["sgUF"] != uf or not r["ideCadastro"]:
+        if r["sgUF"] not in siglas or not r["ideCadastro"]:
             continue
         politico_id = mapa.get(int(r["ideCadastro"]))
         if politico_id is None:
@@ -269,15 +292,13 @@ def coletar_cota(
                 "resposta_id": rid,
             }
         )
-    session.execute(
-        delete(PolDespesaCota).where(
-            PolDespesaCota.ano == ano, PolDespesaCota.politico_id.in_(set(mapa.values()))
-        )
-    )
-    for i in range(0, len(linhas), 2000):
-        session.execute(insert(PolDespesaCota), linhas[i : i + 2000])
+        if len(linhas) >= 2000:
+            session.execute(insert(PolDespesaCota), linhas)
+            total, linhas = total + len(linhas), []
+    if linhas:
+        session.execute(insert(PolDespesaCota), linhas)
     session.commit()
-    return len(linhas)
+    return total + len(linhas)
 
 
 def _dec(texto: str | None) -> Decimal | None:
