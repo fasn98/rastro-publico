@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import sys
 
@@ -39,6 +40,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     ex.add_argument(
         "--sem-ranking", action="store_true", help="prévia: não exporta o ranking nem as notas"
+    )
+    ex.add_argument(
+        "--portao",
+        help="resultado de `rastro portao`: exporta a parte fiscal das UFs aprovadas",
     )
     pb = sub.add_parser(
         "publicar-site", help="verifica e publica o site no GitHub Pages (branch gh-pages)"
@@ -112,7 +117,10 @@ def main(argv: list[str] | None = None) -> int:
         help="não faz nada se esta versão do mapeamento já foi aplicada a esse tipo",
     )
     r = sub.add_parser("ranking", help="calcula e grava o Ranking Fiscal de uma UF")
-    r.add_argument("--uf", required=True)
+    r.add_argument("--uf", required=True, help="ex.: SP; TODAS = cada UF (menos o DF)")
+    pt = sub.add_parser("portao", help="portão de qualidade por UF antes de publicar (ADR-0020)")
+    pt.add_argument("--saida", required=True, help="arquivo JSON com o resultado")
+    pt.add_argument("--uf", nargs="+", help="padrão: todas as UFs")
     sub.add_parser(
         "politicos",
         help="coleta deputados federais, senadores e emendas (ver `rastro politicos --help`)",
@@ -239,8 +247,13 @@ def main(argv: list[str] | None = None) -> int:
 
         from rastro import site
 
+        portao = json.loads(Path(args.portao).read_text()) if args.portao else None
         m = site.exportar(
-            Path(args.saida), args.uf, completa=args.completa, sem_ranking=args.sem_ranking
+            Path(args.saida),
+            args.uf,
+            completa=args.completa,
+            sem_ranking=args.sem_ranking,
+            portao=portao,
         )
         e = m["exportacao"]
         print(
@@ -262,6 +275,48 @@ def main(argv: list[str] | None = None) -> int:
         with get_sessionmaker()() as session:
             n = redigir_arquivadas(session, lgpd.REGRAS)
         print(f"{n} resposta(s) arquivada(s) regravada(s) sem dados pessoais")
+        return 0
+
+    if args.comando == "portao":
+        from datetime import UTC, datetime
+        from pathlib import Path
+
+        from sqlalchemy.orm import Session
+
+        from rastro import portao
+        from rastro import ranking as rk
+        from rastro.coletores.base import novo_cliente
+        from rastro.db import get_engine
+
+        # autocommit: nenhuma transação fica aberta enquanto a fonte é consultada
+        engine = get_engine().execution_options(isolation_level="AUTOCOMMIT")
+        with Session(bind=engine) as session, novo_cliente() as client:
+            resultado = portao.avaliar(
+                session,
+                client,
+                rk.carregar_metodologia().exercicios,
+                datetime.now(UTC).date(),
+                [u.upper() for u in args.uf] if args.uf else None,
+            )
+        Path(args.saida).write_text(json.dumps(resultado, ensure_ascii=False, indent=1))
+        aprovadas = [u for u, r in resultado.items() if r["aprovada"]]
+        for uf, r in resultado.items():
+            print(f"{uf}: {'aprovada' if r['aprovada'] else 'reprovada'}"
+                  + ("" if r["aprovada"] else f" ({'; '.join(r['motivos'])})"))  # fmt: skip
+        print(f"Portão: {len(aprovadas)}/{len(resultado)} UFs aprovadas: {', '.join(aprovadas)}")
+        return 0
+
+    if args.comando == "ranking" and args.uf.upper() == "TODAS":
+        from rastro import ranking
+        from rastro.portao import UFS
+
+        met = ranking.carregar_metodologia()
+        # o DF fica fora do ranking municipal: Brasília não entrega como município (ADR-0020)
+        for uf in [u for u in UFS if u != "DF"]:
+            with get_sessionmaker()() as session:
+                itens = ranking.calcular(session, uf, met)
+            com_nota = sum(1 for i in itens if i["nota"] is not None)
+            print(f"Ranking {uf} v{met.versao}: {com_nota}/{len(itens)} municípios com nota")
         return 0
 
     if args.comando == "ranking":
