@@ -775,3 +775,40 @@ def test_queda_de_politicos_sem_fonte_indisponivel_continua_bloqueando(coletado,
     manifesto = site.exportar(dados, "SP", coletado, hoje=HOJE)
     anterior = {**manifesto, "contagens": {**manifesto["contagens"], "politicos": 99999}}
     assert any("politicos:" in p for p in site.verificar(dados, anterior))
+
+
+def test_prefeitos_eleitos_so_vao_para_o_site_com_a_trava(coletado, engine, tmp_path, monkeypatch):
+    """ADR-0018: com a trava desligada, nada de prefeitos eleitos no site; ligada, a página do
+    município traz os mandatos e os exercícios, com a fonte pelo SHA-256."""
+    from test_prefeitos import _coletar
+
+    with novo_cliente(req_por_segundo=0, arquivo=ArquivoBruto(engine)) as c:
+        _coletar(coletado, c)
+
+    _trava(monkeypatch, "RASTRO_POL_PUBLICAR_GESTOES", "0")
+    fechado = tmp_path / "fechado"
+    manifesto = site.exportar(fechado, "SP", coletado, hoje=HOJE)
+    assert manifesto["travas"]["pol_publicar_gestoes"] is False
+    sp = json.loads((fechado / "municipios" / "3550308.json").read_text())["prefeitos"]
+    assert sp["publicados"] is False and sp["mandatos"] == [] and sp["exercicios"] == []
+    assert "BRUNO COVAS" not in "".join(p.read_text() for p in fechado.rglob("*.json"))
+    assert site.verificar(fechado) == []
+
+    _trava(monkeypatch, "RASTRO_POL_PUBLICAR_GESTOES", "1")
+    aberto = tmp_path / "aberto"
+    site.exportar(aberto, "SP", coletado, hoje=HOJE)
+    sp = json.loads((aberto / "municipios" / "3550308.json").read_text())["prefeitos"]
+    eleicao = sp["mandatos"][0]["eleicao"]
+    assert eleicao["prefeito"] == {"nome": "BRUNO COVAS", "partido": "PSDB"}
+    assert eleicao["vice"] == {"nome": "RICARDO NUNES", "partido": "MDB"}
+    assert "resposta_id" not in eleicao and len(eleicao["sha256"]) == 64
+    assert {x["ano"]: x["texto"] for x in sp["exercicios"]}[2025] == (
+        "RICARDO NUNES (MDB), vice CORONEL MELLO ARAUJO (PL)"
+    )
+    assert site.verificar(aberto) == []
+
+    # segunda barreira: o arquivo real da exportação liberada, copiado para a travada
+    shutil.copy(aberto / "municipios" / "3550308.json", fechado / "municipios" / "3550308.json")
+    assert any(
+        "municipios/3550308.json: prefeitos exportados" in p for p in site.verificar(fechado)
+    )
