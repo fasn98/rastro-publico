@@ -59,12 +59,14 @@ uv run python -m rastro.coletores.siconfi_lote --uf TODAS --esfera M E D \
   --anos "2022-$ANO_ATUAL" --prioridade 2023-2025 \
   --limite-minutos "${RASTRO_LOTE_LIMITE_MIN:-420}" --rodizio || [ $? -eq 1 ]
 
-echo "== políticos de todas as UFs (falha de uma fonte não apaga dados já coletados)"
-# A coleta é nacional (aprovada pelo Fabio em 10/10/2026); o site só publica os políticos
-# das UFs liberadas (por enquanto, SP). Para depois de RASTRO_POLITICOS_LIMITE_MIN minutos
-# (padrão 90): o que faltar continua na próxima execução (os anos fechados ficam guardados).
+echo "== políticos (falha de uma fonte não apaga dados já coletados)"
+# Só SP por enquanto. A coleta de todas as UFs (aprovada em 10/10/2026) fica suspensa:
+# com os políticos das outras UFs no banco, emendas para municípios de SP passam a ter
+# vínculo com deputados de outras UFs, e os arquivos de SP mudam (links para páginas que o
+# site não exporta). Volta com o portão de políticos e a exportação por UF.
+# Para depois de RASTRO_POLITICOS_LIMITE_MIN minutos (padrão 90).
 RASTRO_POLITICOS_LIMITE_MIN="${RASTRO_POLITICOS_LIMITE_MIN:-90}" \
-  uv run rastro politicos --uf TODAS --anos "2023-$ANO_ATUAL" \
+  uv run rastro politicos --uf SP --anos "2023-$ANO_ATUAL" \
   || echo "AVISO: coleta de políticos com falhas; seguem os dados anteriores (resumo no fim)"
 
 echo "== ranking e verificação do arquivo bruto"
