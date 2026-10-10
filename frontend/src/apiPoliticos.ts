@@ -441,6 +441,7 @@ export const CARGOS: Record<string, string> = {
   senador: "Senador(a)",
   deputado_federal: "Deputado(a) federal",
   deputado_estadual: "Deputado(a) estadual",
+  deputado_distrital: "Deputado(a) distrital",
 };
 
 export const FONTES: Record<string, string> = {
