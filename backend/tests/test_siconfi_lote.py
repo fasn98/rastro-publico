@@ -177,6 +177,27 @@ def test_ordem_nacional_uf_menor_primeiro_e_exercicios_prioritarios(session, ent
     ]  # fmt: skip
 
 
+@respx.mock
+def test_primeiro_passa_a_frente_de_todos(session, entes_de_duas_ufs):
+    # o ente de --primeiro (aqui, um de SP, a última UF da ordem) vem antes de todos, com os
+    # exercícios na mesma ordem; o resto segue a ordem nacional
+    respx.get(sd.URL_EXTRATO).respond(
+        json=carregar("siconfi_extrato_brasilia_5300108_2024_vazio.json")
+    )
+    lote, _ = sl.abrir_lote(session, entes_de_duas_ufs, [2024, 2025], "nacional")
+    with httpx.Client() as client:
+        sl.executar_lote(session, client, lote, prioridade=[2025], primeiro=[3550308])
+    ordem = [
+        (int(c.request.url.params["id_ente"]), int(c.request.url.params["an_referencia"]))
+        for c in respx.calls
+    ]
+    assert ordem == [
+        (3550308, 2025), (3550308, 2024),
+        (14, 2025), (1400100, 2025), (3500105, 2025),
+        (14, 2024), (1400100, 2024), (3500105, 2024),
+    ]  # fmt: skip
+
+
 def test_rodizio_dos_exercicios_antigos(session, entes_de_duas_ufs):
     agora = datetime(2026, 10, 12, 4, 20, tzinfo=UTC)  # semana ISO 42: rodízio 42 % 4 = 2
     lidos = {

@@ -55,8 +55,10 @@ echo "== RREO/RGF de todas as UFs (código 1 = algum item falhou; fica para a pr
 # exercícios. Não começa item novo depois de RASTRO_LOTE_LIMITE_MIN minutos (padrão 420):
 # o que faltar continua na próxima execução, e o resto desta coleta roda dentro do limite
 # de 11 h do Replit. Num lote novo, os exercícios antigos entram em rodízio de 4 semanas.
+# --primeiro 35: o estado de SP antes de tudo. A coleta antiga de SP não o incluía, e sem
+# ele SP não passa no portão (ADR-0020); quando os itens dele estão concluídos, não muda nada.
 uv run python -m rastro.coletores.siconfi_lote --uf TODAS --esfera M E D \
-  --anos "2022-$ANO_ATUAL" --prioridade 2023-2025 \
+  --anos "2022-$ANO_ATUAL" --prioridade 2023-2025 --primeiro 35 \
   --limite-minutos "${RASTRO_LOTE_LIMITE_MIN:-420}" --rodizio || [ $? -eq 1 ]
 
 echo "== políticos de todas as UFs (falha de uma fonte não apaga dados já coletados)"

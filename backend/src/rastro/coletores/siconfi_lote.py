@@ -18,6 +18,8 @@ Coleta nacional (ADR-0020):
 
 - ordem: primeiro os exercícios de --prioridade, UF por UF, das UFs com menos municípios
   para as com mais; depois os demais exercícios, do mais recente para o mais antigo;
+- --primeiro: entes que passam à frente de todos os outros (ex.: o estado de SP, 35, que
+  faltava para SP passar no portão de qualidade);
 - --limite-minutos: não começa item novo depois desse tempo. O que faltar fica para a
   próxima execução (o lote continua aberto), e o resto da coleta (ranking, site) roda;
 - --rodizio: num lote novo, o exercício corrente e o anterior entram sempre; os mais
@@ -162,6 +164,7 @@ def executar_lote(
     max_tentativas: int = 3,
     prioridade: list[int] | None = None,
     limite_segundos: float | None = None,
+    primeiro: list[int] | None = None,
 ) -> dict:
     """Coleta os itens pendentes do lote, na ordem de `_ordem`.
 
@@ -189,11 +192,13 @@ def executar_lote(
     ).all()
     posicao_uf = ordem_das_ufs(session)
     prioritarios = set(prioridade or [])
+    na_frente = set(primeiro or [])
 
     def _ordem(item: ItemLote):
         ente = entes[item.cod_ibge]
         fora = item.exercicio not in prioritarios
         return (
+            item.cod_ibge not in na_frente,  # os entes de --primeiro antes de todos
             fora and bool(prioritarios),  # primeiro os exercícios prioritários
             posicao_uf.get(ente.uf, len(posicao_uf)),
             ente.uf or "",
@@ -293,6 +298,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--forcar", action="store_true", help="baixa de novo mesmo sem retificação")
     p.add_argument("--max-tentativas", type=int, default=3)
     p.add_argument("--prioridade", help="exercícios coletados primeiro, UF por UF (ex.: 2023-2025)")
+    p.add_argument(
+        "--primeiro",
+        nargs="+",
+        type=int,
+        default=[],
+        help="códigos IBGE de entes que passam à frente de todos (ex.: 35, o estado de SP)",
+    )
     p.add_argument("--limite-minutos", type=float, help="não começa item novo depois desse tempo")
     p.add_argument(
         "--rodizio",
@@ -338,6 +350,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.max_tentativas,
                     interpretar_anos(args.prioridade) if args.prioridade else None,
                     args.limite_minutos * 60 if args.limite_minutos else None,
+                    args.primeiro,
                 )
         except KeyboardInterrupt:
             session.rollback()
