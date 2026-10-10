@@ -7,7 +7,7 @@
 - [ ] Lançamento: tirar o site da prévia (`RASTRO_PREVIA` padrão `0` em `backend/scripts/coleta_sp.sh`) — depende de T-003
 
 ## P1
-- [ ] T-004 Registrar o resultado do usuário só de leitura da auditoria em "Riscos aceitos" (`docs/deploy-replit.md`, passo 7) — `lexicon` — **pendente com o Fabio**: o resultado ainda não é conhecido
+- [x] T-004 Registrar o resultado do usuário só de leitura da auditoria em "Riscos aceitos" (`docs/deploy-replit.md`, passo 7) — `lexicon` — feito em 10/10/2026: usuário criado e auditoria testada
 
 ## P2
 - [ ] T-006 Atualizar documentação desatualizada: o README diz que `/api/bruto/{sha256}` está "em implementação" (já existe desde `093a6a1`); "Próximas etapas" do módulo de políticos ainda lista "decidir e carregar os eleitos de 2026", já publicados — `lexicon`
