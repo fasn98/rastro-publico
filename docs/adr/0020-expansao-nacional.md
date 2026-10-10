@@ -40,7 +40,8 @@ Projeção nacional:
    - UF por UF, das UFs com menos municípios para as com mais, terminando em MG;
    - primeiro os exercícios do ranking (2023 a 2025); depois 2026 e 2022.
 2. **Limite de tempo por execução:** o lote RREO/RGF não começa item novo depois de
-   `RASTRO_LOTE_LIMITE_MIN` minutos (padrão 480). O que faltar continua na próxima
+   `RASTRO_LOTE_LIMITE_MIN` minutos (padrão 480; 420 desde 10/10/2026, com os políticos
+   nacionais). O que faltar continua na próxima
    execução, e o resto da coleta (ranking, site) cabe no limite de 11 h do Replit.
    Agendamento diário durante a carga inicial; volta ao semanal quando duas execuções
    completas seguidas couberem em 8 h.
