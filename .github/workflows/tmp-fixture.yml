@@ -2,13 +2,16 @@ name: tmp-fixture-distritais
 on:
   push:
     branches: [tmp/fixture-distritais]
+    paths: [".github/workflows/tmp-fixture.yml", "tmp_fixture/cortar.py"]
+permissions:
+  contents: write
 jobs:
   cortar:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: python3 tmp_fixture/cortar.py
-      - uses: actions/upload-artifact@v4
-        with:
-          name: fixtures-distritais
-          path: tse_consulta_cand_*_DF_distritais.csv
+      - run: python3 tmp_fixture/cortar.py 2> tmp_fixture/resumo.txt; cat tmp_fixture/resumo.txt
+      - run: |
+          mv tse_consulta_cand_*_DF_distritais.csv tmp_fixture/
+          git config user.name github-actions && git config user.email github-actions@users.noreply.github.com
+          git add tmp_fixture && git commit -m "tmp: amostras gravadas" && git push
