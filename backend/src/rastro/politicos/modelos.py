@@ -52,7 +52,7 @@ class PolPolitico(Base):
     fonte: Mapped[str] = mapped_column(String(20))  # camara | senado | tse
     id_fonte: Mapped[str] = mapped_column(String(40))  # id na fonte (Câmara, Senado, TSE)
     nome: Mapped[str] = mapped_column(String(200), index=True)  # nome parlamentar / de urna
-    partido: Mapped[str | None] = mapped_column(String(30))
+    partido: Mapped[str | None] = mapped_column(String(120))
     cargo: Mapped[str] = mapped_column(String(30), index=True)
     uf: Mapped[str] = mapped_column(String(2), index=True)
     cod_ibge: Mapped[int | None] = mapped_column(Integer, index=True)  # só cargos municipais

@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # prefeitos eleitos por exercício (ADR-0018): desligada até a aprovação da publicação,
     # depois do 2º turno de 25/10/2026
     pol_publicar_gestoes: bool = False
+    # limite de tempo (minutos) de cada `rastro politicos`; 0 = sem limite. Ao passar dele,
+    # a coleta para antes do próximo item e sai parcial, com o motivo
+    politicos_limite_min: float = 0
 
     @property
     def origens_cors(self) -> list[str]:
