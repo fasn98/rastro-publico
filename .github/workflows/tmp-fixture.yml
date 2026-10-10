@@ -1,0 +1,14 @@
+name: tmp-fixture-distritais
+on:
+  push:
+    branches: [tmp/fixture-distritais]
+jobs:
+  cortar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tmp_fixture/cortar.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fixtures-distritais
+          path: tse_consulta_cand_*_DF_distritais.csv
