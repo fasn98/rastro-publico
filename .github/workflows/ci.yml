@@ -9,7 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        # Mesma imagem oficial do Docker Hub, espelhada no ECR Public, sem o limite de downloads anônimos.
+        image: public.ecr.aws/docker/library/postgres:16
         env:
           POSTGRES_USER: rastro
           POSTGRES_PASSWORD: rastro
