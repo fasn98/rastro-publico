@@ -197,7 +197,7 @@ apaga a mais antiga.
 
 | Risco | Situação | Mitigação |
 |---|---|---|
-| API de auditoria com a credencial principal do banco (só se o passo 7.1 falhar) | *preencher após o passo 7: "usuário só de leitura criado em DD/MM/AAAA" ou "Replit recusou em DD/MM/AAAA: <mensagem>"* | o código da API de auditoria só faz `SELECT` (3 rotas `GET`, testadas); CORS só aceita o site; a senha fica só nos Secrets de produção; backups agendados de 7 dias (passo 5.2) |
+| API de auditoria com a credencial principal do banco (só se o passo 7.1 falhar) | **Não ocorre:** usuário só de leitura `rastro_auditoria` criado em 10/10/2026 (senha trocada no mesmo dia) e em uso no rastro-auditoria; link de auditoria testado em 10/10/2026 (`/api/demonstrativos/{id}/respostas` respondeu 200) | o código da API de auditoria só faz `SELECT` (3 rotas `GET`, testadas); CORS só aceita o site; a senha fica só nos Secrets de produção; backups agendados de 7 dias (passo 5.2) |
 
 ## Pontos confirmados na documentação oficial do Replit
 
