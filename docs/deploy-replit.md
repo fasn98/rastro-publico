@@ -122,9 +122,14 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
    usuário `rastro_auditoria` com leitura apenas dessas 4 tabelas e com toda transação em
    modo só leitura, e imprime **uma vez** a string de conexão dele. Rodar de novo troca a
    senha.
-2. **Se funcionou:** no **rastro-auditoria** → Publishing → Production app secrets, crie
-   `DATABASE_URL` = a string impressa. Depois, **Publish** de novo. Apague a linha do
-   histórico do Shell (`history -c`).
+2. **Se funcionou:** no **rastro-auditoria**, abra **Publishing → Infrastructure →
+   Production environment secrets** (na tela de Republish, a seção "Production app
+   secrets" → "Deployment secrets") e ponha `DATABASE_URL` = a string impressa, sem
+   espaços nem aspas nas pontas. Os Secrets do editor (Tools → Secrets) **não** valem para
+   o app publicado: se a string ficar só lá, a auditoria continua com a anterior ou dá
+   erro 500 ao conectar (traceback em `pool ... checkout`). Depois, **Republish**. Apague a
+   linha do histórico do Shell (`history -c`). Teste: `…/api/respostas/1` devolve um JSON
+   que começa com `{"id":1,`.
 3. **Se o Replit não permitir** (o comando termina com `ERRO: o banco não permitiu criar
    o usuário só de leitura`): use a connection string principal no rastro-auditoria e
    anote o resultado na seção **Riscos aceitos**, abaixo, com a data e a mensagem de erro.
