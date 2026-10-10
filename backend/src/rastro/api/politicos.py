@@ -16,6 +16,7 @@ from rastro.politicos import gestoes, publicacao
 from rastro.politicos.modelos import (
     CARGOS_ESTADUAIS,
     CARGOS_MUNICIPAIS,
+    DEPUTADO_DISTRITAL,
     DEPUTADO_ESTADUAL,
     DEPUTADO_FEDERAL,
     GOVERNADOR,
@@ -639,7 +640,14 @@ SECOES = (
     ("estado", (GOVERNADOR, DEPUTADO_ESTADUAL)),
     ("federal", (SENADOR, DEPUTADO_FEDERAL)),
 )
-CARGOS_2026 = (GOVERNADOR, SENADOR, DEPUTADO_FEDERAL, DEPUTADO_ESTADUAL)
+CARGOS_2026 = (GOVERNADOR, SENADOR, DEPUTADO_FEDERAL, DEPUTADO_ESTADUAL, DEPUTADO_DISTRITAL)
+
+
+def _cargos_secao(chave: str, cargos: tuple[str, ...], uf: str) -> tuple[str, ...]:
+    """No DF, a Assembleia é a Câmara Legislativa: deputados distritais, não estaduais."""
+    if chave == "estado" and uf == "DF":
+        return tuple(DEPUTADO_DISTRITAL if c == DEPUTADO_ESTADUAL else c for c in cargos)
+    return cargos
 
 
 def _pendencia(session: Session, cargo: str, uf: str, cod_ibge: int | None):
@@ -665,7 +673,10 @@ def representantes(cod_ibge: int, session: SessionDep):
     titulos = {
         "municipio": (f"Eleitos em {m.nome}", None),
         "estado": (
-            f"Governador e deputados estaduais eleitos por {m.uf} — representam todo o estado",
+            "Governador e deputados distritais eleitos pelo DF — representam todo o "
+            "Distrito Federal"
+            if m.uf == "DF"
+            else f"Governador e deputados estaduais eleitos por {m.uf} — representam todo o estado",
             None,
         ),
         "federal": (
@@ -677,7 +688,7 @@ def representantes(cod_ibge: int, session: SessionDep):
     secoes = []
     for chave, cargos in SECOES:
         grupos = []
-        for cargo in cargos:
+        for cargo in _cargos_secao(chave, cargos, m.uf):
             q = select(PolPolitico).where(
                 PolPolitico.cargo == cargo, PolPolitico.uf == m.uf, _visivel()
             )

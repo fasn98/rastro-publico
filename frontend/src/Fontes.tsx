@@ -21,6 +21,7 @@ export const FONTE_DO_CARGO: Record<string, string> = {
   vereador: "pol-tse",
   governador: "pol-tse",
   deputado_estadual: "pol-tse",
+  deputado_distrital: "pol-tse",
 };
 
 /** Aviso no topo das páginas quando alguma fonte não foi atualizada nesta coleta. */

@@ -307,7 +307,10 @@ cota estão no repositório **já sem** os dados pessoais.
 - `GET /api/politicos/{id}/proposicoes|votacoes|presencas|cota|emendas?ano=`.
 - `GET /api/municipios/{codigo}/representantes`: seções "Eleitos em {município}",
   "Governador e deputados estaduais eleitos por SP — representam todo o estado" e
-  "Senadores e deputados federais eleitos por SP — representam todo o estado".
+  "Senadores e deputados federais eleitos por SP — representam todo o estado". No DF, a
+  seção estadual é "Governador e deputados distritais eleitos pelo DF — representam todo o
+  Distrito Federal": o DF elege deputados distritais para a Câmara Legislativa (cargo 8 do
+  TSE, `deputado_distrital`), e não estaduais (cargo 7).
 - `GET /api/municipios/{codigo}/emendas`: emendas com destino ao município e
   "Parlamentares que destinaram emendas a este município".
 

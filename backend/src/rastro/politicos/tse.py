@@ -1,4 +1,5 @@
-"""TSE: eleitos de 2024 (prefeitos e vereadores) e 2022 (governador e deputados estaduais).
+"""TSE: eleitos de 2024 (prefeitos e vereadores) e 2022 (governador e deputados estaduais;
+no DF, deputados distritais).
 
 Fontes (Portal de Dados Abertos do TSE, https://dadosabertos.tse.jus.br):
 - "Candidatos" `consulta_cand_{ano}.zip`: um CSV por UF (`consulta_cand_{ano}_{UF}.csv`,
@@ -32,6 +33,7 @@ from rastro.coletores.arquivo import com_redacao, resposta_id
 from rastro.coletores.redacao import redator_csv
 from rastro.politicos.comum import upsert_politico
 from rastro.politicos.modelos import (
+    DEPUTADO_DISTRITAL,
     DEPUTADO_ESTADUAL,
     DEPUTADO_FEDERAL,
     GOVERNADOR,
@@ -77,13 +79,19 @@ ELEICOES_MUNICIPAIS = {2020, 2024}
 UFS_SEM_ELEICAO_MUNICIPAL = {"DF"}
 CARGOS = {
     2024: {"PREFEITO": PREFEITO, "VEREADOR": VEREADOR},
-    2022: {"GOVERNADOR": GOVERNADOR, "DEPUTADO ESTADUAL": DEPUTADO_ESTADUAL},
+    # o DF elege deputados distritais (cargo 8), não estaduais (cargo 7)
+    2022: {
+        "GOVERNADOR": GOVERNADOR,
+        "DEPUTADO ESTADUAL": DEPUTADO_ESTADUAL,
+        "DEPUTADO DISTRITAL": DEPUTADO_DISTRITAL,
+    },
     # 2026: mandatos a partir de 2027; senador e deputados federais também vêm do TSE
     2026: {
         "GOVERNADOR": GOVERNADOR,
         "SENADOR": SENADOR,
         "DEPUTADO FEDERAL": DEPUTADO_FEDERAL,
         "DEPUTADO ESTADUAL": DEPUTADO_ESTADUAL,
+        "DEPUTADO DISTRITAL": DEPUTADO_DISTRITAL,
     },
 }
 
