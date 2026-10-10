@@ -6,6 +6,7 @@ requisição) e para respostas já arquivadas (`rastro redigir-respostas`).
 """
 
 import re
+from collections.abc import Iterable
 
 from rastro.coletores.redacao import redator_csv, redator_json
 
@@ -45,11 +46,12 @@ def apagar_pessoa_fisica(linha: dict) -> list[str]:
     return []
 
 
-def cota(ano: int, uf: str):
+def cota(ano: int, ufs: str | Iterable[str]):
+    siglas = sorted({ufs} if isinstance(ufs, str) else set(ufs))
     return redator_csv(
         COTA_COLUNAS,
-        filtro=lambda linha: linha["sgUF"] == uf,
-        descricao_filtro=f"só sgUF={uf}",
+        filtro=lambda linha: linha["sgUF"] in siglas,
+        descricao_filtro=f"só sgUF={','.join(siglas)}",
         membro_zip=f"Ano-{ano}.csv",
         transformar=apagar_pessoa_fisica,
     )

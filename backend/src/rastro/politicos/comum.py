@@ -2,7 +2,7 @@
 
 import csv
 import io
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from datetime import date, datetime
 
 import httpx
@@ -14,15 +14,27 @@ from rastro.coletores.arquivo import resposta_id
 from rastro.coletores.base import get_json_com_origem
 from rastro.politicos.modelos import PolPolitico
 
-__all__ = ["get_json_com_origem", "baixar_csv", "data", "data_hora", "gravar", "upsert_politico"]
+__all__ = [
+    "get_json_com_origem",
+    "baixar_csv",
+    "data",
+    "data_hora",
+    "gravar",
+    "gravar_em_lotes",
+    "upsert_politico",
+]
 
 
-def baixar_csv(client: httpx.Client, url: str) -> tuple[list[dict], int | None, str]:
-    """Baixa um CSV (`;`, UTF-8 com BOM) inteiro. Devolve (linhas, resposta_id, url)."""
+def baixar_csv(client: httpx.Client, url: str) -> tuple[Iterator[dict], int | None, str]:
+    """Baixa um CSV (`;`, UTF-8 com BOM). Devolve (linhas, resposta_id, url).
+
+    As linhas são lidas sob demanda: os arquivos anuais nacionais da Câmara passam de 50 MB,
+    e uma lista com todas elas ocupava centenas de MB de memória.
+    """
     resp = client.get(url, headers={"Accept": "text/csv"})
     resp.raise_for_status()
     texto = resp.content.decode("utf-8-sig")
-    return list(csv.DictReader(io.StringIO(texto), delimiter=";")), resposta_id(resp), url
+    return csv.DictReader(io.StringIO(texto), delimiter=";"), resposta_id(resp), url
 
 
 def data(valor: str | None) -> date | None:
@@ -48,6 +60,20 @@ def gravar(
         )
         session.execute(stmt)
     return len(linhas)
+
+
+def gravar_em_lotes(
+    session: Session, modelo, linhas: Iterable[dict], chave: Iterable[str], lote=5000
+) -> int:
+    """Como `gravar`, mas consome as linhas aos poucos: com os arquivos nacionais da Câmara,
+    a lista inteira dos votos de todos os deputados ocuparia centenas de MB."""
+    chave, parte, n = list(chave), [], 0
+    for linha in linhas:
+        parte.append(linha)
+        if len(parte) >= lote:
+            n += gravar(session, modelo, parte, chave)
+            parte = []
+    return n + (gravar(session, modelo, parte, chave) if parte else 0)
 
 
 def upsert_politico(session: Session, linha: dict) -> int:
