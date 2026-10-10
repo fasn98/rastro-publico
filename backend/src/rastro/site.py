@@ -644,6 +644,11 @@ def _exportar_fiscal(
             out.manter(ant["arquivos"])
             grupos[nome] = ant
             publicada = "anterior"
+        elif uf == uf_politicos:
+            # os municípios da UF dos políticos saem sempre nos arquivos de sempre
+            # (municipios.json, municipios/{cod}.json, ranking.json): continuam na busca,
+            # mas sem os arquivos novos (estado, ranking da UF, ranking do Brasil)
+            publicada = "arquivos_de_sempre"
         else:
             publicada = "fora"
         situacao[uf] = {
@@ -665,8 +670,14 @@ def _exportar_fiscal(
                 {"cod_ibge": c, "nome": n, "uf": uf, "tipo": "municipio"}
                 for c, n in _municipios_da_uf(s, uf)
             ]
-        for e in s.scalars(
-            select(EnteSiconfi).where(EnteSiconfi.uf == uf, EnteSiconfi.esfera.in_(("E", "D")))
+        # sem estados/{UF}.json, o governo do estado não entra na busca
+        estados_no_site = situacao[uf]["fiscal"]["publicada"] != "arquivos_de_sempre"
+        for e in (
+            s.scalars(
+                select(EnteSiconfi).where(EnteSiconfi.uf == uf, EnteSiconfi.esfera.in_(("E", "D")))
+            ).all()
+            if estados_no_site
+            else []
         ):
             busca.append(
                 {
