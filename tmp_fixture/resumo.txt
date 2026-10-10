@@ -1,0 +1,2 @@
+2022 distritais: 610 eleitos: 24 situações: ['#NULO', 'ELEITO POR MÉDIA', 'ELEITO POR QP', 'NÃO ELEITO', 'SUPLENTE'] CD_CARGO: ['8']
+2026 distritais: 433 eleitos: 24 situações: ['#NULO', 'ELEITO POR MÉDIA', 'ELEITO POR QP', 'NÃO ELEITO', 'SUPLENTE'] CD_CARGO: ['8']
