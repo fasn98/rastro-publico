@@ -20,7 +20,8 @@
 #   RASTRO_GITHUB_TOKEN    token fine-grained, só este repositório, Contents: read and write
 #   RASTRO_URL_AUDITORIA   URL pública da API de auditoria (ex.: https://rastro-auditoria.replit.app)
 #   RASTRO_SIMULAR=1       (opcional) coleta, exporta e verifica, mas não publica o site
-#   RASTRO_LOTE_LIMITE_MIN (opcional) minutos do lote RREO/RGF por execução (padrão 480)
+#   RASTRO_LOTE_LIMITE_MIN (opcional) minutos do lote RREO/RGF por execução (padrão 420)
+#   RASTRO_POLITICOS_LIMITE_MIN (opcional) minutos da coleta de políticos (padrão 90)
 set -euo pipefail
 # qualquer etapa que falhar diz qual foi e com que código (137 = processo morto pelo
 # sistema, em geral por falta de memória; 143 = encerrado pelo agendador)
@@ -51,15 +52,19 @@ uv run rastro coletar ibge-municipios ibge-populacao siconfi-entes \
 echo "== RREO/RGF de todas as UFs (código 1 = algum item falhou; fica para a próxima execução)"
 # Lote nacional (ADR-0020): municípios, estados e DF; primeiro 2023-2025 (os exercícios do
 # ranking v1.1), UF por UF, das UFs com menos municípios para as com mais; depois os demais
-# exercícios. Não começa item novo depois de RASTRO_LOTE_LIMITE_MIN minutos (padrão 480):
+# exercícios. Não começa item novo depois de RASTRO_LOTE_LIMITE_MIN minutos (padrão 420):
 # o que faltar continua na próxima execução, e o resto desta coleta roda dentro do limite
 # de 11 h do Replit. Num lote novo, os exercícios antigos entram em rodízio de 4 semanas.
 uv run python -m rastro.coletores.siconfi_lote --uf TODAS --esfera M E D \
   --anos "2022-$ANO_ATUAL" --prioridade 2023-2025 \
-  --limite-minutos "${RASTRO_LOTE_LIMITE_MIN:-480}" --rodizio || [ $? -eq 1 ]
+  --limite-minutos "${RASTRO_LOTE_LIMITE_MIN:-420}" --rodizio || [ $? -eq 1 ]
 
-echo "== políticos (falha de uma fonte não apaga dados já coletados)"
-uv run rastro politicos --uf SP --anos "2023-$ANO_ATUAL" \
+echo "== políticos de todas as UFs (falha de uma fonte não apaga dados já coletados)"
+# A coleta é nacional (aprovada pelo Fabio em 10/10/2026); o site só publica os políticos
+# das UFs liberadas (por enquanto, SP). Para depois de RASTRO_POLITICOS_LIMITE_MIN minutos
+# (padrão 90): o que faltar continua na próxima execução (os anos fechados ficam guardados).
+RASTRO_POLITICOS_LIMITE_MIN="${RASTRO_POLITICOS_LIMITE_MIN:-90}" \
+  uv run rastro politicos --uf TODAS --anos "2023-$ANO_ATUAL" \
   || echo "AVISO: coleta de políticos com falhas; seguem os dados anteriores (resumo no fim)"
 
 echo "== ranking e verificação do arquivo bruto"
