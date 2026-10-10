@@ -963,3 +963,21 @@ def test_ranking_nacional_junta_as_ufs_no_site(nacional, tmp_path):
     assert adamantina["posicao_faixa_nacional"] == 1
     assert itens[3550308]["nota"] is None and itens[3550308]["posicao_nacional"] is None
     assert site.verificar(dados) == []
+
+
+def test_uf_dos_politicos_reprovada_continua_na_busca(nacional, tmp_path):
+    """Produção, 10/10/2026: SP reprovada no portão (o extrato do governo do estado ainda
+    não tinha sido lido) saiu da busca nacional, embora os municípios de SP continuassem
+    publicados nos arquivos de sempre. Eles têm de continuar na busca, sem os arquivos
+    novos (estado, ranking da UF e do Brasil)."""
+    dados = tmp_path / "dados"
+    manifesto = site.exportar(dados, "SP", nacional, portao=_portao(SP=False, DF=True))
+    assert manifesto["ufs"]["SP"]["fiscal"]["publicada"] == "arquivos_de_sempre"
+    busca = json.loads((dados / "busca.json").read_text())
+    assert busca["ufs"] == ["DF", "SP"]
+    itens = {(b["uf"], b["nome"], b["tipo"]) for b in site.expandir(busca)}
+    assert {("SP", "Adamantina", "municipio"), ("SP", "São Paulo", "municipio")} <= itens
+    assert ("SP", "São Paulo", "estado") not in itens  # sem estados/SP.json
+    assert not (dados / "estados" / "SP.json").exists()
+    assert (dados / "municipios" / "3550308.json").exists()  # arquivos de sempre
+    assert site.verificar(dados) == []
