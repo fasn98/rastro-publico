@@ -13,7 +13,7 @@
 # o envio ao GitHub.
 #
 # O RREO/RGF é coletado para todas as UFs (ADR-0020). A parte fiscal de cada UF entra no
-# site só depois de aprovada no portão de qualidade; os políticos continuam só de SP.
+# site só depois de aprovada no portão de qualidade; dos políticos, o site publica só SP.
 #
 # Variáveis (Secrets do Replit):
 #   DATABASE_URL           banco de produção (criado pelo Replit)
@@ -59,13 +59,23 @@ uv run python -m rastro.coletores.siconfi_lote --uf TODAS --esfera M E D \
   --anos "2022-$ANO_ATUAL" --prioridade 2023-2025 \
   --limite-minutos "${RASTRO_LOTE_LIMITE_MIN:-420}" --rodizio || [ $? -eq 1 ]
 
-echo "== políticos de todas as UFs (falha de uma fonte não apaga dados já coletados)"
-# A coleta é nacional (aprovada pelo Fabio em 10/10/2026); o site só publica os políticos
-# das UFs liberadas (por enquanto, SP). Para depois de RASTRO_POLITICOS_LIMITE_MIN minutos
-# (padrão 90): o que faltar continua na próxima execução (os anos fechados ficam guardados).
+echo "== políticos (falha de uma fonte não apaga dados já coletados)"
+# Câmara, Senado e TSE de todas as UFs (aprovado em 10/10/2026); as emendas só de SP.
+# Com as emendas de todas as UFs, emendas para municípios de SP ganham vínculo com
+# deputados de outras UFs, e os arquivos de SP mudam (links para páginas que o site não
+# exporta; recorte nacional no arquivo bruto). Com esta divisão, a exportação de SP fica
+# idêntica byte a byte à de um banco só com SP (3.058 arquivos, conferidos por SHA-256 em
+# 10/10/2026). As emendas nacionais entram com o portão e a exportação de políticos por UF.
+# Cada chamada para depois de RASTRO_POLITICOS_LIMITE_MIN minutos (padrão 90); o que
+# faltar continua na próxima execução (os anos fechados ficam guardados).
 RASTRO_POLITICOS_LIMITE_MIN="${RASTRO_POLITICOS_LIMITE_MIN:-90}" \
-  uv run rastro politicos --uf TODAS --anos "2023-$ANO_ATUAL" \
+  uv run rastro politicos --uf TODAS --anos "2023-$ANO_ATUAL" --fontes camara senado tse \
   || echo "AVISO: coleta de políticos com falhas; seguem os dados anteriores (resumo no fim)"
+# depois da coleta nacional: a gravação das emendas substitui todas as linhas, e o vínculo
+# fica restrito aos autores de SP
+RASTRO_POLITICOS_LIMITE_MIN="${RASTRO_POLITICOS_LIMITE_MIN:-90}" \
+  uv run rastro politicos --uf SP --anos "2023-$ANO_ATUAL" --fontes emendas emendas-api \
+  || echo "AVISO: coleta das emendas com falhas; seguem os dados anteriores (resumo no fim)"
 
 echo "== ranking e verificação do arquivo bruto"
 # cada UF com o seu ranking (o DF fica fora: Brasília não entrega como município)
