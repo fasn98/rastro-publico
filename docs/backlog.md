@@ -1,6 +1,6 @@
 # Backlog — Rastro Público
 
-> Atualizado em 2026-10-08, na migração para o fluxo do squad. Ordem aprovada pelo Fabio em
+> Atualizado em 2026-10-10 (antes: 2026-10-08, na migração para o fluxo do squad). Ordem aprovada pelo Fabio em
 > 2026-10-08. Nenhuma implementação começa até o Fabio liberar a tarefa. Prioridade: P1 (agora), P2 (próximo), P3 (depois).
 
 ## Aguardando aprovação do Fabio
@@ -20,7 +20,9 @@
 - [ ] T-011 LexML: normas e proposições
 - [ ] T-012 Análise de matérias estranhas ao objeto das proposições
 - [ ] T-013 Doadores de campanha (TSE, prestação de contas)
-- [ ] T-014 Expandir além de SP (a projeção para o Brasil está no README)
+- [ ] T-014 Expandir além de SP — **em andamento** (ADR-0020, aceito em 2026-10-09). Em 2026-10-10, a parte fiscal de 11 UFs passou no portão e está no site (AC, AL, AM, AP, DF, ES, MS, RJ, RO, RR, SE); as demais seguem nas execuções diárias.
+- [ ] T-015 Portão de qualidade dos políticos por UF (`ufs.{UF}.politicos` no manifesto) — sessão de políticos
+- [ ] T-016 Publicar os políticos das UFs além de SP — **aguardando aprovação do Fabio** (publicação de dado novo), depois de T-015
 
 ## Pronto (antes do squad; ver o git log e os READMEs)
 - [x] Coleta SICONFI (RREO, RGF, extrato), IBGE e lote retomável
@@ -36,3 +38,7 @@
 - [x] ADR-0016 Coleta oficial no Replit; Actions só manual; aviso de código atrasado no início da coleta (T-002 cancelada) — 2026-10-09
 - [x] T-005 Chave do Portal da Transparência: era posta num cliente HTTP descartado, e as consultas saíam sem o cabeçalho `chave-api-dados` ("Chave de API não informada"); corrigido com teste pelo caminho da coleta — 2026-10-09. Falta conferir na próxima coleta que `pol-emendas` pela API deixa de falhar. As emendas da API não aparecem no site enquanto houver as do arquivo (`api/politicos.py`).
 - [x] T-003 Ranking Fiscal v1.1 (D1 a D7): ADR-0017, `metodologia_v1_1.toml`, código, testes e página Metodologia — PR #24, aprovado pelo Fabio em 2026-10-09
+- [x] Políticos em várias UFs: passada única da Câmara, reaproveitamento, limite de tempo, partido longo (migração 0020) e DF sem eleição municipal — PR #40, aprovado pelo Fabio em 2026-10-09, mesclado em 2026-10-10
+- [x] CI: PostgreSQL 16 pelo espelho oficial no ECR Public, sem o limite de downloads do Docker Hub — PR #41, aprovado pelo Fabio em 2026-10-10
+- [x] Busca nacional: municípios de SP continuam na busca com a situação "arquivos de sempre" enquanto SP não passa no portão — PR #42, 2026-10-10
+- [x] Cargo deputado(a) distrital para os eleitos do DF (cargo 8 do TSE; 24 em 2022 e 24 em 2026) — PR #43, aprovado pelo Fabio em 2026-10-10
