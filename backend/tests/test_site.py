@@ -595,6 +595,32 @@ def test_exportacao_incremental(coletado, engine, tmp_path):
     assert site.verificar(dados) == []
 
 
+def test_eleitos_regravados_com_ids_novos_refazem_o_arquivo(coletado, engine, tmp_path):
+    """Produção, 12/10/2026: a publicação foi cancelada com "167 políticos citados sem
+    página". O coletor do TSE apaga e regrava os eleitos do ano e da UF a cada coleta, e os
+    167 eleitos de 2026 de SP voltaram com o mesmo conteúdo e ids novos. A impressão do
+    grupo `eleitos:uf-SP-2026` não tinha os ids: a exportação reaproveitou o arquivo com
+    os ids antigos, e as seções de representantes passaram a citar os ids novos."""
+    from test_tse import _zip_original
+
+    dados = tmp_path / "dados"
+    site.exportar(dados, "SP", coletado, hoje=HOJE)
+    antes = _ids(coletado, PolPolitico.fonte == "tse", PolPolitico.eleicao_ano == 2026)
+
+    # a coleta seguinte do TSE 2026, com a mesma resposta real gravada
+    with respx.mock:
+        respx.get(tse.URL_CANDIDATOS.format(ano=2026)).respond(content=_zip_original(2026))
+        with novo_cliente(req_por_segundo=0, arquivo=ArquivoBruto(engine)) as c:
+            tse.coletar_eleitos(coletado, c, 2026, "SP", set())
+    depois = _ids(coletado, PolPolitico.fonte == "tse", PolPolitico.eleicao_ano == 2026)
+    assert len(depois) == len(antes) and not set(depois) & set(antes)  # mesmos eleitos, ids novos
+
+    site.exportar(dados, "SP", coletado, hoje=HOJE)
+    assert site.verificar(dados) == []
+    arquivo = json.loads((dados / "eleitos" / "uf-SP-2026.json").read_text())
+    assert sorted(p["id"] for p in site.expandir(arquivo)) == sorted(depois)
+
+
 def test_arquivo_reaproveitado_alterado_e_regravado(coletado, tmp_path):
     dados = tmp_path / "dados"
     site.exportar(dados, "SP", coletado, hoje=HOJE)
