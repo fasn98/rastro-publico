@@ -19,7 +19,7 @@ import httpx
 import pytest
 import respx
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from conftest import FIXTURES, carregar
 from rastro import publicacao, site
@@ -607,6 +607,13 @@ def test_eleitos_regravados_com_ids_novos_refazem_o_arquivo(coletado, engine, tm
     site.exportar(dados, "SP", coletado, hoje=HOJE)
     antes = _ids(coletado, PolPolitico.fonte == "tse", PolPolitico.eleicao_ano == 2026)
 
+    # ids novos para os mesmos eleitos. Desde o #51 a coleta mantém o id de quem continua no
+    # arquivo; apagar antes reproduz o que ela fazia em 12/10 (e um eleito que sai e volta)
+    coletado.execute(
+        delete(PolPolitico).where(
+            PolPolitico.fonte == "tse", PolPolitico.eleicao_ano == 2026, PolPolitico.uf == "SP"
+        )
+    )
     # a coleta seguinte do TSE 2026, com a mesma resposta real gravada
     with respx.mock:
         respx.get(tse.URL_CANDIDATOS.format(ano=2026)).respond(content=_zip_original(2026))
