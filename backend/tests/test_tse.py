@@ -55,14 +55,18 @@ def _marcador(coluna: str, i: int) -> str:
     return f"MARCADOR-TESTE-{coluna}-{i}"
 
 
-def _zip_original(ano: int) -> bytes:
-    """Remonta o ZIP no layout do TSE a partir da amostra real redigida + marcadores."""
-    linhas = list(
-        csv.DictReader(
+def _zip_original(ano: int, sem: set[str] = frozenset()) -> bytes:
+    """Remonta o ZIP no layout do TSE a partir da amostra real redigida + marcadores.
+
+    `sem`: SQ_CANDIDATO das linhas a deixar de fora (candidato que saiu do arquivo)."""
+    linhas = [
+        r
+        for r in csv.DictReader(
             io.StringIO((POL / f"tse_consulta_cand_{ano}_SP_amostra.csv").read_text()),
             delimiter=";",
         )
-    )
+        if r["SQ_CANDIDATO"] not in sem
+    ]
     saida = io.StringIO()
     w = csv.DictWriter(
         saida, CABECALHO, delimiter=";", quoting=csv.QUOTE_ALL, lineterminator="\r\n"
@@ -314,3 +318,33 @@ def test_eleitos_2026_ficam_ocultos_ate_a_trava(session, cliente, monkeypatch):
         assert "mandato a partir de 2027" in s26["titulo"]
     finally:
         app.dependency_overrides.clear()
+
+
+@respx.mock
+def test_eleito_mantem_o_id_entre_coletas(session, cliente):
+    """O id entra no endereço da página do eleito (#/eleito/.../{id}): não pode mudar a cada
+    coleta. Quem sai do arquivo é apagado."""
+    _mock()
+    tse.coletar_eleitos(session, cliente, 2024, "SP", AMOSTRA_IBGE)
+
+    def ids():
+        return dict(
+            session.execute(
+                select(PolPolitico.id_fonte, PolPolitico.id).where(PolPolitico.fonte == "tse")
+            ).all()
+        )
+
+    antes = ids()
+    tse.coletar_eleitos(session, cliente, 2024, "SP", AMOSTRA_IBGE)
+    assert ids() == antes
+
+    vereador = session.scalars(
+        select(PolPolitico).where(PolPolitico.cargo == "vereador").order_by(PolPolitico.id)
+    ).first()
+    respx.get(tse.URL_CANDIDATOS.format(ano=2024)).respond(
+        content=_zip_original(2024, sem={vereador.id_fonte})
+    )
+    tse.coletar_eleitos(session, cliente, 2024, "SP", AMOSTRA_IBGE)
+    depois = ids()
+    assert vereador.id_fonte not in depois
+    assert depois == {k: v for k, v in antes.items() if k != vereador.id_fonte}

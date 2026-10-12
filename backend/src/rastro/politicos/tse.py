@@ -201,7 +201,12 @@ def _motivo(cargo_tse: str, posteriores: list[list[dict]]) -> str:
 def coletar_eleitos(
     session: Session, client: httpx.Client, ano: int, uf: str, codigos_ibge: set[int]
 ) -> dict:
-    """Grava os eleitos do ano. Substitui por inteiro os registros TSE do ano e da UF."""
+    """Grava os eleitos do ano. Substitui por inteiro os registros TSE do ano e da UF.
+
+    O eleito que continua no arquivo mantém o id (regravação pela chave do TSE): o endereço
+    da página dele no site (`#/eleito/.../{id}`) não muda a cada coleta. Quem saiu do
+    arquivo é apagado no fim.
+    """
     cargos = CARGOS[ano]
     municipal = ano == 2024
     tse_ibge, rid_mun = cruzamento_municipios(client, uf, codigos_ibge) if municipal else ({}, None)
@@ -213,17 +218,13 @@ def coletar_eleitos(
     ]
 
     session.execute(
-        delete(PolPolitico).where(
-            PolPolitico.fonte == "tse", PolPolitico.eleicao_ano == ano, PolPolitico.uf == uf
-        )
-    )
-    session.execute(
         delete(PolPendencia).where(
             PolPendencia.fonte == "tse", PolPendencia.eleicao_ano == ano, PolPendencia.uf == uf
         )
     )
     resumo = {"eleitos": 0, "pendencias": 0, "unidades": set()}
     sem_par = set()
+    mantidos: set[int] = set()
     for ue, cargo_tse, eleitos, posteriores, segundo_turno in selecionar_eleitos(linhas, cargos):
         cargo = cargos[cargo_tse]
         if posteriores:
@@ -241,7 +242,7 @@ def coletar_eleitos(
                 + (f" ({r['DS_ELEICAO']}, {r['DT_ELEICAO']})" if suplementar else "")
                 + (" (2º turno)" if r["NR_TURNO"] == "2" else "")
             )
-            upsert_politico(
+            pid = upsert_politico(
                 session,
                 {
                     "fonte": "tse",
@@ -261,6 +262,7 @@ def coletar_eleitos(
                     "resposta_id": rid,
                 },
             )
+            mantidos.add(pid)
             resumo["eleitos"] += 1
         if not eleitos:
             session.add(
@@ -283,6 +285,14 @@ def coletar_eleitos(
             resumo["pendencias"] += 1
     if sem_par:
         raise CruzamentoIncompleto(f"códigos TSE sem par IBGE: {sorted(sem_par)}")
+    session.execute(
+        delete(PolPolitico).where(
+            PolPolitico.fonte == "tse",
+            PolPolitico.eleicao_ano == ano,
+            PolPolitico.uf == uf,
+            PolPolitico.id.not_in(mantidos),
+        )
+    )
     session.commit()
     resumo["unidades"] = len(resumo["unidades"])
     resumo["resposta_municipios"] = rid_mun
