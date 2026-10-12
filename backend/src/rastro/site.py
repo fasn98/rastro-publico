@@ -39,7 +39,8 @@ só muda quando a fonte muda, e a cópia é aberta na API de auditoria em /api/b
 
 Exportação incremental: a saída é JSON determinístico. Cada político federal e cada
 arquivo de eleitos é um grupo com uma impressão digital calculada no banco (linhas que o
-alimentam, sem ids e datas de gravação) mais o formato, as travas, as exceções de emendas
+alimentam, sem datas de gravação e sem ids internos, salvo os ids dos eleitos, que o
+arquivo de eleitos lista) mais o formato, as travas, as exceções de emendas
 e o código do exportador. Grupo com a mesma impressão da exportação anterior reaproveita
 os arquivos já gravados; os demais arquivos são recalculados e só regravados se mudarem.
 
@@ -312,11 +313,12 @@ def _sal(uf: str, anos_cota: tuple[int, ...], estado_emendas: dict) -> str:
     )
 
 
-def _linhas_sql(tabela: str, grupo: str) -> str:
-    """Linhas de `tabela` como texto, sem id interno, id da resposta e data de gravação;
-    a resposta entra pelo SHA-256 e pela URL (o que o site mostra)."""
+def _linhas_sql(tabela: str, grupo: str, com_id: bool = False) -> str:
+    """Linhas de `tabela` como texto, sem id interno (salvo `com_id`), id da resposta e
+    data de gravação; a resposta entra pelo SHA-256 e pela URL (o que o site mostra)."""
+    sem_id = "" if com_id else " - 'id'"
     return (
-        f"select {grupo} as grupo, (to_jsonb(t) - 'id' - 'resposta_id' - 'atualizado_em')"
+        f"select {grupo} as grupo, (to_jsonb(t){sem_id} - 'resposta_id' - 'atualizado_em')"
         f"::text || '#' || coalesce(r.sha256, '') || '#' || coalesce(r.url, '') as linha "
         f"from {tabela} t left join resposta_bruta r on r.id = t.resposta_id"
     )
@@ -354,13 +356,17 @@ def chave_eleitos(p: dict) -> str:
 
 
 def _impressoes_eleitos(session: Session, ids: list[int], sal: str) -> dict[str, str]:
+    """Com os ids: o arquivo de eleitos lista os ids, e as seções de representantes citam
+    os ids atuais. O coletor do TSE apaga e regrava os eleitos a cada coleta; com o mesmo
+    conteúdo e ids novos, o arquivo reaproveitado citaria ids que não existem mais
+    (produção, 12/10/2026: "167 políticos citados sem página")."""
     chave = (
         "case when t.cod_ibge is not null then 'm-' || t.cod_ibge "
         "else 'uf-' || t.uf || '-' || t.eleicao_ano end"
     )
     sql = text(
         f"select grupo, md5(string_agg(linha, '|' order by linha)) from "
-        f"({_linhas_sql('pol_politico', chave)} "
+        f"({_linhas_sql('pol_politico', chave, com_id=True)} "
         f"where t.id = any(:ids)) x group by grupo"
     )
     return {g: _sha(f"{sal}|{h}".encode()) for g, h in session.execute(sql, {"ids": ids})}
