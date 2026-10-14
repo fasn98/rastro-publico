@@ -198,7 +198,35 @@ h2 { margin: 16px 0 4px; }
 .tabela-ranking { width: 100%; font-size: 0.9em; }
 .tabela-ranking .esq, .tabela-ranking th.esq { text-align: left; }
 .tabela-ranking td.nota-final { font-weight: 700; }
+/* nomes longos e faixas quebram a linha: a tabela cabe na página (no ranking do Brasil, com
+   UF e posição na UF, passava da largura e escondia Transp. e Faltam) */
+.tabela-ranking td.mun, .tabela-ranking td.faixa { white-space: normal; }
 .nota-rodape { font-size: 0.8em; color: var(--suave); }
+.legenda-cartoes { display: none; }
+
+/* celular e tablet: cada linha do ranking vira um cartão (posição, município e nota; a
+   faixa; e os indicadores em etiquetas). Nada fica escondido atrás de uma rolagem
+   horizontal. Acima de 900 px a tabela inteira cabe na página (ranking do Brasil incluído). */
+@media (max-width: 900px) {
+  .legenda-cartoes { display: block; font-size: 0.8em; color: var(--suave); margin: 4px 0 0; }
+  .tabela-ranking, .tabela-ranking tbody { display: block; }
+  .tabela-ranking thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
+  }
+  .tabela-ranking tr {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
+    padding: 8px 2px; border-bottom: 1px solid var(--borda);
+  }
+  .tabela-ranking td { border: 0; padding: 0; }
+  /* a ordem visual independe da ordem das colunas (no Brasil, UF e posição na UF vêm antes
+     da nota na tabela) */
+  .tabela-ranking td.pos { order: 0; min-width: 2.2em; color: var(--suave); font-weight: 600; }
+  .tabela-ranking td.mun { order: 1; flex: 1; white-space: normal; }
+  .tabela-ranking td.nota-final { order: 2; font-size: 1.15em; }
+  .tabela-ranking td.faixa { order: 3; flex-basis: 100%; font-size: 0.85em; color: var(--suave); }
+  .tabela-ranking td.ind { order: 4; font-size: 0.85em; }
+  .tabela-ranking td.ind::before { content: attr(data-rotulo) " "; color: var(--suave); }
+}
 
 .nota-ranking .nota-linha { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .nota-grande { font-size: 2.4em; font-weight: 700; line-height: 1; }

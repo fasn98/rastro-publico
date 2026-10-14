@@ -92,6 +92,13 @@ export default function RankingPagina({ uf }: { uf: string }) {
   const comNota = itens.filter((i) => i.nota !== null);
   const linhas = (semNota ? itens : comNota).slice(0, limite);
   const posicao = faixa ? "posicao_faixa" : "posicao_geral";
+  const rotuloPosicao = faixa
+    ? brasil
+      ? "Pos. na faixa (Brasil)"
+      : "Pos. na faixa"
+    : brasil
+      ? "Posição no Brasil"
+      : "Posição";
 
   const seletor = (
     <select
@@ -189,11 +196,16 @@ export default function RankingPagina({ uf }: { uf: string }) {
         </label>
       </div>
 
+      {/* no celular a tabela vira cartões (estilo.css) e o cabeçalho some: esta linha diz o
+          que é o número à esquerda de cada cartão */}
+      <p className="legenda-cartoes">
+        Número à esquerda: {rotuloPosicao.charAt(0).toLowerCase() + rotuloPosicao.slice(1)}. Notas de 0 a 10.
+      </p>
       <div className="tabela-rolagem">
         <table className="tabela-ranking">
           <thead>
             <tr>
-              <th>{faixa ? (brasil ? "Pos. na faixa (Brasil)" : "Pos. na faixa") : brasil ? "Posição no Brasil" : "Posição"}</th>
+              <th>{rotuloPosicao}</th>
               <th className="esq">Município</th>
               {brasil && <th>UF</th>}
               {brasil && <th title="posição entre os municípios da própria UF">Pos. na UF</th>}
@@ -210,8 +222,8 @@ export default function RankingPagina({ uf }: { uf: string }) {
           <tbody>
             {linhas.map((i) => (
               <tr key={i.cod_ibge}>
-                <td>{i[posicao] ?? "—"}</td>
-                <td className="esq">
+                <td className="pos">{i[posicao] ?? "—"}</td>
+                <td className="esq mun">
                   <a href={`#/municipio/${i.cod_ibge}`}>{i.nome}</a>
                   {gestoes && (
                     // ADR-0018: nenhum nome de prefeito na linha da nota; só o caminho para a
@@ -221,14 +233,26 @@ export default function RankingPagina({ uf }: { uf: string }) {
                     </a>
                   )}
                 </td>
-                {brasil && <td>{i.uf}</td>}
-                {brasil && <td>{i.posicao_uf ?? "—"}</td>}
+                {brasil && (
+                  <td className="ind" data-rotulo="UF">
+                    {i.uf}
+                  </td>
+                )}
+                {brasil && (
+                  <td className="ind" data-rotulo="Pos. na UF">
+                    {i.posicao_uf ?? "—"}
+                  </td>
+                )}
                 <td className="nota-final">{i.nota === null ? "sem nota" : nota10(i.nota)}</td>
-                <td className="esq">{i.faixa}</td>
+                <td className="esq faixa">{i.faixa}</td>
                 {INDICADORES_RANKING.map((k) => (
-                  <td key={k}>{nota10(i.notas[k])}</td>
+                  <td key={k} className="ind" data-rotulo={ABREV[k]} title={met?.indicadores[k]?.nome}>
+                    {nota10(i.notas[k])}
+                  </td>
                 ))}
-                <td>{i.indicadores_faltantes}</td>
+                <td className="ind" data-rotulo="Faltam" title="indicadores sem dado (não reportados)">
+                  {i.indicadores_faltantes}
+                </td>
               </tr>
             ))}
           </tbody>
