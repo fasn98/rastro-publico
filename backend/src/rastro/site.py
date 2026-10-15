@@ -663,7 +663,10 @@ def _exportar_fiscal(
                 "publicada": publicada,
                 "motivos": r.get("motivos", []),
                 **{k: r[k] for k in ("completude", "arquivo_bruto", "sorteados") if k in r},
-            }
+            },
+            # portão de políticos (aprovado em 15/10/2026); a exportação dos políticos fora
+            # de SP ainda não usa este resultado
+            **({"politicos": r["politicos"]} if "politicos" in r else {}),
         }
 
     no_site = sorted(u for u, x in situacao.items() if x["fiscal"]["publicada"] != "fora")

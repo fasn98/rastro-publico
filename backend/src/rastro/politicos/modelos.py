@@ -12,6 +12,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -324,3 +325,27 @@ class PolEleicaoPrefeito(Base):
     data_divulgacao: Mapped[date | None] = mapped_column(Date)  # DT_GERACAO do arquivo
     url_fonte: Mapped[str] = mapped_column(Text)
     resposta_id: Mapped[int | None] = _resposta()
+
+
+class PolColetaUf(Base):
+    """Resultado de cada execução de coleta dos políticos, por UF (migração 0021).
+
+    A tabela `coleta` não tem UF, e a Câmara e as emendas cobrem várias UFs numa execução
+    só: uma passada nacional cortada pelo limite de tempo não diz quais UFs ficaram
+    completas. O portão de políticos (`politicos/portao.py`) lê esta tabela.
+    """
+
+    __tablename__ = "pol_coleta_uf"
+    __table_args__ = (Index("ix_pol_coleta_uf_fonte_uf", "fonte", "uf", "id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    coleta_id: Mapped[int] = mapped_column(ForeignKey("coleta.id"), index=True)
+    # pol-camara | pol-senado | pol-emendas | pol-tse | pol-tse-prefeitos
+    fonte: Mapped[str] = mapped_column(String(60))
+    uf: Mapped[str] = mapped_column(String(2))
+    # sucesso | parcial | falha
+    status: Mapped[str] = mapped_column(String(20))
+    motivo: Mapped[str | None] = mapped_column(Text)
+    registrada_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
