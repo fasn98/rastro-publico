@@ -341,8 +341,17 @@ confere que nenhuma fixture tem CPF formatado.
 **Varredura** (só leitura; imprime fonte, campo e quantidade, nunca os valores):
 
 ```bash
-cd backend && uv run python scripts/varrer_lgpd.py
+cd backend && uv run python scripts/varrer_lgpd.py               # banco e arquivo bruto
+cd backend && uv run python scripts/varrer_lgpd.py --sem-arquivo # só o banco
 ```
+
+A primeira linha diz quantos conteúdos de `payload_bruto` foram lidos, do total (ou que o
+arquivo não foi varrido). O CPF pontuado sai separado pelo dígito verificador
+(`cpf_formatado_dv_valido` e `_invalido`), e os campos que são identificador, hash,
+código ou link (`sha256`, `id_fonte`, `url_pagina`, `SQ_CANDIDATO`...) ficam numa seção à
+parte: os 11 dígitos neles não são dado pessoal em texto. Com a regra atual, no texto
+devem restar só `11_digitos_dv_invalido` e `cpf_formatado_dv_invalido` (números que não
+são CPF, como o do documento fiscal).
 
 ## API
 

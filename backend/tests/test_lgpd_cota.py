@@ -196,3 +196,46 @@ def test_limpeza_da_cota_gravada_antes_da_regra(session, engine, monkeypatch):
     # rodar de novo não muda nada
     assert lgpd.limpar_cpf_nas_tabelas(session) == 0
     assert reaplicar_redacao(session, lgpd.REDIGIR_DE_NOVO) == 0
+
+
+@respx.mock
+def test_cpf_com_pontuacao_parcial_no_nome_gravado_antes_da_0022(session, engine, monkeypatch):
+    """Fornecedor com o CPF em pontuação parcial ("000000000-00", "000.000.00000"), que a
+    regra anterior à 0022 não pegava: a limpeza troca na tabela e no arquivo bruto."""
+    import re as _re
+
+    linhas = _linhas()
+    pj = [r for r in linhas if len(lgpd.digitos(r["txtCNPJCPF"])) == 14]
+    pj[0]["txtFornecedor"] += " 000000000-00"
+    pj[1]["txtFornecedor"] += " 000.000.00000"
+    saida = io.StringIO()
+    w = csv.DictWriter(saida, CABECALHO_COTA, delimiter=";", quoting=csv.QUOTE_ALL, restval="")
+    w.writeheader()
+    w.writerows(linhas)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("Ano-2025.csv", saida.getvalue().encode("utf-8-sig"))
+    respx.get(URL).respond(content=buf.getvalue())
+    mapa = _mapa(session)
+    # a regra de antes da 0022: 11 dígitos seguidos ou 000.000.000-00 completo
+    antiga = _re.compile(r"(?<!\d)\d{11}(?!\d)|(?<!\d)\d{3}\.\d{3}\.\d{3}-\d{2}(?!\d)")
+    monkeypatch.setattr(lgpd, "_CPF_NO_TEXTO", antiga)
+    with novo_cliente(req_por_segundo=0, arquivo=ArquivoBruto(engine)) as c:
+        camara.coletar_cota(session, c, 2025, "SP", mapa)
+    monkeypatch.undo()
+    parciais = (b"000000000-00", b"000.000.00000")
+    resp = session.scalar(select(RespostaBruta))
+    gravado = ler_payload(session.get(PayloadBruto, resp.sha256))
+    assert all(p in gravado for p in parciais)  # a regra antiga deixou passar
+
+    assert lgpd.limpar_cpf_nas_tabelas(session) == 2
+    assert reaplicar_redacao(session, lgpd.REDIGIR_DE_NOVO) == 1
+
+    session.expire_all()
+    nomes = [n or "" for n in session.scalars(select(PolDespesaCota.fornecedor))]
+    assert sum(n.endswith(f" {lgpd.CPF_REMOVIDO}") for n in nomes) == 2
+    assert not any(p.decode() in n for n in nomes for p in parciais)
+    resp = session.scalar(select(RespostaBruta))
+    assert "txtFornecedor (CPF no nome) (2 linhas)" in resp.campos_removidos
+    novo = ler_payload(session.get(PayloadBruto, resp.sha256))
+    assert not any(p in novo for p in parciais)

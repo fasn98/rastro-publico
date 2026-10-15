@@ -10,13 +10,18 @@ Só leitura. Imprime fonte, campo e quantidade, nunca os valores encontrados.
   há redação), aberto como JSON (por chave), CSV (por coluna, também dentro de ZIP) ou,
   se não for nenhum dos dois, como texto inteiro ("(conteúdo)"). A fonte vem do endereço.
 
-Padrões (contados por ocorrência; "linhas" = linhas do banco ou conteúdos do arquivo):
-- cpf_formatado: 000.000.000-00, também com pontuação parcial (000000000-00, 000.000.00000);
-- cpf_11_digitos_dv_valido: 11 dígitos seguidos, com dígitos verificadores de CPF válidos;
-- 11_digitos_dv_invalido: 11 dígitos seguidos que não passam no dígito verificador
-  (não são CPF; aparecem para mostrar o ruído do padrão);
+Padrões (contados por ocorrência; "linhas" = linhas do banco ou conteúdos do arquivo). O
+dígito verificador é o da regra do CPF, a mesma da redação (`lgpd.cpf_valido`: dígitos
+iguais, como "00000000000", não são CPF):
+- cpf_formatado_dv_valido / cpf_formatado_dv_invalido: 11 dígitos com pontuação, completa
+  (000.000.000-00) ou parcial (000000000-00, 000.000.00000);
+- cpf_11_digitos_dv_valido / 11_digitos_dv_invalido: 11 dígitos seguidos, sem pontuação;
 - email_institucional (.gov.br, .leg.br, .jus.br, .mp.br, .def.br) e email_outro;
 - telefone: (00) 0000-0000, (00) 00000-0000, +55..., 0800 000 0000.
+
+Campos que são identificador, hash, código ou link (sha256, id_fonte, url_pagina,
+SQ_CANDIDATO, urlDocumento...) saem numa seção à parte: os 11 dígitos neles são parte do
+identificador, não dado pessoal em texto.
 """
 
 import argparse
@@ -32,6 +37,7 @@ from collections import defaultdict
 from sqlalchemy import text
 
 from rastro.db import get_sessionmaker
+from rastro.politicos.lgpd import cpf_valido
 
 csv.field_size_limit(sys.maxsize)
 
@@ -60,14 +66,16 @@ FONTES = {
 }
 
 
-def cpf_valido(d: str) -> bool:
-    if len(d) != 11 or len(set(d)) == 1:
-        return False
-    for n in (9, 10):
-        soma = sum(int(d[i]) * (n + 1 - i) for i in range(n))
-        if (soma * 10) % 11 % 10 != int(d[n]):
-            return False
-    return True
+# nome do campo (sem a tabela ou o prefixo "zip:"), em minúsculas
+_IDENTIFICADOR = re.compile(
+    r"sha256\w*|hash\w*|id|id_\w+|\w+_id|\w*_id[a-z]\w*|ide(cadastro|documento)"
+    r"|uri\w*|\w*_uri\w*|url\w*|\w*_url\w*|sq_\w+|cod(igo)?\w*|\w+_cod\w*"
+)
+
+
+def identificador(campo: str) -> bool:
+    """Campo que é identificador, hash, código ou link, não texto."""
+    return bool(_IDENTIFICADOR.fullmatch(re.split(r"[.:]", campo)[-1].lower()))
 
 
 def achados(valor: str) -> dict[str, int]:
@@ -77,7 +85,9 @@ def achados(valor: str) -> dict[str, int]:
         if n:
             r[chave] = r.get(chave, 0) + n
 
-    soma("cpf_formatado", sum(not m.isdigit() for m in CPF_PONTUADO.findall(valor)))
+    for m in CPF_PONTUADO.findall(valor):
+        if not m.isdigit():
+            soma("cpf_formatado_dv_" + ("valido" if cpf_valido(m) else "invalido"), 1)
     for m in ONZE.finditer(valor):
         soma("cpf_11_digitos_dv_valido" if cpf_valido(m.group()) else "11_digitos_dv_invalido", 1)
     for m in EMAIL.finditer(valor):
@@ -102,7 +112,14 @@ class Contagem:
 
     def linhas(self) -> list[dict]:
         return [
-            {"fonte": f, "campo": c, "padrao": p, "linhas": n[0], "ocorrencias": n[1]}
+            {
+                "fonte": f,
+                "campo": c,
+                "padrao": p,
+                "linhas": n[0],
+                "ocorrencias": n[1],
+                "identificador": identificador(c),
+            }
             for (f, c, p), n in sorted(self.c.items())
         ]
 
@@ -198,7 +215,9 @@ def varrer_conteudo(cont: Contagem, fonte: str, dados: bytes) -> None:
     cont.valor(fonte, "(conteúdo)", t)
 
 
-def varrer_arquivo(session, cont: Contagem) -> int:
+def varrer_arquivo(session, cont: Contagem) -> tuple[int, int]:
+    """Devolve (conteúdos lidos, total de linhas de payload_bruto)."""
+    total = session.execute(text("select count(*) from payload_bruto")).scalar_one()
     hosts = dict(
         session.execute(
             text(
@@ -216,7 +235,7 @@ def varrer_arquivo(session, cont: Contagem) -> int:
         host = hosts.get(sha, "?")
         varrer_conteudo(cont, f"arquivo/{FONTES.get(host, host)}", dados)
         n += 1
-    return n
+    return n, total
 
 
 def main(argv=None) -> int:
@@ -227,18 +246,27 @@ def main(argv=None) -> int:
     cont = Contagem()
     with get_sessionmaker()() as session:
         varrer_banco(session, cont)
-        n = 0 if args.sem_arquivo else varrer_arquivo(session, cont)
+        lidos, total = (None, None) if args.sem_arquivo else varrer_arquivo(session, cont)
     linhas = cont.linhas()
-    print(f"Conteúdos do arquivo bruto lidos: {n}")
-    print(f"{'fonte':42} {'campo':45} {'padrão':26} {'linhas':>7} {'ocorr.':>7}")
-    for x in linhas:
-        print(
-            f"{x['fonte']:42} {x['campo']:45} {x['padrao']:26} "
-            f"{x['linhas']:>7} {x['ocorrencias']:>7}"
-        )
+    if args.sem_arquivo:
+        print("Arquivo bruto: não varrido (--sem-arquivo)")
+    else:
+        print(f"Arquivo bruto: {lidos} de {total} conteúdos de payload_bruto lidos")
+    for titulo, ident in (
+        ("TEXTO", False),
+        ("IDENTIFICADORES, HASHES, CÓDIGOS E LINKS (não é texto: ruído do padrão)", True),
+    ):
+        print(f"\n== {titulo}")
+        print(f"{'fonte':42} {'campo':45} {'padrão':26} {'linhas':>7} {'ocorr.':>7}")
+        for x in (x for x in linhas if x["identificador"] == ident):
+            print(
+                f"{x['fonte']:42} {x['campo']:45} {x['padrao']:26} "
+                f"{x['linhas']:>7} {x['ocorrencias']:>7}"
+            )
     if args.json:
+        arquivo = {"varrido": not args.sem_arquivo, "lidos": lidos, "total": total}
         with open(args.json, "w") as f:
-            json.dump({"conteudos_lidos": n, "achados": linhas}, f, ensure_ascii=False, indent=1)
+            json.dump({"arquivo": arquivo, "achados": linhas}, f, ensure_ascii=False, indent=1)
     return 0
 
 
