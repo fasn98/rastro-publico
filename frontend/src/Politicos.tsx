@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { buscarMunicipios, type Municipio } from "./api";
+import { daUf, municipiosComPoliticos, NOME_UF, ufDoCodigo, ufsComPoliticos, type Municipio } from "./api";
 import { AUDITORIA_ATIVA, obterManifesto, type SituacaoFonte, urlAuditoria } from "./dados";
 import { FONTE_DO_CARGO } from "./Fontes";
 import {
@@ -111,6 +111,9 @@ export function Contestar({ titulo }: { titulo: string }) {
 
 export function QuemRepresenta({ cod }: { cod: number | null }) {
   const [busca, setBusca] = useState("");
+  // UFs com políticos no site (null: carregando) e a escolhida ("": todas)
+  const [ufs, setUfs] = useState<string[] | null>(null);
+  const [uf, setUf] = useState("");
   const [municipios, setMunicipios] = useState<Municipio[]>([]);
   const [rep, setRep] = useState<Representantes | null>(null);
   const [semRepresentantes, setSemRepresentantes] = useState(false);
@@ -127,55 +130,94 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
   };
 
   useEffect(() => {
+    ufsComPoliticos()
+      .then((u) => {
+        setUfs(u);
+        if (u.length === 1) setUf(u[0]);
+      })
+      .catch((e: Error) => setErro(e.message));
+  }, []);
+  // município aberto pelo link: a UF dele fica escolhida
+  const ufDoMunicipio = cod === null ? "" : ufDoCodigo(cod);
+  useEffect(() => {
+    if (ufs?.includes(ufDoMunicipio)) setUf(ufDoMunicipio);
+  }, [ufs, ufDoMunicipio]);
+  const ufNaoPublicada = cod !== null && ufs !== null && !ufs.includes(ufDoMunicipio);
+
+  const termo = busca.trim();
+  // todas as UFs: a lista só aparece com ao menos 2 letras, para não montar milhares de opções
+  const precisaBusca = uf === "" && termo.length < 2;
+  useEffect(() => {
+    if (ufs === null) return;
+    if (precisaBusca) {
+      setMunicipios([]);
+      return;
+    }
     const t = setTimeout(() => {
-      buscarMunicipios("SP", busca.trim().length >= 2 ? busca.trim() : "")
-        .then((r) => setMunicipios(r.itens))
+      municipiosComPoliticos(ufs, uf, termo.length >= 2 ? termo : "")
+        .then(setMunicipios)
         .catch((e: Error) => setErro(e.message));
     }, 250);
     return () => clearTimeout(t);
-  }, [busca]);
+  }, [ufs, uf, termo, precisaBusca]);
 
   useEffect(() => {
     setRep(null);
     setEmendas(null);
     setSemRepresentantes(false);
-    if (cod === null) return;
+    // UF sem políticos no site: nem o arquivo do município é lido (ele pode nem existir)
+    if (cod === null || ufs === null || !ufs.includes(ufDoCodigo(cod))) return;
     obterRepresentantes(cod)
       .then((r) => (r === null ? setSemRepresentantes(true) : setRep(r)))
       .catch((e: Error) => setErro(e.message));
     obterEmendasMunicipio(cod).then(setEmendas).catch((e: Error) => setErro(e.message));
-  }, [cod]);
+  }, [cod, ufs]);
 
   return (
     <section className="politicos">
       <h2>Quem representa você</h2>
       <p className="sub">
-        Escolha um município de SP para ver quem ocupa cada cargo, segundo as fontes oficiais.
+        Escolha a UF e o município para ver quem ocupa cada cargo, segundo as fontes oficiais.
         Listas em ordem alfabética.
       </p>
+      {ufs?.length === 1 && (
+        <p className="sub">Por enquanto, só há políticos {daUf(ufs[0])} publicados no site.</p>
+      )}
       <div className="filtros">
+        <select aria-label="UF" value={uf} onChange={(e) => setUf(e.target.value)}>
+          {ufs !== null && ufs.length > 1 && <option value="">Todas as UFs</option>}
+          {(ufs ?? []).map((u) => (
+            <option key={u} value={u}>
+              {NOME_UF[u] ?? u}
+            </option>
+          ))}
+        </select>
         <input
-          placeholder="Buscar município de SP"
-          aria-label="Buscar município de SP"
+          placeholder="Buscar município"
+          aria-label="Buscar município"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
         />
         <select
           aria-label="Município"
-          value={cod ?? ""}
+          value={municipios.some((m) => m.cod_ibge === cod) ? (cod ?? "") : ""}
           onChange={(e) => (location.hash = e.target.value ? `#/representantes/${e.target.value}` : "#/representantes")}
         >
-          <option value="">Selecione o município</option>
+          <option value="">
+            {precisaBusca ? "Digite ao menos 2 letras do município" : "Selecione o município"}
+          </option>
           {municipios.map((m) => (
             <option key={m.cod_ibge} value={m.cod_ibge}>
-              {m.nome}
+              {uf === "" ? `${m.nome} / ${m.uf}` : m.nome}
             </option>
           ))}
         </select>
       </div>
       {erro && <p className="erro">{erro}</p>}
-      {semRepresentantes && (
-        <p className="sub">Representantes deste município ainda não coletados.</p>
+      {ufNaoPublicada ? (
+        <p className="sub">Os políticos {daUf(ufDoMunicipio)} ainda não estão publicados no site.</p>
+      ) : (
+        semRepresentantes && <p className="sub">Representantes deste município ainda não coletados.</p>
       )}
 
       {rep && (

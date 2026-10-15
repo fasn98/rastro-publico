@@ -66,6 +66,14 @@ export type Manifesto = {
   fontes?: SituacaoFonte[];
   /** travas de publicação no momento da exportação (Settings.pol_publicar_*) */
   travas?: Record<string, boolean>;
+  /** portões por UF (ADR-0020); `politicos` só nas exportações com o portão de políticos */
+  ufs?: Record<
+    string,
+    {
+      fiscal: { aprovada: boolean; motivos: string[]; publicada: string };
+      politicos?: { aprovada: boolean; motivos: string[]; publicada?: boolean };
+    }
+  >;
 };
 
 export const obterManifesto = () => lerJson<Manifesto>("manifesto.json", true);

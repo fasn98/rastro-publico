@@ -36,7 +36,7 @@ export type MunicipioDetalhe = Municipio & {
 export type Pagina<T> = { total: number; itens: T[] };
 
 import type { Representantes } from "./apiPoliticos";
-import { expandir, lerJson, normalizar, urlDados, type Compacto } from "./dados";
+import { expandir, lerJson, normalizar, obterManifesto, urlDados, type Compacto } from "./dados";
 
 /** Arquivo estático de um município: detalhe, série, nota, representantes, emendas. */
 export type ArquivoMunicipio = {
@@ -151,6 +151,28 @@ export async function sugerirMunicipios(texto: string, limite = 10): Promise<Ite
       a[1].nome.localeCompare(b[1].nome, "pt-BR"),
   );
   return pontuados.slice(0, limite).map(([, m]) => m);
+}
+
+/** UFs com os políticos no site: a UF da exportação e as liberadas que passaram nos dois
+ * portões (`ufs.{UF}.politicos.publicada` no manifesto, a mesma regra de `verificar`). */
+export async function ufsComPoliticos(): Promise<string[]> {
+  const m = await obterManifesto();
+  const ufs = new Set([m?.uf ?? "SP"]);
+  for (const [uf, x] of Object.entries(m?.ufs ?? {})) if (x.politicos?.publicada) ufs.add(uf);
+  return [...ufs].sort();
+}
+
+/** Municípios das UFs com políticos no site, pela busca nacional. `uf` vazio: todas. */
+export async function municipiosComPoliticos(ufs: string[], uf: string, nome: string): Promise<Municipio[]> {
+  const termo = normalizar(nome);
+  return (await listaBusca()).itens
+    .filter(
+      (m) =>
+        m.tipo === "municipio" &&
+        (uf ? m.uf === uf : ufs.includes(m.uf)) &&
+        (!termo || normalizar(m.nome).includes(termo)),
+    )
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR") || a.uf.localeCompare(b.uf));
 }
 
 export const todosMunicipios = () => listaMunicipios();
