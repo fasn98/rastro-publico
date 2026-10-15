@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from rastro.coletores.arquivo import resposta_id
+from rastro.coletores.arquivo import com_redacao, resposta_id
 from rastro.coletores.base import get_json_com_origem
 from rastro.politicos.modelos import PolPolitico
 
@@ -25,13 +25,16 @@ __all__ = [
 ]
 
 
-def baixar_csv(client: httpx.Client, url: str) -> tuple[Iterator[dict], int | None, str]:
+def baixar_csv(
+    client: httpx.Client, url: str, redator=None
+) -> tuple[Iterator[dict], int | None, str]:
     """Baixa um CSV (`;`, UTF-8 com BOM). Devolve (linhas, resposta_id, url).
 
     As linhas são lidas sob demanda: os arquivos anuais nacionais da Câmara passam de 50 MB,
-    e uma lista com todas elas ocupava centenas de MB de memória.
+    e uma lista com todas elas ocupava centenas de MB de memória. Com `redator`, a resposta
+    é arquivada redigida (as linhas devolvidas são as originais: ver `get_json_com_origem`).
     """
-    resp = client.get(url, headers={"Accept": "text/csv"})
+    resp = client.get(url, headers={"Accept": "text/csv"}, extensions=com_redacao(redator))
     resp.raise_for_status()
     texto = resp.content.decode("utf-8-sig")
     return csv.DictReader(io.StringIO(texto), delimiter=";"), resposta_id(resp), url

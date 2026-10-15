@@ -288,7 +288,8 @@ O arquivo anual tem 32 colunas e 209.080 linhas em 2025, das quais 25.844 de SP.
 - colunas `cpf`, `nuCarteiraParlamentar` e `txtPassageiro`;
 - em linhas de fornecedor **pessoa física** (11 dígitos em `txtCNPJCPF`), o CPF e o nome
   do fornecedor: 191 linhas em SP, 2025;
-- CPF dentro do nome do fornecedor, como na razão social de MEI ("NOME 12345678901"):
+- CPF dentro do nome do fornecedor, como na razão social de MEI ("NOME 12345678901"),
+  com ou sem pontuação, completa ou parcial ("NOME 123456789-01", desde 15/10/2026):
   trocado por "[CPF removido]" em 75 linhas. O CNPJ (14 dígitos) é mantido. Sequências de
   11 dígitos em `txtNumero` (número do documento fiscal) não são CPF e ficam.
 
@@ -313,11 +314,28 @@ pública e comparar com `sha256_original`.
 | Câmara, cota | `cpf`, `nuCarteiraParlamentar`, `txtPassageiro`; CPF e nome de fornecedor pessoa física |
 | Câmara, listas de deputados | `email` (e-mail de gabinete) |
 | Senado, lista de senadores | `EmailParlamentar` |
+| Câmara `/proposicoes` e Senado `/processo` | CPF citado no texto livre (ementa, autoria), trocado por "[CPF removido]" |
+| Câmara, `votacoes-{ano}.csv` | CPF citado nas colunas de descrição, trocado por "[CPF removido]" |
 | Câmara `/deputados/{id}` e Senado `/senador/{cod}` | não são consultados (CPF, data de nascimento, endereço) |
 
+**CPF em texto livre (15/10/2026).** Ementas de denúncias trazem o CPF da pessoa
+denunciada ("inscrito no CPF sob o n° ..."), e a descrição de uma votação de 2023 lista
+pessoas com o CPF. A coleta troca, no banco e no arquivo bruto, todo CPF do texto (11
+dígitos com ou sem pontuação, sem outro dígito encostado) por "[CPF removido]". Resposta
+sem CPF é arquivada como veio, sem redação. O que já estava gravado foi limpo pela
+migração 0022 (a mesma limpeza do `rastro redigir-respostas`). Na exportação, `verificar`
+recusa publicar qualquer arquivo com CPF no formato 000.000.000-00.
+
 Testes varrem todas as tabelas e todos os payloads procurando e-mails, nomes de campos
-pessoais e marcadores de teste colocados nas colunas pessoais. As fixtures do TSE e da
-cota estão no repositório **já sem** os dados pessoais.
+pessoais e marcadores de teste colocados nas colunas pessoais. As fixtures do TSE, da
+cota e das proposições estão no repositório **já sem** os dados pessoais, e um teste
+confere que nenhuma fixture tem CPF formatado.
+
+**Varredura** (só leitura; imprime fonte, campo e quantidade, nunca os valores):
+
+```bash
+cd backend && uv run python scripts/varrer_lgpd.py
+```
 
 ## API
 
