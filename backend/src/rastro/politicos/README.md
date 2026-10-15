@@ -105,6 +105,26 @@ Uma UF nova, uma semana passada ou a coleta sem arquivamento fazem baixar de nov
 coleta para antes do próximo item (deputado, ano, UF ou fonte), guarda o que já gravou e
 sai `parcial`, com o motivo.
 
+**Resultado por UF** (`pol_coleta_uf`, migração 0021). Cada execução grava o resultado de
+cada UF. Na Câmara, a falha num item de um deputado conta só para a UF dele; a de um
+arquivo nacional e o fim do prazo contam para todas. A API de emendas fica em
+`pol-emendas-api`, separada do arquivo em lote (`pol-emendas`).
+
+**Portão de políticos por UF** (`portao.py`, aprovado em 10/10 e 15/10/2026). Roda dentro
+do `rastro portao` e vai para o manifesto em `ufs.{UF}.politicos = {aprovada, motivos}`.
+Os políticos de uma UF além da UF da exportação (SP, publicada desde 06/10/2026 e fora
+deste portão) só saem no site com este portão e o fiscal aprovados. Conferências, só no
+banco:
+1. a última coleta da UF em Câmara, Senado, TSE e emendas terminou com sucesso (fonte sem
+   coleta: "ainda não coletados");
+2. há eleitos do TSE da UF em 2022 e 2024 (o DF não tem eleição municipal);
+3. toda exceção aprovada de emenda de político da UF casou com uma linha do arquivo;
+4. com `pol_publicar_gestoes` ligada, a coleta de prefeitos da UF terminou com sucesso.
+
+Emenda sem vínculo por ambiguidade (nome repetido, mais de um "Código do Autor") não
+reprova a UF: a regra já a mostra sem link. Um erro na avaliação vira reprovação, sem
+derrubar o portão fiscal.
+
 **Tempos medidos em 06/10/2026, SP:**
 - Câmara (com cota) e Senado, ano de 2025, numa só execução: 3 min 10 s. Foram 90
   deputados, 8.884 proposições, 24.565 votos, 14.936 presenças e 25.844 lançamentos de

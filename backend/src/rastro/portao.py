@@ -15,6 +15,9 @@ Uma UF só entra no site se passar nas três conferências, nesta ordem:
 
 Uma UF reprovada fica fora do site (ou com a versão publicada antes), sem bloquear as
 demais. O resultado vai para o manifesto.
+
+Cada UF leva também o resultado do portão de políticos (`politicos/portao.py`), em
+`politicos`: os políticos de uma UF só saem com os dois portões aprovados.
 """
 
 import logging
@@ -294,6 +297,8 @@ def avaliar(
     hoje: date,
     ufs: list[str] | None = None,
 ) -> dict[str, dict]:
+    from rastro.politicos import portao as portao_politicos
+
     resultados = {}
     for uf in ufs or UFS:
         resultados[uf] = avaliar_uf(session, client, uf, exercicios, hoje)
@@ -304,4 +309,6 @@ def avaliar(
             "aprovada" if r["aprovada"] else "reprovada",
             "" if r["aprovada"] else f" ({'; '.join(r['motivos'])})",
         )
+        # portão de políticos: só lê o banco, e um erro nele não derruba o fiscal
+        r["politicos"] = portao_politicos.avaliar_uf_isolado(session, uf)
     return resultados
