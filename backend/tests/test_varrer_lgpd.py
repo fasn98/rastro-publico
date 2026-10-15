@@ -38,6 +38,10 @@ def test_identificadores_saem_a_parte():
         "SQ_COLIGACAO",
         "zip:ideDocumento",
         "ultimaApresentacaoProposicao_idProposicao",
+        "pol_despesa_cota.ide_documento",
+        "idOrgao",
+        "idEvento",
+        "idDeputadoAutor",
     ):
         assert v.identificador(campo), campo
     for campo in (
@@ -49,5 +53,7 @@ def test_identificadores_saem_a_parte():
         "zip:txtFornecedor",
         "ultimaApresentacaoProposicao_descricao",
         "(conteúdo)",
+        "identificacao",
+        "pol_proposicao.identificacao",
     ):
         assert not v.identificador(campo), campo
