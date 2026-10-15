@@ -112,8 +112,9 @@ arquivo nacional e o fim do prazo contam para todas. A API de emendas fica em
 
 **Portão de políticos por UF** (`portao.py`, aprovado em 10/10 e 15/10/2026). Roda dentro
 do `rastro portao` e vai para o manifesto em `ufs.{UF}.politicos = {aprovada, motivos}`.
-Os políticos de uma UF só saem no site com este portão e o fiscal aprovados. Conferências,
-só no banco:
+Os políticos de uma UF além da UF da exportação (SP, publicada desde 06/10/2026 e fora
+deste portão) só saem no site com este portão e o fiscal aprovados. Conferências, só no
+banco:
 1. a última coleta da UF em Câmara, Senado, TSE e emendas terminou com sucesso (fonte sem
    coleta: "ainda não coletados");
 2. há eleitos do TSE da UF em 2022 e 2024 (o DF não tem eleição municipal);

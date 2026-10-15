@@ -1,7 +1,8 @@
 """Portão de políticos por UF (aprovado pelo Fabio em 10/10 e 15/10/2026).
 
-Uma UF só tem os políticos publicados se passar neste portão **e** no portão fiscal
-(`rastro.portao`). Conferências, só no banco (nenhuma consulta à rede):
+Uma UF além da UF da exportação (SP, publicada desde 06/10/2026 e fora deste portão) só
+tem os políticos publicados se passar neste portão **e** no portão fiscal (`rastro.portao`).
+Conferências, só no banco (nenhuma consulta à rede):
 
 1. **Coletas:** a última coleta da UF em cada fonte (`pol_coleta_uf`) terminou com sucesso.
    Câmara, Senado, TSE e emendas do arquivo em lote. Fonte sem coleta da UF: "ainda não
