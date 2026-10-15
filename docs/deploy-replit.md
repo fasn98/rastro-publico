@@ -178,6 +178,10 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 > (`Running upgrade ... -> 0021`); sem nenhuma linha "Running upgrade", o banco já estava em
 > dia. A coleta também roda `alembic upgrade head` no início de cada execução, mas aplicar
 > antes do Republish garante que o código novo nunca encontre o banco no formato antigo.
+> Migrações só de dados levam alguns minutos no banco nacional: na medição da sessão de
+> políticos (15/10/2026), a 0022 (CPF em texto livre) levou cerca de 1,5 min e a 0023 (cota:
+> CPF no número do documento e e-mail do fornecedor) cerca de 2,5 min. Se não forem
+> aplicadas no Shell, a primeira coleta depois do Republish as aplica e demora isso a mais.
 
 > **No painel Git do Replit, use apenas Pull; nunca Sync Changes nem Push. Os commits locais
 > do Replit são registros de publicação e configuração do app e não devem ir para o
