@@ -932,6 +932,19 @@ def test_exporta_so_as_ufs_aprovadas_no_portao(nacional, tmp_path):
     assert site.verificar(dados) == []
 
 
+def test_manifesto_traz_o_portao_de_politicos_por_uf(nacional, tmp_path):
+    """Chave ufs.{UF}.politicos (aprovada pelo Fabio em 15/10/2026), ao lado do fiscal."""
+    portao = _portao(SP=True, DF=True)
+    portao["DF"]["politicos"] = {
+        "aprovada": False,
+        "motivos": ["emendas da UF ainda não coletadas"],
+    }
+    manifesto = site.exportar(tmp_path / "dados", "SP", nacional, portao=portao)
+    assert manifesto["ufs"]["DF"]["politicos"] == portao["DF"]["politicos"]
+    assert "politicos" not in manifesto["ufs"]["SP"]  # portão sem a parte de políticos
+    assert site.verificar(tmp_path / "dados") == []
+
+
 def test_verificacao_recusa_arquivo_de_uf_fora_do_site(nacional, tmp_path):
     dados = tmp_path / "dados"
     site.exportar(dados, "SP", nacional, portao=_portao(SP=True, DF=False))

@@ -28,7 +28,7 @@ from rastro.config import get_settings
 from rastro.db import get_sessionmaker
 from rastro.fontes import executar_com_esperas
 from rastro.politicos import camara, gestoes, reuso, senado, transparencia, tse
-from rastro.politicos.modelos import DEPUTADO_FEDERAL, SENADOR, PolPolitico
+from rastro.politicos.modelos import DEPUTADO_FEDERAL, SENADOR, PolColetaUf, PolPolitico
 
 log = logging.getLogger(__name__)
 FONTES = ("camara", "senado", "emendas", "emendas-api", "tse", "prefeitos")
@@ -99,17 +99,26 @@ def coletor_camara(ufs: str | list[str], anos: list[int], prazo: Prazo = SEM_PRA
     nacionais e são baixados uma vez para todas as UFs. Nos anos fechados, um arquivo já
     baixado na semana, arquivado e que cobriu todas as UFs pedidas não é baixado de novo
     (`reuso`); as proposições do deputado no ano fechado, idem.
+
+    Depois de rodar, `coletar.por_uf` diz o resultado de cada UF (gravado em pol_coleta_uf):
+    a falha num item de um deputado conta só para a UF dele; a de um arquivo nacional e o
+    fim do prazo contam para todas.
     """
     ufs = [ufs] if isinstance(ufs, str) else list(ufs)
 
     def coletar(session: Session, client: httpx.Client) -> int:
         erros: list[str] = []
         mapa: dict[int, int] = {}
+        uf_de: dict[int, str] = {}
+        falhas: dict[str, list[str]] = {uf: [] for uf in ufs}
+        coletar.por_uf = {}
         for uf in ufs:
-            mapa.update(camara.coletar_deputados(session, client, uf))
+            da_uf = camara.coletar_deputados(session, client, uf)
+            mapa.update(da_uf)
+            uf_de.update(dict.fromkeys(da_uf, uf))
         total = len(mapa)
 
-        def tentar(rotulo: str, funcao, *args) -> None:
+        def tentar(rotulo: str, funcao, *args, uf: str | None = None) -> None:
             nonlocal total
             if prazo.esgotado():
                 raise _PrazoEsgotado
@@ -118,11 +127,16 @@ def coletor_camara(ufs: str | list[str], anos: list[int], prazo: Prazo = SEM_PRA
             # (idle_in_transaction_session_timeout). Nada está pendente: cada item grava
             # com commit.
             session.commit()
+            antes = len(erros)
             total += _tentar(erros, rotulo, funcao, session, client, *args)
+            if len(erros) > antes:
+                for u in [uf] if uf else ufs:
+                    falhas[u].append(erros[-1])
 
         try:
             for id_camara, pid in sorted(mapa.items()):
-                tentar(f"histórico {id_camara}", camara.coletar_historico, id_camara, pid)
+                uf = uf_de[id_camara]
+                tentar(f"histórico {id_camara}", camara.coletar_historico, id_camara, pid, uf=uf)
             for ano in anos:
                 fechado = reuso.ano_fechado(ano, hoje)
                 for id_camara, pid in sorted(mapa.items()):
@@ -131,7 +145,8 @@ def coletor_camara(ufs: str | list[str], anos: list[int], prazo: Prazo = SEM_PRA
                     ):
                         continue
                     rotulo = f"proposições {id_camara}/{ano}"
-                    tentar(rotulo, camara.coletar_proposicoes, id_camara, pid, ano)
+                    uf = uf_de[id_camara]
+                    tentar(rotulo, camara.coletar_proposicoes, id_camara, pid, ano, uf=uf)
                 for tipo, rotulo, funcao, extra in (
                     ("votos", "votos", camara.coletar_votos, ()),
                     ("presencas", "presenças", camara.coletar_presencas, ()),
@@ -143,10 +158,16 @@ def coletor_camara(ufs: str | list[str], anos: list[int], prazo: Prazo = SEM_PRA
                     tentar(f"{rotulo} {ano}", funcao, ano, *extra, mapa)
         except _PrazoEsgotado:
             erros.append(prazo.motivo)
+            for u in ufs:
+                falhas[u].append(prazo.motivo)
+        coletar.por_uf = {
+            u: ("parcial", "; ".join(f[:3])) if f else ("sucesso", None) for u, f in falhas.items()
+        }
         if erros:
             raise ColetaParcial(total, erros)
         return total
 
+    coletar.por_uf = {}
     return coletar
 
 
@@ -291,6 +312,30 @@ def coletor_prefeitos(uf: str):
     return coletar
 
 
+def registrar_ufs(
+    session: Session,
+    coleta,
+    fonte: str,
+    ufs: list[str],
+    por_uf: dict[str, tuple[str, str | None]] | None = None,
+) -> None:
+    """Grava o resultado da coleta por UF (pol_coleta_uf), lido pelo portão de políticos.
+
+    `fonte` é o nome da fonte no CLI com o prefixo "pol-": a API de emendas fica em
+    "pol-emendas-api", separada do arquivo em lote ("pol-emendas"). `por_uf`: resultado
+    de cada UF quando o coletor sabe separar (Câmara); senão, todas as UFs recebem o
+    status da execução.
+    """
+    motivo_geral = (coleta.erro or "").split("\n")[0] or None
+    for uf in ufs:
+        if por_uf and uf in por_uf and coleta.status != "falha":
+            st, motivo = por_uf[uf]
+        else:
+            st, motivo = coleta.status, motivo_geral
+        session.add(PolColetaUf(coleta_id=coleta.id, fonte=fonte, uf=uf, status=st, motivo=motivo))
+    session.commit()
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="rastro politicos", description=__doc__.split("\n\n")[0])
     p.add_argument("--uf", nargs="+", default=["SP"], help="ex.: SP AC; TODAS = as 27 UFs")
@@ -338,9 +383,11 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"{nome} {rotulo}: não coletada ({prazo.motivo})", file=sys.stderr)
                     status = 1
                     continue
-                coleta = executar_com_esperas(
-                    session, nome, fabrica(alvo, anos), cliente_da_fonte(fonte)
-                )
+                coletor = fabrica(alvo, anos)
+                coleta = executar_com_esperas(session, nome, coletor, cliente_da_fonte(fonte))
+                ufs_alvo = [alvo] if isinstance(alvo, str) else alvo
+                por_uf = getattr(coletor, "por_uf", None)
+                registrar_ufs(session, coleta, f"pol-{fonte}", ufs_alvo, por_uf)
                 print(f"{nome} {rotulo}: {coleta.status} ({coleta.registros or 0} registros)")
                 if coleta.erro:
                     print(coleta.erro, file=sys.stderr)
