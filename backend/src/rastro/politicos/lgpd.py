@@ -39,6 +39,41 @@ def sem_cpf(texto: str | None) -> str | None:
     return _CPF_NO_TEXTO.sub(CPF_REMOVIDO, texto) if texto else texto
 
 
+def cpf_valido(numero: str) -> bool:
+    """11 dígitos cujos dois dígitos verificadores batem com a regra do CPF (módulo 11).
+    Sequências de dígitos iguais passam na conta, mas a Receita não as emite e não são CPF:
+    na cota aparecem como número de documento ("00000000000", 5 linhas em 2023 e 2024)."""
+    d = digitos(numero)
+    if len(d) != 11 or len(set(d)) == 1:
+        return False
+    for n in (9, 10):
+        soma = sum(int(d[i]) * (n + 1 - i) for i in range(n))
+        if (soma * 10) % 11 % 10 != int(d[n]):
+            return False
+    return True
+
+
+def sem_cpf_valido(texto: str | None) -> str | None:
+    """Como `sem_cpf`, mas só troca o que passa no dígito verificador do CPF (número do
+    documento fiscal da cota: os demais números de 11 dígitos são mantidos)."""
+    if not texto:
+        return texto
+    return _CPF_NO_TEXTO.sub(lambda m: CPF_REMOVIDO if cpf_valido(m[0]) else m[0], texto)
+
+
+_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}")
+EMAIL_REMOVIDO = "[e-mail removido]"
+
+
+def sem_email(texto: str | None) -> str | None:
+    return _EMAIL.sub(EMAIL_REMOVIDO, texto) if texto else texto
+
+
+def fornecedor_sem_dados_pessoais(texto: str | None) -> str | None:
+    """Nome de fornecedor da cota (pessoa jurídica): sem CPF nem e-mail no meio do nome."""
+    return sem_email(sem_cpf(texto))
+
+
 # Campos de texto livre das proposições (Câmara: ementa; Senado: ementa e autoria). Os
 # demais são códigos, datas e links: o link do documento no Senado tem 11 dígitos seguidos
 # ("...documento?dm=...") e não pode ser tocado.
@@ -101,15 +136,28 @@ def votacoes(original: bytes) -> Redacao:
 
 
 def apagar_pessoa_fisica(linha: dict) -> list[str]:
+    alterados = []
     if len(digitos(linha.get("txtCNPJCPF"))) == 11:
         linha["txtCNPJCPF"] = ""
         linha["txtFornecedor"] = ""
-        return ["txtCNPJCPF", "txtFornecedor"]
-    limpo = sem_cpf(linha.get("txtFornecedor"))
-    if limpo != linha.get("txtFornecedor"):
-        linha["txtFornecedor"] = limpo
-        return ["txtFornecedor (CPF no nome)"]
-    return []
+        alterados += ["txtCNPJCPF", "txtFornecedor"]
+    else:
+        nome = linha.get("txtFornecedor")
+        sem_o_cpf = sem_cpf(nome)
+        if sem_o_cpf != nome:
+            alterados.append("txtFornecedor (CPF no nome)")
+        limpo = sem_email(sem_o_cpf)
+        if limpo != sem_o_cpf:
+            alterados.append("txtFornecedor (e-mail no nome)")
+        if alterados:
+            linha["txtFornecedor"] = limpo
+    # número do documento fiscal: só o que é CPF (dígito verificador válido) sai
+    numero = linha.get("txtNumero")
+    limpo = sem_cpf_valido(numero)
+    if limpo != numero:
+        linha["txtNumero"] = limpo
+        alterados.append("txtNumero (CPF)")
+    return alterados
 
 
 def cota(ano: int, ufs: str | Iterable[str]):
@@ -123,8 +171,8 @@ def cota(ano: int, ufs: str | Iterable[str]):
     )
 
 
-# Cota já gravada redigida (CSV em UTF-8, sem as colunas pessoais): de novo o CPF no nome
-# do fornecedor, com o padrão atual (o anterior não pegava a pontuação parcial)
+# Cota já gravada redigida (CSV em UTF-8, sem as colunas pessoais): de novo a regra atual
+# (CPF com pontuação parcial e e-mail no nome do fornecedor, CPF no número do documento)
 COTA_GRAVADA = redator_csv((), encoding="utf-8", transformar=apagar_pessoa_fisica)
 
 
@@ -147,9 +195,17 @@ REGRAS = [
 REDIGIR_DE_NOVO = [(r"^https://www\.camara\.leg\.br/cotas/Ano-\d{4}\.csv\.zip$", COTA_GRAVADA)]
 
 
+# limpeza por coluna (as demais: `sem_cpf`)
+_LIMPEZA = {
+    "fornecedor": fornecedor_sem_dados_pessoais,
+    "numero_documento": sem_cpf_valido,
+}
+
+
 def limpar_cpf_nas_tabelas(session) -> int:
-    """Troca o CPF citado no texto já gravado (coletas anteriores à regra de 15/10/2026):
-    ementas e autoria das proposições, descrição das votações, nome do fornecedor da cota.
+    """Troca o CPF citado no texto já gravado (coletas anteriores às regras de 15/10/2026):
+    ementas e autoria das proposições, descrição das votações, nome do fornecedor da cota
+    (também o e-mail) e número do documento da cota (só CPF com dígito verificador válido).
     Devolve quantas linhas mudaram; o arquivo bruto fica com `redigir_arquivadas` e
     `reaplicar_redacao`."""
     from sqlalchemy import or_, select
@@ -160,16 +216,16 @@ def limpar_cpf_nas_tabelas(session) -> int:
     for modelo, campos in (
         (PolProposicao, ("ementa", "autoria")),
         (PolVotacao, ("descricao",)),
-        (PolDespesaCota, ("fornecedor",)),
+        (PolDespesaCota, ("fornecedor", "numero_documento")),
     ):
         colunas = [getattr(modelo, c) for c in campos]
         linhas = session.scalars(
-            select(modelo).where(or_(*(c.regexp_match(CPF_NO_TEXTO_SQL) for c in colunas)))
+            select(modelo).where(or_(*(c.regexp_match(f"{CPF_NO_TEXTO_SQL}|@") for c in colunas)))
         ).all()
         for linha in linhas:
             mudou = False
             for c in campos:
-                limpo = sem_cpf(getattr(linha, c))
+                limpo = _LIMPEZA.get(c, sem_cpf)(getattr(linha, c))
                 if limpo != getattr(linha, c):
                     setattr(linha, c, limpo)
                     mudou = True

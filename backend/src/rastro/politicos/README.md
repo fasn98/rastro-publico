@@ -290,8 +290,14 @@ O arquivo anual tem 32 colunas e 209.080 linhas em 2025, das quais 25.844 de SP.
   do fornecedor: 191 linhas em SP, 2025;
 - CPF dentro do nome do fornecedor, como na razão social de MEI ("NOME 12345678901"),
   com ou sem pontuação, completa ou parcial ("NOME 123456789-01", desde 15/10/2026):
-  trocado por "[CPF removido]" em 75 linhas. O CNPJ (14 dígitos) é mantido. Sequências de
-  11 dígitos em `txtNumero` (número do documento fiscal) não são CPF e ficam.
+  trocado por "[CPF removido]" em 75 linhas. O CNPJ (14 dígitos) é mantido;
+- e-mail no nome do fornecedor (pessoa jurídica): trocado por "[e-mail removido]"
+  (decisão do Fabio, 15/10/2026);
+- número do documento fiscal (`txtNumero`): sai só o que é CPF, isto é, 11 dígitos, com ou
+  sem pontuação, com dígito verificador válido, trocado por "[CPF removido]" (decisão do
+  Fabio, 15/10/2026). Os demais números ficam, inclusive "00000000000": sequência de
+  dígitos iguais passa na conta do verificador, mas a Receita não a emite. Nos arquivos
+  oficiais de 2023 a 2026, isso é 57 números de documento.
 
 **Carga.**
 - O arquivo não tem chave única por linha: há linhas idênticas, como débitos mensais de
@@ -311,7 +317,7 @@ pública e comparar com `sha256_original`.
 | Fonte | O que é removido |
 |---|---|
 | TSE, candidatos | as 17 colunas da tabela acima; só as linhas de SP |
-| Câmara, cota | `cpf`, `nuCarteiraParlamentar`, `txtPassageiro`; CPF e nome de fornecedor pessoa física |
+| Câmara, cota | `cpf`, `nuCarteiraParlamentar`, `txtPassageiro`; CPF e nome de fornecedor pessoa física; CPF e e-mail no nome do fornecedor; CPF no número do documento |
 | Câmara, listas de deputados | `email` (e-mail de gabinete) |
 | Senado, lista de senadores | `EmailParlamentar` |
 | Câmara `/proposicoes` e Senado `/processo` | CPF citado no texto livre (ementa, autoria), trocado por "[CPF removido]" |
@@ -323,7 +329,8 @@ denunciada ("inscrito no CPF sob o n° ..."), e a descrição de uma votação d
 pessoas com o CPF. A coleta troca, no banco e no arquivo bruto, todo CPF do texto (11
 dígitos com ou sem pontuação, sem outro dígito encostado) por "[CPF removido]". Resposta
 sem CPF é arquivada como veio, sem redação. O que já estava gravado foi limpo pela
-migração 0022 (a mesma limpeza do `rastro redigir-respostas`). Na exportação, `verificar`
+migração 0022 (a mesma limpeza do `rastro redigir-respostas`); o da cota (número do
+documento e e-mail no nome do fornecedor), pela 0023. Na exportação, `verificar`
 recusa publicar qualquer arquivo com CPF no formato 000.000.000-00.
 
 Testes varrem todas as tabelas e todos os payloads procurando e-mails, nomes de campos
