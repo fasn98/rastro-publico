@@ -278,10 +278,12 @@ def coletar_cota(
                 "linha": n,
                 "categoria": r["txtDescricao"],
                 "especificacao": r["txtDescricaoEspecificacao"] or None,
-                "fornecedor": None if pf else (lgpd.sem_cpf(r["txtFornecedor"]) or None),
+                "fornecedor": None
+                if pf
+                else (lgpd.fornecedor_sem_dados_pessoais(r["txtFornecedor"]) or None),
                 "cnpj": doc if len(doc) == 14 else None,
                 "pessoa_fisica": pf,
-                "numero_documento": r["txtNumero"] or None,
+                "numero_documento": lgpd.sem_cpf_valido(r["txtNumero"]) or None,
                 "tipo_documento": r["indTipoDocumento"] or None,
                 "data_emissao": data(r["datEmissao"]),
                 "valor_documento": _dec(r["vlrDocumento"]),
