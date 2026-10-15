@@ -117,6 +117,17 @@ def test_ultima_coleta_parcial_reprova(session, cliente):
     assert r["motivos"] == ["senadores (Senado): última coleta terminou parcial"]
 
 
+@respx.mock
+def test_uf_sem_eleitos_de_2024_e_reprovada(session, cliente):
+    _mock_tse()
+    tse.coletar_eleitos(session, cliente, 2022, "SP", set())  # só 2022
+    for fonte in pp.FONTES:
+        _registrar(session, fonte, ["SP"])
+    assert pp.avaliar_uf(session, "SP")["motivos"] == [
+        "nenhum eleito do TSE de 2024 gravado para a UF"
+    ]
+
+
 def test_df_nao_precisa_de_eleitos_de_2024(session):
     for fonte in pp.FONTES:
         _registrar(session, fonte, ["DF"])
