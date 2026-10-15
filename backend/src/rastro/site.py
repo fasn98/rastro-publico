@@ -57,6 +57,7 @@ import json
 import logging
 import math
 import os
+import re
 import resource
 import shutil
 import subprocess
@@ -1090,6 +1091,11 @@ def _exportar_politico(pid, get, out: _Escritor, arquivados, catalogos, anos_cot
 # --------------------------------------------------------------------------- verificação
 
 
+# CPF no formato 000.000.000-00 em qualquer arquivo exportado (o sem pontuação não entra:
+# 11 dígitos seguidos também são valores e códigos)
+_CPF_FORMATADO = re.compile(rb"(?<!\d)\d{3}\.\d{3}\.\d{3}-\d{2}(?!\d)")
+
+
 def verificar(saida: Path, anterior: dict | None = None) -> list[str]:
     """Problemas que impedem publicar (lista vazia = pode publicar).
 
@@ -1103,10 +1109,13 @@ def verificar(saida: Path, anterior: dict | None = None) -> list[str]:
     except (OSError, ValueError) as exc:
         return [f"manifesto ausente ou inválido: {exc}"]
     for arq in saida.rglob("*.json"):
+        conteudo = arq.read_bytes()
         try:
-            json.loads(arq.read_bytes())
+            json.loads(conteudo)
         except ValueError as exc:
             problemas.append(f"JSON inválido: {arq.relative_to(saida)} ({exc})")
+        if _CPF_FORMATADO.search(conteudo):  # LGPD: o valor nunca vai para a mensagem
+            problemas.append(f"CPF no conteúdo (LGPD): {arq.relative_to(saida)}")
     if problemas:
         return problemas
     problemas += _conferir_indice(saida)
