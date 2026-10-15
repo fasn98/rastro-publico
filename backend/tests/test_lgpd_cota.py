@@ -120,6 +120,14 @@ def test_email_no_nome_do_fornecedor():
         f"EMPRESA LTDA {lgpd.EMAIL_REMOVIDO}"
     )
     assert lgpd.fornecedor_sem_dados_pessoais("EMPRESA LTDA") == "EMPRESA LTDA"
+    # 11 dígitos antes do "@": o e-mail sai inteiro, sem sobrar o domínio
+    com_digitos = "EMPRESA LTDA contato00000000000@marcador-de-teste.invalid"
+    assert lgpd.fornecedor_sem_dados_pessoais(com_digitos) == (
+        f"EMPRESA LTDA {lgpd.EMAIL_REMOVIDO}"
+    )
+    linha = {"txtCNPJCPF": "", "txtFornecedor": com_digitos, "txtNumero": ""}
+    assert lgpd.apagar_pessoa_fisica(linha) == ["txtFornecedor (e-mail no nome)"]
+    assert linha["txtFornecedor"] == f"EMPRESA LTDA {lgpd.EMAIL_REMOVIDO}"
 
 
 # ------------------------------------------------------------------ coleta

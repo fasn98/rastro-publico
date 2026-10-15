@@ -70,8 +70,10 @@ def sem_email(texto: str | None) -> str | None:
 
 
 def fornecedor_sem_dados_pessoais(texto: str | None) -> str | None:
-    """Nome de fornecedor da cota (pessoa jurídica): sem CPF nem e-mail no meio do nome."""
-    return sem_email(sem_cpf(texto))
+    """Nome de fornecedor da cota (pessoa jurídica): sem CPF nem e-mail no meio do nome.
+    O e-mail sai primeiro: com 11 dígitos antes do "@", trocar o CPF antes deixaria o
+    resto do endereço, que já não seria reconhecido como e-mail."""
+    return sem_cpf(sem_email(texto))
 
 
 # Campos de texto livre das proposições (Câmara: ementa; Senado: ementa e autoria). Os
@@ -143,12 +145,12 @@ def apagar_pessoa_fisica(linha: dict) -> list[str]:
         alterados += ["txtCNPJCPF", "txtFornecedor"]
     else:
         nome = linha.get("txtFornecedor")
-        sem_o_cpf = sem_cpf(nome)
-        if sem_o_cpf != nome:
-            alterados.append("txtFornecedor (CPF no nome)")
-        limpo = sem_email(sem_o_cpf)
-        if limpo != sem_o_cpf:
+        sem_o_email = sem_email(nome)  # antes do CPF: ver fornecedor_sem_dados_pessoais
+        if sem_o_email != nome:
             alterados.append("txtFornecedor (e-mail no nome)")
+        limpo = sem_cpf(sem_o_email)
+        if limpo != sem_o_email:
+            alterados.append("txtFornecedor (CPF no nome)")
         if alterados:
             linha["txtFornecedor"] = limpo
     # número do documento fiscal: só o que é CPF (dígito verificador válido) sai
