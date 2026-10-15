@@ -32,6 +32,16 @@ class Settings(BaseSettings):
     # prefeitos eleitos por exercício (ADR-0018): desligada até a aprovação da publicação,
     # depois do 2º turno de 25/10/2026
     pol_publicar_gestoes: bool = False
+    # UFs (além da UF da exportação, SP) com os políticos no site, separadas por vírgula
+    # (ex.: "SC"). Vazia até a aprovação do Fabio, depois de 25/10/2026: condição (a) de
+    # 15/10. Uma UF da lista só sai com o portão fiscal e o de políticos aprovados. Fora do
+    # prefixo pol_publicar_ para não entrar nas travas do manifesto.
+    pol_ufs_liberadas: str = ""
+
+    @property
+    def ufs_liberadas(self) -> set[str]:
+        return {u.strip().upper() for u in self.pol_ufs_liberadas.split(",") if u.strip()}
+
     # limite de tempo (minutos) de cada `rastro politicos`; 0 = sem limite. Ao passar dele,
     # a coleta para antes do próximo item e sai parcial, com o motivo
     politicos_limite_min: float = 0

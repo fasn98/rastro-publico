@@ -124,6 +124,13 @@ Emenda sem vínculo por ambiguidade (nome repetido, mais de um "Código do Autor
 reprova a UF: a regra já a mostra sem link. Um erro na avaliação vira reprovação, sem
 derrubar o portão fiscal.
 
+**Políticos de outras UFs no site** (`RASTRO_POL_UFS_LIBERADAS`, ex.: `SC`; vazia por
+padrão). Condições do Fabio em 15/10/2026: (a) nenhuma UF fora de SP antes de 25/10, e o
+relatório da UF passa por ele antes do merge que a libera; (b) a UF só sai com o portão
+fiscal e o de políticos aprovados. A exportação grava então os representantes e as emendas
+dos municípios da UF, os eleitos e as páginas dos deputados e senadores dela; `verificar`
+recusa dado de político de UF não publicada.
+
 **Tempos medidos em 06/10/2026, SP:**
 - Câmara (com cota) e Senado, ano de 2025, numa só execução: 3 min 10 s. Foram 90
   deputados, 8.884 proposições, 24.565 votos, 14.936 presenças e 25.844 lançamentos de

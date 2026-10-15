@@ -940,7 +940,7 @@ def test_manifesto_traz_o_portao_de_politicos_por_uf(nacional, tmp_path):
         "motivos": ["emendas da UF ainda não coletadas"],
     }
     manifesto = site.exportar(tmp_path / "dados", "SP", nacional, portao=portao)
-    assert manifesto["ufs"]["DF"]["politicos"] == portao["DF"]["politicos"]
+    assert manifesto["ufs"]["DF"]["politicos"] == {**portao["DF"]["politicos"], "publicada": False}
     assert "politicos" not in manifesto["ufs"]["SP"]  # portão sem a parte de políticos
     assert site.verificar(tmp_path / "dados") == []
 
@@ -1027,3 +1027,82 @@ def test_uf_dos_politicos_reprovada_continua_na_busca(nacional, tmp_path):
     assert not (dados / "estados" / "SP.json").exists()
     assert (dados / "municipios" / "3550308.json").exists()  # arquivos de sempre
     assert site.verificar(dados) == []
+
+
+# ------------------------------------------------- políticos por UF (pol_ufs_liberadas)
+
+
+@pytest.fixture
+def com_df(nacional, engine):
+    """`nacional` mais os eleitos de 2026 do DF (amostra real do TSE, test_mandato_excecoes)."""
+    from test_mandato_excecoes import _zip_2026_df
+
+    nacional.add(Municipio(cod_ibge=5300108, nome="Brasília", uf="DF", regiao="CO"))
+    nacional.commit()
+    with respx.mock:
+        respx.get(tse.URL_CANDIDATOS.format(ano=2026)).respond(content=_zip_2026_df())
+        with novo_cliente(req_por_segundo=0, arquivo=ArquivoBruto(engine)) as c:
+            tse.coletar_eleitos(nacional, c, 2026, "DF", set())
+    return nacional
+
+
+def _portao_df(politicos_ok: bool):
+    portao = _portao(SP=True, DF=True)
+    portao["DF"]["politicos"] = {"aprovada": politicos_ok, "motivos": []}
+    return portao
+
+
+def _liberar(monkeypatch, ufs: str):
+    from rastro.config import get_settings
+
+    monkeypatch.setenv("RASTRO_POL_UFS_LIBERADAS", ufs)
+    get_settings.cache_clear()
+
+
+def test_politicos_de_outra_uf_ficam_fora_sem_liberacao(com_df, tmp_path):
+    """Condição (a) de 15/10/2026: com a lista vazia (padrão), só os políticos de SP."""
+    dados = tmp_path / "dados"
+    manifesto = site.exportar(dados, "SP", com_df, portao=_portao_df(True))
+    assert manifesto["ufs"]["DF"]["politicos"]["publicada"] is False
+    assert manifesto["ufs"]["SP"].get("politicos") is None
+    assert not list((dados / "eleitos").glob("uf-DF-*.json"))
+    assert site.verificar(dados) == []
+
+
+def test_uf_liberada_e_aprovada_nos_dois_portoes_sai(com_df, tmp_path, monkeypatch):
+    _liberar(monkeypatch, "DF")
+    try:
+        dados = tmp_path / "dados"
+        manifesto = site.exportar(dados, "SP", com_df, portao=_portao_df(True))
+    finally:
+        _liberar(monkeypatch, "")
+    assert manifesto["ufs"]["DF"]["politicos"]["publicada"] is True
+    eleitos = site.expandir(json.loads((dados / "eleitos" / "uf-DF-2026.json").read_text()))
+    assert {p["uf"] for p in eleitos} == {"DF"} and len(eleitos) == 2
+    assert site.verificar(dados) == []
+
+
+def test_uf_liberada_sem_o_portao_de_politicos_fica_fora(com_df, tmp_path, monkeypatch):
+    """Condição (b): liberada pelo Fabio, mas reprovada no portão de políticos."""
+    _liberar(monkeypatch, "DF")
+    try:
+        dados = tmp_path / "dados"
+        manifesto = site.exportar(dados, "SP", com_df, portao=_portao_df(False))
+    finally:
+        _liberar(monkeypatch, "")
+    assert manifesto["ufs"]["DF"]["politicos"]["publicada"] is False
+    assert not list((dados / "eleitos").glob("uf-DF-*.json"))
+
+
+def test_verificacao_recusa_eleitos_de_uf_nao_publicada(com_df, tmp_path, monkeypatch):
+    liberado = tmp_path / "liberado"
+    _liberar(monkeypatch, "DF")
+    try:
+        site.exportar(liberado, "SP", com_df, portao=_portao_df(True))
+    finally:
+        _liberar(monkeypatch, "")
+    dados = tmp_path / "dados"
+    site.exportar(dados, "SP", com_df, portao=_portao_df(True))
+    (dados / "eleitos").mkdir(exist_ok=True)
+    shutil.copy(liberado / "eleitos" / "uf-DF-2026.json", dados / "eleitos" / "uf-DF-2026.json")
+    assert any("DF sem políticos publicados, mas há 1 páginas" in p for p in site.verificar(dados))
