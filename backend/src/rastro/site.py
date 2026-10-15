@@ -1121,12 +1121,19 @@ def verificar(saida: Path, anterior: dict | None = None) -> list[str]:
     problemas += _conferir_indice(saida)
     municipios = json.loads((saida / "municipios.json").read_text())
     faltando, refs_quebradas, citados = [], set(), []
+    autores_emendas: set[int] = set()
     for m in municipios:
         arq = saida / "municipios" / f"{m['cod_ibge']}.json"
         if not arq.exists():
             faltando.append(m["cod_ibge"])
             continue
-        for sec in json.loads(arq.read_bytes())["representantes"]["secoes"]:
+        dados_mun = json.loads(arq.read_bytes())
+        # autores das emendas destinadas ao município: o site liga cada um à página dele
+        emendas = dados_mun.get("emendas") or {}
+        for e in [*emendas.get("itens", []), *emendas.get("por_parlamentar", [])]:
+            if e.get("politico_id") is not None:
+                autores_emendas.add(e["politico_id"])
+        for sec in dados_mun["representantes"]["secoes"]:
             if "ref" in sec:
                 if not (saida / sec["ref"]).exists():
                     refs_quebradas.add(sec["ref"])
@@ -1155,6 +1162,16 @@ def verificar(saida: Path, anterior: dict | None = None) -> list[str]:
     if sem_pagina:
         problemas.append(
             f"{len(sem_pagina)} políticos citados sem página: {sorted(sem_pagina)[:10]}"
+        )
+    # ex.: deputado de outra UF (cujas páginas ainda não são publicadas) autor de emenda
+    # para município da UF publicada: o link levaria a uma página que não existe
+    sem_pagina_emendas = sorted(
+        i for i in autores_emendas if not (saida / "politicos" / f"{i}.json").exists()
+    )
+    if sem_pagina_emendas:
+        problemas.append(
+            f"{len(sem_pagina_emendas)} autores de emendas nos municípios sem página: "
+            f"{sem_pagina_emendas[:10]}"
         )
     problemas += _conferir_listas(saida)
     problemas += _conferir_travas(saida, manifesto.get("travas", {}))
