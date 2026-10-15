@@ -628,6 +628,30 @@ def test_eleitos_regravados_com_ids_novos_refazem_o_arquivo(coletado, engine, tm
     assert sorted(p["id"] for p in site.expandir(arquivo)) == sorted(depois)
 
 
+def test_autor_de_emenda_sem_pagina_cancela_a_publicacao(coletado, tmp_path):
+    """Com as emendas de SP e SC na coleta (15/10/2026), um deputado de SC autor de emenda
+    para município de SP apareceria na página do município com link para uma página que o
+    site ainda não publica. A verificação para a publicação nesse caso.
+
+    Caso real: a emenda de 2024 da Tabata Amaral (vínculo confirmado) para São Vicente.
+    `ibge_municipio_3551009.json` é o registro de São Vicente recortado da resposta real
+    da API de municípios do IBGE (arquivo bruto, SHA-256 86ecdccd...6c9c02, 5.571 itens)."""
+    coletado.add_all(
+        Municipio(**ibge.normalizar(m)) for m in carregar("ibge_municipio_3551009.json")
+    )
+    coletado.commit()
+    dados = tmp_path / "dados"
+    site.exportar(dados, "SP", coletado, hoje=HOJE)
+    assert site.verificar(dados) == []
+    tabata = _mapa(coletado)[TABATA]
+    emendas = json.loads((dados / "municipios" / "3551009.json").read_text())["emendas"]
+    assert tabata in {e["politico_id"] for e in emendas["itens"]}  # premissa
+    # a página do autor some (como a de um deputado de SC antes da liberação de SC)
+    (dados / "politicos" / f"{tabata}.json").unlink()
+    problemas = site.verificar(dados)
+    assert f"1 autores de emendas nos municípios sem página: [{tabata}]" in problemas, problemas
+
+
 def test_arquivo_reaproveitado_alterado_e_regravado(coletado, tmp_path):
     dados = tmp_path / "dados"
     site.exportar(dados, "SP", coletado, hoje=HOJE)
