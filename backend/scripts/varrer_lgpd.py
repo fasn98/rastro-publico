@@ -68,14 +68,20 @@ FONTES = {
 
 # nome do campo (sem a tabela ou o prefixo "zip:"), em minúsculas
 _IDENTIFICADOR = re.compile(
-    r"sha256\w*|hash\w*|id|id_\w+|\w+_id|\w*_id[a-z]\w*|ide(cadastro|documento)"
+    r"sha256\w*|hash\w*|id|id_\w+|\w+_id|\w*_id[a-z]\w*|ide_?(cadastro|documento)"
     r"|uri\w*|\w*_uri\w*|url\w*|\w*_url\w*|sq_\w+|cod(igo)?\w*|\w+_cod\w*"
 )
 
 
+# camelCase com "id" na frente (idOrgao, idEvento, idDeputadoAutor): pelo nome original,
+# porque em minúsculas "identificacao" ficaria igual a um id
+_ID_CAMEL = re.compile(r"ide?[A-Z]\w*")
+
+
 def identificador(campo: str) -> bool:
     """Campo que é identificador, hash, código ou link, não texto."""
-    return bool(_IDENTIFICADOR.fullmatch(re.split(r"[.:]", campo)[-1].lower()))
+    nome = re.split(r"[.:]", campo)[-1]
+    return bool(_ID_CAMEL.fullmatch(nome) or _IDENTIFICADOR.fullmatch(nome.lower()))
 
 
 def achados(valor: str) -> dict[str, int]:
