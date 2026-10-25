@@ -77,6 +77,8 @@ class ArquivoBruto:
         # respostas de erro (4xx/5xx) não trazem os dados da fonte; são gravadas como vieram
         if redator is not None and response.is_success:
             redacao = redator(original)  # se falhar, nada é gravado
+            if redacao.conteudo == original and not redacao.campos_removidos:
+                redacao = None  # nada a redigir: grava-se a resposta como veio
         conteudo = redacao.conteudo if redacao else original
         digest = sha256(conteudo)
         try:

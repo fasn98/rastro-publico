@@ -160,7 +160,10 @@ def redigir_arquivadas(session, regras: list[tuple[str, Redator]]) -> int:
         if redator is None:
             continue
         antigo = session.get(PayloadBruto, resp.sha256)
-        red = redator(ler_payload(antigo))
+        original = ler_payload(antigo)
+        red = redator(original)
+        if red.conteudo == original and not red.campos_removidos:
+            continue  # nada a redigir: a resposta fica como veio da fonte
         novo = sha256(red.conteudo)
         session.execute(
             pg_insert(PayloadBruto)
@@ -176,6 +179,67 @@ def redigir_arquivadas(session, regras: list[tuple[str, Redator]]) -> int:
         resp.sha256, resp.tamanho = novo, len(red.conteudo)
         resp.campos_removidos = red.campos_removidos
         resp.redacao = f"{red.descricao} (redigido em {datetime.now(UTC):%Y-%m-%d}, após a coleta)"
+        session.flush()
+        em_uso = session.scalar(
+            select(func.count())
+            .select_from(RespostaBruta)
+            .where(RespostaBruta.sha256 == antigo.sha256)
+        )
+        if not em_uso:
+            session.delete(antigo)
+        feitas += 1
+    session.commit()
+    return feitas
+
+
+def reaplicar_redacao(session, regras: list[tuple[str, Redator]]) -> int:
+    """Redige de novo respostas JÁ redigidas por uma regra anterior que deixou passar dado
+    pessoal. O redator recebe o conteúdo gravado (já redigido); só muda o que ele altera.
+    `sha256_original` continua o dos bytes da fonte; os campos e a descrição da nova
+    redação são acrescentados aos de antes. O payload anterior é apagado se nada o usa.
+    """
+    import gzip
+    import re
+    from datetime import UTC, datetime
+
+    from sqlalchemy import func, select
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from rastro.coletores.arquivo import ler_payload, sha256
+    from rastro.models import PayloadBruto, RespostaBruta
+
+    compiladas = [(re.compile(p), r) for p, r in regras]
+    feitas = 0
+    redigidas = session.scalars(
+        select(RespostaBruta)
+        .where(RespostaBruta.sha256_original.is_not(None), RespostaBruta.status_http < 300)
+        .order_by(RespostaBruta.id)
+    ).all()
+    for resp in redigidas:
+        redator = next((r for p, r in compiladas if p.search(resp.url)), None)
+        if redator is None:
+            continue
+        antigo = session.get(PayloadBruto, resp.sha256)
+        atual = ler_payload(antigo)
+        red = redator(atual)
+        if red.conteudo == atual:
+            continue
+        novo = sha256(red.conteudo)
+        session.execute(
+            pg_insert(PayloadBruto)
+            .values(
+                sha256=novo,
+                tamanho=len(red.conteudo),
+                compressao="gzip",
+                conteudo=gzip.compress(red.conteudo, mtime=0),
+            )
+            .on_conflict_do_nothing(index_elements=["sha256"])
+        )
+        resp.sha256, resp.tamanho = novo, len(red.conteudo)
+        resp.campos_removidos = [*(resp.campos_removidos or []), *red.campos_removidos]
+        resp.redacao = (
+            f"{resp.redacao}; {red.descricao} (redigido de novo em {datetime.now(UTC):%Y-%m-%d})"
+        )
         session.flush()
         em_uso = session.scalar(
             select(func.count())

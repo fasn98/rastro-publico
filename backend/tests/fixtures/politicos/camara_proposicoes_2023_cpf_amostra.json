@@ -1,0 +1,25 @@
+{
+ "dados": [
+  {
+   "id": 2400894,
+   "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2400894",
+   "siglaTipo": "PROC",
+   "codTipo": 720,
+   "numero": 508,
+   "ano": 2023,
+   "ementa": "DENÚNCIA POR CRIME DE RESPONSABILIDADE contra FLÁVIO DINO DE CASTRO E COSTA,  brasileiro, casado, ocupante do cargo de Ministro de Estado do Ministério da Justiça e Segurança Pública, inscrito no CPF sob o n° [CPF removido], com endereço funcional no Palácio da Justiça, Esplanada dos Ministérios, Bloco S, Brasília – DF, CEP 70297-400, pela prática do ato previsto no artigo 4º, II e III, e artigo 6º, item 2 c/c artigo 13, item 1, da Lei nº 1.079, de 10 de abril de 1950, consoante os fundamentos de fato e direito a seguir expostos.",
+   "dataApresentacao": "2023-11-01T10:31"
+  },
+  {
+   "id": 2405476,
+   "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2405476",
+   "siglaTipo": "PROC",
+   "codTipo": 720,
+   "numero": 516,
+   "ano": 2023,
+   "ementa": "DENÚNCIA contra SÍLVIO LUIZ DE ALMEIDA, brasileiro, casado, ministro de Estado, inscrito no CPF com o n. [CPF removido], pela prática de crime de responsabilidade, o que faz com fulcro nas razões de fato e direito a seguir aduzidas.",
+   "dataApresentacao": "2023-11-22T09:44"
+  }
+ ],
+ "links": []
+}

@@ -122,7 +122,7 @@ def coletar_proposicoes(
 ) -> int:
     params = _params_proposicoes(id_camara, ano)
     linhas = []
-    for itens, rid in paginas(client, f"{API}/proposicoes", params):
+    for itens, rid in paginas(client, f"{API}/proposicoes", params, lgpd.PROPOSICOES):
         for p in itens:
             linhas.append(
                 {
@@ -131,7 +131,7 @@ def coletar_proposicoes(
                     "sigla_tipo": p["siglaTipo"],
                     "numero": str(p["numero"]),
                     "ano": p["ano"],
-                    "ementa": p["ementa"],
+                    "ementa": lgpd.sem_cpf(p["ementa"]),
                     "data_apresentacao": data(p.get("dataApresentacao")),
                     "url_fonte": p["uri"],
                     "url_pagina": f"https://www.camara.leg.br/propostas-legislativas/{p['id']}",
@@ -145,7 +145,9 @@ def coletar_proposicoes(
 
 def coletar_votos(session: Session, client: httpx.Client, ano: int, mapa: dict[int, int]) -> int:
     """Votos nominais do ano dos deputados em `mapa`, a partir dos arquivos anuais."""
-    votacoes, _, _ = baixar_csv(client, f"{ARQUIVOS}/votacoes/csv/votacoes-{ano}.csv")
+    votacoes, _, _ = baixar_csv(
+        client, f"{ARQUIVOS}/votacoes/csv/votacoes-{ano}.csv", lgpd.votacoes
+    )
     info = {v["id"]: v for v in votacoes}
     votos, rid, _ = baixar_csv(client, f"{ARQUIVOS}/votacoesVotos/csv/votacoesVotos-{ano}.csv")
 
@@ -163,7 +165,7 @@ def coletar_votos(session: Session, client: httpx.Client, ano: int, mapa: dict[i
                 "voto_descricao": None,
                 "orgao": sobre.get("siglaOrgao") or None,
                 "materia": None,
-                "descricao": sobre.get("descricao") or None,
+                "descricao": lgpd.sem_cpf(sobre.get("descricao")) or None,
                 "url_fonte": v["uriVotacao"],
                 "resposta_id": rid,
             }
@@ -276,10 +278,12 @@ def coletar_cota(
                 "linha": n,
                 "categoria": r["txtDescricao"],
                 "especificacao": r["txtDescricaoEspecificacao"] or None,
-                "fornecedor": None if pf else (lgpd.sem_cpf(r["txtFornecedor"]) or None),
+                "fornecedor": None
+                if pf
+                else (lgpd.fornecedor_sem_dados_pessoais(r["txtFornecedor"]) or None),
                 "cnpj": doc if len(doc) == 14 else None,
                 "pessoa_fisica": pf,
-                "numero_documento": r["txtNumero"] or None,
+                "numero_documento": lgpd.sem_cpf_valido(r["txtNumero"]) or None,
                 "tipo_documento": r["indTipoDocumento"] or None,
                 "data_emissao": data(r["datEmissao"]),
                 "valor_documento": _dec(r["vlrDocumento"]),

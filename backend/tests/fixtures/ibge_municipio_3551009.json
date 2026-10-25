@@ -1,0 +1,42 @@
+[
+ {
+  "id": 3551009,
+  "nome": "São Vicente",
+  "microrregiao": {
+   "id": 35063,
+   "nome": "Santos",
+   "mesorregiao": {
+    "id": 3515,
+    "nome": "Metropolitana de São Paulo",
+    "UF": {
+     "id": 35,
+     "sigla": "SP",
+     "nome": "São Paulo",
+     "regiao": {
+      "id": 3,
+      "sigla": "SE",
+      "nome": "Sudeste"
+     }
+    }
+   }
+  },
+  "regiao-imediata": {
+   "id": 350002,
+   "nome": "Santos",
+   "regiao-intermediaria": {
+    "id": 3501,
+    "nome": "São Paulo",
+    "UF": {
+     "id": 35,
+     "sigla": "SP",
+     "nome": "São Paulo",
+     "regiao": {
+      "id": 3,
+      "sigla": "SE",
+      "nome": "Sudeste"
+     }
+    }
+   }
+  }
+ }
+]
