@@ -77,7 +77,7 @@ def coletar_materias(
     session: Session, client: httpx.Client, codigo: str, politico_id: int, ano: int
 ) -> int:
     url = _url("/processo", {"codigoParlamentarAutor": codigo, "ano": ano})
-    itens, rid = get_json_com_origem(client, url)
+    itens, rid = get_json_com_origem(client, url, redator=lgpd.PROPOSICOES)
     linhas = []
     for m in itens:
         ident = _IDENT.match(m.get("identificacao") or "")
@@ -88,9 +88,9 @@ def coletar_materias(
                 "sigla_tipo": ident[1] if ident else None,
                 "numero": ident[2] if ident else None,
                 "ano": int(ident[3]) if ident else ano,
-                "ementa": m.get("ementa"),
+                "ementa": lgpd.sem_cpf(m.get("ementa")),
                 "data_apresentacao": data(m.get("dataApresentacao")),
-                "autoria": m.get("autoria"),
+                "autoria": lgpd.sem_cpf(m.get("autoria")),
                 "url_fonte": url,
                 "url_pagina": m.get("urlDocumento"),
                 "resposta_id": rid,

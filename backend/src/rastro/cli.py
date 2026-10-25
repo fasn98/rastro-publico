@@ -269,12 +269,15 @@ def main(argv: list[str] | None = None) -> int:
         return _publicacao(args)
 
     if args.comando == "redigir-respostas":
-        from rastro.coletores.redacao import redigir_arquivadas
+        from rastro.coletores.redacao import reaplicar_redacao, redigir_arquivadas
         from rastro.politicos import lgpd
 
         with get_sessionmaker()() as session:
+            linhas = lgpd.limpar_cpf_nas_tabelas(session)
             n = redigir_arquivadas(session, lgpd.REGRAS)
+            n += reaplicar_redacao(session, lgpd.REDIGIR_DE_NOVO)
         print(f"{n} resposta(s) arquivada(s) regravada(s) sem dados pessoais")
+        print(f"{linhas} linha(s) com CPF no texto corrigida(s) no banco")
         return 0
 
     if args.comando == "portao":

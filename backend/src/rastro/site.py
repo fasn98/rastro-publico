@@ -63,6 +63,7 @@ import json
 import logging
 import math
 import os
+import re
 import resource
 import shutil
 import subprocess
@@ -1145,6 +1146,11 @@ def _exportar_politico(pid, get, out: _Escritor, arquivados, catalogos, anos_cot
 # --------------------------------------------------------------------------- verificação
 
 
+# CPF no formato 000.000.000-00 em qualquer arquivo exportado (o sem pontuação não entra:
+# 11 dígitos seguidos também são valores e códigos)
+_CPF_FORMATADO = re.compile(rb"(?<!\d)\d{3}\.\d{3}\.\d{3}-\d{2}(?!\d)")
+
+
 def verificar(saida: Path, anterior: dict | None = None) -> list[str]:
     """Problemas que impedem publicar (lista vazia = pode publicar).
 
@@ -1158,21 +1164,31 @@ def verificar(saida: Path, anterior: dict | None = None) -> list[str]:
     except (OSError, ValueError) as exc:
         return [f"manifesto ausente ou inválido: {exc}"]
     for arq in saida.rglob("*.json"):
+        conteudo = arq.read_bytes()
         try:
-            json.loads(arq.read_bytes())
+            json.loads(conteudo)
         except ValueError as exc:
             problemas.append(f"JSON inválido: {arq.relative_to(saida)} ({exc})")
+        if _CPF_FORMATADO.search(conteudo):  # LGPD: o valor nunca vai para a mensagem
+            problemas.append(f"CPF no conteúdo (LGPD): {arq.relative_to(saida)}")
     if problemas:
         return problemas
     problemas += _conferir_indice(saida)
     municipios = json.loads((saida / "municipios.json").read_text())
     faltando, refs_quebradas, citados = [], set(), []
+    autores_emendas: set[int] = set()
     for m in municipios:
         arq = saida / "municipios" / f"{m['cod_ibge']}.json"
         if not arq.exists():
             faltando.append(m["cod_ibge"])
             continue
-        for sec in json.loads(arq.read_bytes())["representantes"]["secoes"]:
+        dados_mun = json.loads(arq.read_bytes())
+        # autores das emendas destinadas ao município: o site liga cada um à página dele
+        emendas = dados_mun.get("emendas") or {}
+        for e in [*emendas.get("itens", []), *emendas.get("por_parlamentar", [])]:
+            if e.get("politico_id") is not None:
+                autores_emendas.add(e["politico_id"])
+        for sec in dados_mun["representantes"]["secoes"]:
             if "ref" in sec:
                 if not (saida / sec["ref"]).exists():
                     refs_quebradas.add(sec["ref"])
@@ -1201,6 +1217,16 @@ def verificar(saida: Path, anterior: dict | None = None) -> list[str]:
     if sem_pagina:
         problemas.append(
             f"{len(sem_pagina)} políticos citados sem página: {sorted(sem_pagina)[:10]}"
+        )
+    # ex.: deputado de outra UF (cujas páginas ainda não são publicadas) autor de emenda
+    # para município da UF publicada: o link levaria a uma página que não existe
+    sem_pagina_emendas = sorted(
+        i for i in autores_emendas if not (saida / "politicos" / f"{i}.json").exists()
+    )
+    if sem_pagina_emendas:
+        problemas.append(
+            f"{len(sem_pagina_emendas)} autores de emendas nos municípios sem página: "
+            f"{sem_pagina_emendas[:10]}"
         )
     problemas += _conferir_listas(saida)
     problemas += _conferir_travas(saida, manifesto.get("travas", {}))
