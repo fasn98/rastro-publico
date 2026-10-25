@@ -48,3 +48,23 @@ def test_conexao_so_leitura_recusa_escrita():
     with Session(eng) as s, pytest.raises(DBAPIError, match="read-only"):
         s.execute(text("create temporary table x_teste (i int)"))
     eng.dispose()
+
+
+def test_connection_string_do_replit_e_o_que_aparece_na_tela():
+    url = r.url_do_banco(
+        " postgres://usuario:segredo@ep-exemplo.neon.tech/neondb?sslmode=require\n"
+    )
+    assert url.startswith("postgresql+psycopg://usuario:segredo@")
+    assert r.onde(url) == "servidor=ep-exemplo.neon.tech banco=neondb"
+    assert "segredo" not in r.onde(url) and "usuario" not in r.onde(url)
+
+
+def test_le_o_banco_digitado_e_nao_as_variaveis(monkeypatch, capsys):
+    # mesmo com RASTRO_DATABASE_URL e DATABASE_URL apontando para outro lugar
+    monkeypatch.setenv("RASTRO_DATABASE_URL", "postgresql+psycopg://x:y@outro-banco/dev")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://x:y@outro-banco/dev")
+    monkeypatch.setattr(r.getpass, "getpass", lambda _: URL_TESTE)
+    assert r.main(["--uf", "SC", "--sem-fonte"]) == 0
+    primeira = capsys.readouterr().out.splitlines()[0]
+    assert primeira == f"Conectado a {r.onde(URL_TESTE)} (só leitura)"
+    assert "outro-banco" not in primeira

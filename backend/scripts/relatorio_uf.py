@@ -2,6 +2,11 @@
 
     cd backend && uv run python scripts/relatorio_uf.py --uf SC [--sem-fonte] [--json saida.json]
 
+O script pede a connection string do banco (sem eco na tela, como o `read -s`) e não usa
+DATABASE_URL, RASTRO_DATABASE_URL nem o `.env`: no Replit, essas variáveis podem apontar
+para o banco de desenvolvimento. A primeira linha mostra o servidor e o banco conectados
+(sem a senha), para conferir que é o de produção.
+
 Imprime só contagens e situações, nunca nomes, CPFs ou outros dados pessoais. Os motivos que
 trazem nomes de pessoas (exceções de emendas, candidatos do 2º turno) saem só contados.
 
@@ -20,10 +25,10 @@ trazem nomes de pessoas (exceções de emendas, candidatos do 2º turno) saem s�
 
 Só leitura: a conexão abre com `default_transaction_read_only=on`, e o PostgreSQL recusa
 qualquer escrita. A conferência com o SICONFI usa um cliente HTTP sem arquivamento.
-A URL do banco vem de DATABASE_URL (ou RASTRO_DATABASE_URL), como no resto do `rastro`.
 """
 
 import argparse
+import getpass
 import json
 import sys
 from collections import Counter, defaultdict
@@ -31,9 +36,9 @@ from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy import create_engine, func, select
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-from rastro.config import get_settings
 from rastro.models import Municipio
 from rastro.politicos import portao as portao_politicos
 from rastro.politicos.modelos import (
@@ -244,16 +249,34 @@ def _imprimir(r: dict, nivel: int = 0) -> None:
             print(f"{'  ' * nivel}{k}: {v}")
 
 
+def url_do_banco(texto: str) -> str:
+    """Connection string como o Replit e o Neon entregam (`postgres://`, `postgresql://`)
+    -> com o driver do projeto."""
+    texto = texto.strip()
+    for prefixo in ("postgres://", "postgresql://"):
+        if texto.startswith(prefixo):
+            return "postgresql+psycopg://" + texto[len(prefixo) :]
+    return texto
+
+
+def onde(url: str) -> str:
+    """Servidor e banco, sem usuário nem senha."""
+    u = make_url(url)
+    return f"servidor={u.host} banco={u.database}"
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--uf", required=True)
     ap.add_argument("--sem-fonte", action="store_true", help="não confere 3 RREOs no SICONFI")
     ap.add_argument("--json", help="grava também o resultado neste arquivo")
     args = ap.parse_args(argv)
-    engine = create_engine(
-        get_settings().database_url,
-        connect_args={"options": "-c default_transaction_read_only=on"},
-    )
+    url = url_do_banco(getpass.getpass("Connection string do banco (não aparece na tela): "))
+    if not url:
+        print("Nenhuma connection string informada.", file=sys.stderr)
+        return 2
+    engine = create_engine(url, connect_args={"options": "-c default_transaction_read_only=on"})
+    print(f"Conectado a {onde(url)} (só leitura)")
     with Session(engine) as session:
         r = relatorio(session, args.uf, com_fonte=not args.sem_fonte)
     engine.dispose()
