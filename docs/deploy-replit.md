@@ -172,9 +172,8 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 > `backend/alembic/versions/`, como a 0021), a ordem no rastro-coleta é:
 > **1. Pull → 2. `alembic upgrade head` no Shell → 3. Republish**, nesta ordem, e fora de
 > uma execução em andamento. No passo 2, use a string do banco **de produção** (o Shell
-> carrega a do banco de desenvolvimento):
-> `cd backend && DATABASE_URL='<connection string de produção>' uv run alembic upgrade head`,
-> e depois `history -c`. A última linha deve citar a migração nova
+> carrega a do banco de desenvolvimento), na forma descrita em "Passo 2, comandos" abaixo.
+> A saída do `upgrade` deve citar a migração nova
 > (`Running upgrade ... -> 0021`); sem nenhuma linha "Running upgrade", o banco já estava em
 > dia. A coleta também roda `alembic upgrade head` no início de cada execução, mas aplicar
 > antes do Republish garante que o código novo nunca encontre o banco no formato antigo.
@@ -183,16 +182,26 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 > CPF no número do documento e e-mail do fornecedor) cerca de 2,5 min. Se não forem
 > aplicadas no Shell, a primeira coleta depois do Republish as aplica e demora isso a mais.
 >
-> **Passo 2, forma recomendada** (decidida pelo Fabio em 26/10/2026, na 0024):
-> `read -rs DATABASE_URL; export DATABASE_URL; unset RASTRO_DATABASE_URL; cd backend && uv run python -c "from rastro.db import get_engine; print(get_engine().url.render_as_string(hide_password=True))" && uv run alembic current && uv run alembic upgrade head && uv run alembic current`
-> e depois feche o Shell.
+> **Passo 2, comandos** (forma decidida pelo Fabio em 26/10/2026, na 0024). São dois
+> comandos, com uma conferência no meio:
+>
+> 1. Conferir o destino, sem migrar nada (cole a string de produção quando o `read` pedir;
+>    ela não aparece na tela nem no histórico):
+>    `read -rs DATABASE_URL; export DATABASE_URL; unset RASTRO_DATABASE_URL; cd backend && if [ -z "$DATABASE_URL" ]; then echo "DATABASE_URL vazio: pare"; else uv run python -c "from rastro.db import get_engine; print(get_engine().url.render_as_string(hide_password=True))" && uv run alembic current; fi`
+> 2. Só se a linha impressa for o banco de produção (host e nome do banco) e trouxer
+>    `sslmode=require`: `uv run alembic upgrade head && uv run alembic current`, e depois
+>    feche o Shell.
+>
 > - **O `unset RASTRO_DATABASE_URL` é obrigatório.** Se essa variável existir,
 >   `config._url_do_ambiente` ignora o `DATABASE_URL`, e a migração roda no banco errado sem
 >   avisar.
-> - A primeira linha impressa mostra o host e o banco de destino, sem a senha: confira que é
->   o de produção antes de seguir.
-> - A string do Replit (`postgres://` ou `postgresql://`, com ou sem `?sslmode=require`) serve
->   como está: o código troca o prefixo por `postgresql+psycopg://` e mantém os parâmetros.
+> - **Não rode o comando 2 com o `DATABASE_URL` vazio.** Sem ele, o código cai no padrão
+>   `localhost`. O comando 1 para nesse caso.
+> - A string do Replit (`postgres://` ou `postgresql://`) serve como está: o código troca o
+>   prefixo por `postgresql+psycopg://` e mantém os parâmetros. Se a linha impressa não
+>   trouxer `sslmode=require`, repita o comando 1 colando a string com `?sslmode=require` no
+>   fim (ou `&sslmode=require`, se ela já tiver `?`). Sem isso, o driver aceita conexão sem
+>   TLS.
 >
 > **Na tela de Publish/Republish, nunca aceite mudança de banco proposta pelo Replit.** As
 > mudanças de esquema da produção entram só pelo Alembic, no passo 2. Com produção e
