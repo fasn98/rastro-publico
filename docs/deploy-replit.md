@@ -182,6 +182,22 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 > políticos (15/10/2026), a 0022 (CPF em texto livre) levou cerca de 1,5 min e a 0023 (cota:
 > CPF no número do documento e e-mail do fornecedor) cerca de 2,5 min. Se não forem
 > aplicadas no Shell, a primeira coleta depois do Republish as aplica e demora isso a mais.
+>
+> **Passo 2, forma recomendada** (decidida pelo Fabio em 26/10/2026, na 0024):
+> `read -rs DATABASE_URL; export DATABASE_URL; unset RASTRO_DATABASE_URL; cd backend && uv run python -c "from rastro.db import get_engine; print(get_engine().url.render_as_string(hide_password=True))" && uv run alembic current && uv run alembic upgrade head && uv run alembic current`
+> e depois feche o Shell.
+> - **O `unset RASTRO_DATABASE_URL` é obrigatório.** Se essa variável existir,
+>   `config._url_do_ambiente` ignora o `DATABASE_URL`, e a migração roda no banco errado sem
+>   avisar.
+> - A primeira linha impressa mostra o host e o banco de destino, sem a senha: confira que é
+>   o de produção antes de seguir.
+> - A string do Replit (`postgres://` ou `postgresql://`, com ou sem `?sslmode=require`) serve
+>   como está: o código troca o prefixo por `postgresql+psycopg://` e mantém os parâmetros.
+>
+> **Na tela de Publish/Republish, nunca aceite mudança de banco proposta pelo Replit.** As
+> mudanças de esquema da produção entram só pelo Alembic, no passo 2. Com produção e
+> desenvolvimento na mesma migração, a tela não deve propor nada. Se propuser, não aplique:
+> pare e confira com `alembic current` nos dois bancos.
 
 > **No painel Git do Replit, use apenas Pull; nunca Sync Changes nem Push. Os commits locais
 > do Replit são registros de publicação e configuração do app e não devem ir para o
