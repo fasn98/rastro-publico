@@ -53,10 +53,16 @@ identificador do usuário que gerou a mídia.
    - o pacote do 1º turno tem 95 GB.
 
    O acesso seção por seção fica só para protótipo e conferência pontual.
-3. **Sem atribuição de causa.** Votos computados depois das 17h aparecem sempre ao lado da
-   mesma métrica no 1º turno, nas mesmas seções. A regra legal da fila e os documentos
-   oficiais da prorrogação vão com link e sem resumo próprio. Nenhuma frase atribui causa,
-   e não há projeção do "que teria acontecido".
+3. **Sem atribuição de causa.**
+   - Votos e encerramentos de 17:00 a 18:59 e a partir das 19:00 aparecem em métricas
+     separadas.
+   - O 2º turno aparece sempre ao lado do 1º turno, nas mesmas seções, com a nota de que os
+     turnos não são diretamente comparáveis: no 1º turno são 6 votos por eleitor; no 2º, 1
+     ou 2. O número de votos afeta o tempo de votação e as filas.
+   - A regra legal da fila (Código Eleitoral, art. 153) só é citada depois de conferido o
+     texto oficial.
+   - Os documentos oficiais da prorrogação vão com link, sem resumo próprio.
+   - Nenhuma frase atribui causa, e não há projeção do "que teria acontecido".
 4. **Horário de Brasília.** O relógio da urna registra a hora local, e a votação de 2026
    abriu às 8h de Brasília em todo o país. As métricas convertem a hora local para a de
    Brasília, e o método de conversão fica documentado.
@@ -78,6 +84,10 @@ identificador do usuário que gerou a mídia.
      com número de outra.
    - **Conferência com a totalização oficial:** registra a data e a hora da totalização
      usada (campos `dt`/`ht` do JSON do TSE).
+   - **Last-Modified só da própria leitura:** o Last-Modified e o ETag registrados são os
+     da resposta em que o conteúdo foi lido. Nunca se preenchem com uma consulta feita
+     depois. Se faltarem, a versão fica identificada pela URL e pelo SHA-256 do conteúdo,
+     e a falta fica registrada.
 6. **Publicação só depois de parecer jurídico** e de aprovação explícita do Fabio, em local
    a definir. A proposta é um site separado do gh-pages atual.
 
