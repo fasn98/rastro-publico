@@ -185,6 +185,8 @@ class PolEmenda(Base):
     numero_emenda: Mapped[str | None] = mapped_column(String(40))
     localidade_gasto: Mapped[str | None] = mapped_column(String(200))
     cod_ibge_destino: Mapped[int | None] = mapped_column(Integer, index=True)
+    # sigla da coluna "UF" do arquivo em lote; nula em "Múltiplo" e "Sem informação" (0024)
+    uf_destino: Mapped[str | None] = mapped_column(String(2), index=True)
     funcao: Mapped[str | None] = mapped_column(String(120))
     subfuncao: Mapped[str | None] = mapped_column(String(120))
     valor_empenhado: Mapped[Decimal | None] = mapped_column(Numeric)
