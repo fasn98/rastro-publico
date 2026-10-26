@@ -204,9 +204,12 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 >   TLS. O `require` não valida o certificado do servidor; a troca por `verify-full` está no
 >   backlog (T-019).
 >
-> **Nenhum Publish/Republish antes de a produção estar migrada pelo Alembic.** O passo 3 só
-> começa depois de o comando 2 terminar em `(head)` com a string de produção (ou de o
-> comando 1 já mostrar `(head)`). Em 26/10/2026, o Publish das 12:45 foi feito com a
+> **Nenhum Publish/Republish antes de a produção estar migrada pelo Alembic.** Vale para a
+> operação, depois da instalação. Na instalação (passos 3 a 8), os primeiros Publish criam
+> os apps (e o banco de produção, se o Replit só oferecer criá-lo ali, passo 5), e a
+> primeira coleta cria o esquema pelo Alembic. Na operação, o passo 3 só começa depois de o
+> comando 2 terminar em `(head)` com a string de produção (ou de o comando 1 já mostrar
+> `(head)`). Em 26/10/2026, o Publish das 12:45 foi feito com a
 > produção ainda na 0023; a 0024 foi aplicada pelo Alembic às 13:05, sem erro. Como a 0024
 > usa `add_column` e `create_index` sem `IF NOT EXISTS`, isso mostra que o Publish não criou
 > a coluna. Entre 12:45 e 13:05, o banco de produção não tinha `pol_emenda.uf_destino`, que
@@ -220,7 +223,8 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 > **O Agent do Replit não mexe no banco de produção.** Não peça a ele, nem aceite dele,
 > migração, SQL, correção de esquema ou de dados na produção, mesmo que ele proponha como
 > conserto de uma diferença entre os bancos. A produção só muda pelo Alembic, no passo 2,
-> ou pela coleta agendada.
+> pela coleta agendada ou pelo `rastro criar-usuario-auditoria` rodado por você no Shell
+> (passo 7 da instalação, que cria ou renova o usuário só de leitura da auditoria).
 
 > **No painel Git do Replit, use apenas Pull; nunca Sync Changes nem Push. Os commits locais
 > do Replit são registros de publicação e configuração do app e não devem ir para o
@@ -244,7 +248,7 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 | `IdleInTransactionSessionTimeout` (terminating connection due to idle-in-transaction timeout) | O banco de produção encerra a conexão que fica com uma transação aberta e ociosa além de `idle_in_transaction_session_timeout`; o valor aparece no início do log, na linha `Banco de produção: idle_in_transaction_session_timeout = ...` (`rastro conferir-producao`). **Em produção: `5min`** (execução 6qmcl, 09/10/2026). Nenhuma etapa pode deixar uma transação aberta e parada por 5 minutos. Em 09/10/2026 (execução 6pfw6) a exportação falhava assim, perto do fim (cerca de 5.000 a 5.500 s). Corrigido no código: a exportação lê em autocommit, e os coletores fecham a transação antes de ir à rede. **Não** se resolve aumentando o limite no servidor. Se voltar a acontecer, o traceback mostra o comando; teste novo em `tests/test_site_transacao_ociosa.py`. |
 | `npm error Exit handler never called!` ou `tsc: not found` no log | A instalação das dependências do frontend quebrou. Elas são instaladas no **build** do deployment (Republish), e a coleta só reinstala se faltar algo, com até 3 tentativas; o npm pode quebrar e ainda sair com código 0, por isso o script confere se `tsc` e `vite` ficaram instalados. Nada é publicado quando isso falha (o site continua como estava). Se o erro aparecer no build, faça o Republish de novo; se aparecer na coleta, a próxima execução tenta de novo. |
 | Execução terminou com erro | Só acontece quando algo crítico falha: banco, migrações, verificação do arquivo bruto, exportação ou verificação do site, ou o envio ao GitHub. Nesses casos nada é publicado e o site continua como estava; veja a última mensagem de erro no log. |
-| Código novo no `main` | nos dois apps: Git → **Pull** (nunca Sync Changes nem Push), depois **Publish** |
+| Código novo no `main` | nos dois apps: Git → **Pull** (nunca Sync Changes nem Push); se o `main` trouxer migração nova, migre a produção pelo Alembic (ver "Quando o `main` trouxer uma migração nova", em Operação) e confira `(head)`; só depois **Publish** |
 | Token vencendo | passo 1.4 |
 | App reiniciando sem parar (*crash loop*) | Publishing → **Logs**. Se aparecer `ERRO: RASTRO_PAPEL` ou `ERRO: o Secret RASTRO_PAPEL não está definido`, corrija o Secret em Publishing → Production app secrets (`coleta` ou `auditoria`) e publique de novo. Os Secrets de produção não aparecem no Shell do editor: para testar um valor lá, rode `RASTRO_PAPEL=<valor> bash backend/scripts/replit.sh --validar-papel` |
 | Forçar exportação do zero | a coleta parte do `dados/` publicado e só regrava o que mudou; para refazer tudo, rode `uv run rastro exportar-site --uf SP --saida <pasta> --completa` |
