@@ -60,7 +60,25 @@ identificador do usuário que gerou a mídia.
 4. **Horário de Brasília.** O relógio da urna registra a hora local, e a votação de 2026
    abriu às 8h de Brasília em todo o país. As métricas convertem a hora local para a de
    Brasília, e o método de conversão fica documentado.
-5. **Publicação só depois de parecer jurídico** e de aprovação explícita do Fabio, em local
+5. **Número sempre ligado à versão da fonte.** Todo número do módulo leva a versão exata do
+   arquivo oficial de onde saiu:
+   - URL;
+   - `Last-Modified` e `ETag` lidos na coleta;
+   - tamanho em bytes;
+   - SHA-256 do conteúdo lido;
+   - data e hora da leitura.
+
+   O TSE substitui pacotes já publicados: o pacote de arquivos de urna do 1º turno de 2026
+   foi criado em 06/10/2026 e tem `Last-Modified` de 22/10/2026. Por isso:
+   - **Pacote em lote:** o SHA-256 vale para o pacote inteiro e também para cada arquivo
+     lido de dentro dele. A leitura por faixas (HTTP Range) é interrompida se o
+     `Last-Modified` mudar no meio.
+   - **Nova versão da fonte:** os números são recalculados e a versão anterior fica
+     registrada, com a data em que deixou de valer. Número de uma versão nunca é misturado
+     com número de outra.
+   - **Conferência com a totalização oficial:** registra a data e a hora da totalização
+     usada (campos `dt`/`ht` do JSON do TSE).
+6. **Publicação só depois de parecer jurídico** e de aprovação explícita do Fabio, em local
    a definir. A proposta é um site separado do gh-pages atual.
 
 ## Consequências
