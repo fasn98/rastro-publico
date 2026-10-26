@@ -135,9 +135,11 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
      errado sem avisar.
    - **Não rode o comando b com o `DATABASE_URL` vazio.** Sem ele, o código cai no padrão
      `localhost`. O comando a para nesse caso.
-   - Se a linha impressa não trouxer `sslmode=require`, repita o comando a colando a string
-     com `?sslmode=require` no fim (ou `&sslmode=require`, se ela já tiver `?`). A string
-     do usuário de auditoria impressa pelo comando b herda esse parâmetro.
+   - Se a linha impressa não trouxer `sslmode=require`, repita o comando a com a string
+     corrigida: se ela já tiver `sslmode` com outro valor (`prefer`, `disable`...), troque o
+     valor por `require`; se não tiver `sslmode`, acrescente `?sslmode=require` no fim (ou
+     `&sslmode=require`, se ela já tiver `?`). Nunca deixe dois `sslmode` na mesma string.
+     A string do usuário de auditoria impressa pelo comando b herda esse parâmetro.
 
    O comando b gera uma senha forte (256 bits, aleatória, só para este usuário), cria o
    usuário `rastro_auditoria` com leitura apenas dessas 4 tabelas e com toda transação em
@@ -222,10 +224,12 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 >   `localhost`. O comando 1 para nesse caso.
 > - A string do Replit (`postgres://` ou `postgresql://`) serve como está: o código troca o
 >   prefixo por `postgresql+psycopg://` e mantém os parâmetros. Se a linha impressa não
->   trouxer `sslmode=require`, repita o comando 1 colando a string com `?sslmode=require` no
->   fim (ou `&sslmode=require`, se ela já tiver `?`). Sem isso, o driver aceita conexão sem
->   TLS. O `require` não valida o certificado do servidor; a troca por `verify-full` está no
->   backlog (T-019).
+>   trouxer `sslmode=require`, repita o comando 1 com a string corrigida: se ela já tiver
+>   `sslmode` com outro valor (`prefer`, `disable`...), troque o valor por `require`; se não
+>   tiver `sslmode`, acrescente `?sslmode=require` no fim (ou `&sslmode=require`, se ela já
+>   tiver `?`). Nunca deixe dois `sslmode` na mesma string. Sem `require`, o driver aceita
+>   conexão sem TLS. O `require` não valida o certificado do servidor; a troca por
+>   `verify-full` está no backlog (T-019).
 >
 > **Nenhum Publish/Republish antes de a produção estar migrada pelo Alembic.** Vale para a
 > operação, depois da instalação. Na instalação (passos 3 a 8), os primeiros Publish criam
