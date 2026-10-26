@@ -1130,3 +1130,41 @@ def test_verificacao_recusa_eleitos_de_uf_nao_publicada(com_df, tmp_path, monkey
     (dados / "eleitos").mkdir(exist_ok=True)
     shutil.copy(liberado / "eleitos" / "uf-DF-2026.json", dados / "eleitos" / "uf-DF-2026.json")
     assert any("DF sem políticos publicados, mas há 1 páginas" in p for p in site.verificar(dados))
+
+
+def test_nota_de_emendas_sem_municipio_no_municipio_e_na_uf(coletado, tmp_path, monkeypatch):
+    """Pedido do Fabio em 26/10/2026: quantas emendas da UF, no arquivo do Portal, não
+    informam o município de destino, com o link e a versão do arquivo. Amostra real: SP
+    desde 2023 tem 6 linhas, 2 sem município."""
+    from rastro.coletores import siconfi
+    from rastro.models import Coleta, EnteSiconfi
+    from rastro.politicos.modelos import PolColetaUf
+
+    coletado.add_all(
+        EnteSiconfi(**siconfi.normalizar(e)) for e in carregar("siconfi_entes.json")["items"]
+    )
+    coleta = coletado.scalars(select(Coleta).where(Coleta.fonte == "pol-emendas")).one()
+    coletado.add(PolColetaUf(coleta_id=coleta.id, fonte="pol-emendas", uf="SP", status="sucesso"))
+    coletado.commit()
+    dados = tmp_path / "dados"
+    site.exportar(dados, "SP", coletado, portao=_portao(SP=True))
+    nota_uf = json.loads((dados / "estados" / "SP.json").read_text())["emendas_sem_municipio"]
+    assert (nota_uf["total"], nota_uf["sem_municipio"], nota_uf["ano_inicial"]) == (6, 2, 2023)
+    # auditoria: o recorte arquivado pelo SHA-256; a versão do arquivo do Portal pelo original
+    assert len(nota_uf["sha256"]) == 64 and "resposta_id" not in nota_uf
+    assert len(nota_uf["sha256_arquivo_original"]) == 64
+    mun = json.loads((dados / "municipios" / "3550308.json").read_text())
+    assert mun["emendas_sem_municipio"] == nota_uf
+    assert site.verificar(dados) == []
+
+    # trava das emendas desligada: a nota não sai, e a verificação recusa se aparecer
+    _trava(monkeypatch, "RASTRO_POL_PUBLICAR_EMENDAS", "0")
+    sem = tmp_path / "sem"
+    site.exportar(sem, "SP", coletado, portao=_portao(SP=True))
+    assert json.loads((sem / "estados" / "SP.json").read_text())["emendas_sem_municipio"] is None
+    arq = sem / "municipios" / "3550308.json"
+    assert json.loads(arq.read_text())["emendas_sem_municipio"] is None
+    m = json.loads(arq.read_text())
+    m["emendas_sem_municipio"] = nota_uf
+    arq.write_text(json.dumps(m))
+    assert any("nota de emendas sem município" in p for p in site.verificar(sem))

@@ -214,6 +214,8 @@ NOMES_UF = {
 }
 
 
+SIGLA_POR_NOME = {nome: sigla for sigla, nome in NOMES_UF.items()}
+
 _SUFIXO = re.compile(r"\s*\(.*$")
 
 
@@ -305,6 +307,7 @@ def coletar_arquivo(
                 "numero_emenda": r["Número da emenda"],
                 "localidade_gasto": r["Localidade de aplicação do recurso"],
                 "cod_ibge_destino": int(cod) if cod.isdigit() and len(cod) == 7 else None,
+                "uf_destino": SIGLA_POR_NOME.get(r["UF"]),
                 "funcao": r["Nome Função"],
                 "subfuncao": r["Nome Subfunção"],
                 "acao": r["Nome Ação"],
