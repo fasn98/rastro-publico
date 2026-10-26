@@ -172,9 +172,8 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 > `backend/alembic/versions/`, como a 0021), a ordem no rastro-coleta é:
 > **1. Pull → 2. `alembic upgrade head` no Shell → 3. Republish**, nesta ordem, e fora de
 > uma execução em andamento. No passo 2, use a string do banco **de produção** (o Shell
-> carrega a do banco de desenvolvimento):
-> `cd backend && DATABASE_URL='<connection string de produção>' uv run alembic upgrade head`,
-> e depois `history -c`. A última linha deve citar a migração nova
+> carrega a do banco de desenvolvimento), na forma descrita em "Passo 2, comandos" abaixo.
+> A saída do `upgrade` deve citar a migração nova
 > (`Running upgrade ... -> 0021`); sem nenhuma linha "Running upgrade", o banco já estava em
 > dia. A coleta também roda `alembic upgrade head` no início de cada execução, mas aplicar
 > antes do Republish garante que o código novo nunca encontre o banco no formato antigo.
@@ -182,6 +181,50 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 > políticos (15/10/2026), a 0022 (CPF em texto livre) levou cerca de 1,5 min e a 0023 (cota:
 > CPF no número do documento e e-mail do fornecedor) cerca de 2,5 min. Se não forem
 > aplicadas no Shell, a primeira coleta depois do Republish as aplica e demora isso a mais.
+>
+> **Passo 2, comandos** (forma decidida pelo Fabio em 26/10/2026, na 0024). São dois
+> comandos, com uma conferência no meio:
+>
+> 1. Conferir o destino, sem migrar nada (cole a string de produção quando o `read` pedir;
+>    ela não aparece na tela nem no histórico):
+>    `read -rs DATABASE_URL; export DATABASE_URL; unset RASTRO_DATABASE_URL; cd backend && if [ -z "$DATABASE_URL" ]; then echo "DATABASE_URL vazio: pare"; else uv run python -c "from rastro.db import get_engine; print(get_engine().url.render_as_string(hide_password=True))" && uv run alembic current; fi`
+> 2. Só se a linha impressa for o banco de produção (host e nome do banco) e trouxer
+>    `sslmode=require`: `uv run alembic upgrade head && uv run alembic current`, e depois
+>    feche o Shell.
+>
+> - **O `unset RASTRO_DATABASE_URL` é obrigatório.** Se essa variável existir,
+>   `config._url_do_ambiente` ignora o `DATABASE_URL`, e a migração roda no banco errado sem
+>   avisar.
+> - **Não rode o comando 2 com o `DATABASE_URL` vazio.** Sem ele, o código cai no padrão
+>   `localhost`. O comando 1 para nesse caso.
+> - A string do Replit (`postgres://` ou `postgresql://`) serve como está: o código troca o
+>   prefixo por `postgresql+psycopg://` e mantém os parâmetros. Se a linha impressa não
+>   trouxer `sslmode=require`, repita o comando 1 colando a string com `?sslmode=require` no
+>   fim (ou `&sslmode=require`, se ela já tiver `?`). Sem isso, o driver aceita conexão sem
+>   TLS. O `require` não valida o certificado do servidor; a troca por `verify-full` está no
+>   backlog (T-019).
+>
+> **Nenhum Publish/Republish antes de a produção estar migrada pelo Alembic.** Vale para a
+> operação, depois da instalação. Na instalação (passos 3 a 8), os primeiros Publish criam
+> os apps (e o banco de produção, se o Replit só oferecer criá-lo ali, passo 5), e a
+> primeira coleta cria o esquema pelo Alembic. Na operação, o passo 3 só começa depois de o
+> comando 2 terminar em `(head)` com a string de produção (ou de o comando 1 já mostrar
+> `(head)`). Em 26/10/2026, o Publish das 12:45 foi feito com a
+> produção ainda na 0023; a 0024 foi aplicada pelo Alembic às 13:05, sem erro. Como a 0024
+> usa `add_column` e `create_index` sem `IF NOT EXISTS`, isso mostra que o Publish não criou
+> a coluna. Entre 12:45 e 13:05, o banco de produção não tinha `pol_emenda.uf_destino`, que
+> o código do #66 usa.
+>
+> **Na tela de Publish/Republish, nunca aceite mudança de banco proposta pelo Replit.** As
+> mudanças de esquema da produção entram só pelo Alembic, no passo 2. Com produção e
+> desenvolvimento na mesma migração, a tela não deve propor nada. Se propuser, não aplique:
+> pare e confira com `alembic current` nos dois bancos.
+>
+> **O Agent do Replit não mexe no banco de produção.** Não peça a ele, nem aceite dele,
+> migração, SQL, correção de esquema ou de dados na produção, mesmo que ele proponha como
+> conserto de uma diferença entre os bancos. A produção só muda pelo Alembic, no passo 2,
+> pela coleta agendada ou pelo `rastro criar-usuario-auditoria` rodado por você no Shell
+> (passo 7 da instalação, que cria ou renova o usuário só de leitura da auditoria).
 
 > **No painel Git do Replit, use apenas Pull; nunca Sync Changes nem Push. Os commits locais
 > do Replit são registros de publicação e configuração do app e não devem ir para o
@@ -205,7 +248,7 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 | `IdleInTransactionSessionTimeout` (terminating connection due to idle-in-transaction timeout) | O banco de produção encerra a conexão que fica com uma transação aberta e ociosa além de `idle_in_transaction_session_timeout`; o valor aparece no início do log, na linha `Banco de produção: idle_in_transaction_session_timeout = ...` (`rastro conferir-producao`). **Em produção: `5min`** (execução 6qmcl, 09/10/2026). Nenhuma etapa pode deixar uma transação aberta e parada por 5 minutos. Em 09/10/2026 (execução 6pfw6) a exportação falhava assim, perto do fim (cerca de 5.000 a 5.500 s). Corrigido no código: a exportação lê em autocommit, e os coletores fecham a transação antes de ir à rede. **Não** se resolve aumentando o limite no servidor. Se voltar a acontecer, o traceback mostra o comando; teste novo em `tests/test_site_transacao_ociosa.py`. |
 | `npm error Exit handler never called!` ou `tsc: not found` no log | A instalação das dependências do frontend quebrou. Elas são instaladas no **build** do deployment (Republish), e a coleta só reinstala se faltar algo, com até 3 tentativas; o npm pode quebrar e ainda sair com código 0, por isso o script confere se `tsc` e `vite` ficaram instalados. Nada é publicado quando isso falha (o site continua como estava). Se o erro aparecer no build, faça o Republish de novo; se aparecer na coleta, a próxima execução tenta de novo. |
 | Execução terminou com erro | Só acontece quando algo crítico falha: banco, migrações, verificação do arquivo bruto, exportação ou verificação do site, ou o envio ao GitHub. Nesses casos nada é publicado e o site continua como estava; veja a última mensagem de erro no log. |
-| Código novo no `main` | nos dois apps: Git → **Pull** (nunca Sync Changes nem Push), depois **Publish** |
+| Código novo no `main` | nos dois apps: Git → **Pull** (nunca Sync Changes nem Push); se o `main` trouxer migração nova, migre a produção pelo Alembic (ver "Quando o `main` trouxer uma migração nova", em Operação) e confira `(head)`; só depois **Publish** |
 | Token vencendo | passo 1.4 |
 | App reiniciando sem parar (*crash loop*) | Publishing → **Logs**. Se aparecer `ERRO: RASTRO_PAPEL` ou `ERRO: o Secret RASTRO_PAPEL não está definido`, corrija o Secret em Publishing → Production app secrets (`coleta` ou `auditoria`) e publique de novo. Os Secrets de produção não aparecem no Shell do editor: para testar um valor lá, rode `RASTRO_PAPEL=<valor> bash backend/scripts/replit.sh --validar-papel` |
 | Forçar exportação do zero | a coleta parte do `dados/` publicado e só regrava o que mudou; para refazer tudo, rode `uv run rastro exportar-site --uf SP --saida <pasta> --completa` |

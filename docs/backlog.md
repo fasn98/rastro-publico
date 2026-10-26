@@ -1,10 +1,14 @@
 # Backlog — Rastro Público
 
-> Atualizado em 2026-10-10 (antes: 2026-10-08, na migração para o fluxo do squad). Ordem aprovada pelo Fabio em
+> Atualizado em 2026-10-26 (antes: 2026-10-10 e 2026-10-08, na migração para o fluxo do squad). Ordem aprovada pelo Fabio em
 > 2026-10-08. Nenhuma implementação começa até o Fabio liberar a tarefa. Prioridade: P1 (agora), P2 (próximo), P3 (depois).
 
 ## Aguardando aprovação do Fabio
 - [ ] Lançamento: tirar o site da prévia (`RASTRO_PREVIA` padrão `0` em `backend/scripts/coleta_sp.sh`) — depende de T-003
+- [ ] T-018 Decisão futura: ligar as emendas de 2023 aos parlamentares da legislatura atual (regra de cruzamento, exige aprovação).
+  - **Hoje:** a regra 3 de `politicos/vinculo.py` só liga emendas a partir de 2024, porque o orçamento de 2023 foi votado em 2022, na legislatura 56. As emendas de 2023 aparecem com o autor como está na fonte, sem link.
+  - **Medido na coleta local de SC de 25/10/2026:** 22 emendas de 2023 com destino em SC ficaram sem vínculo. Os autores delas são parlamentares de SC com o mesmo "Código do Autor" das emendas de 2024 em diante, que estão ligadas.
+  - **Decisão de 26/10/2026:** a regra continua como está.
 
 ## P1
 - [x] T-004 Registrar o resultado do usuário só de leitura da auditoria em "Riscos aceitos" (`docs/deploy-replit.md`, passo 7) — `lexicon` — feito em 10/10/2026: usuário criado e auditoria testada
@@ -13,6 +17,9 @@
 - [ ] T-006 Atualizar documentação desatualizada: o README diz que `/api/bruto/{sha256}` está "em implementação" (já existe desde `093a6a1`); "Próximas etapas" do módulo de políticos ainda lista "decidir e carregar os eleitos de 2026", já publicados — `lexicon`
 - [ ] T-007 Transferências especiais: ligar ao município que recebeu pelo arquivo de favorecidos do Portal — `keystone` (ADR de cruzamento) → `node-runner` — regra de cruzamento exige aprovação
 - [ ] T-008 Testes do frontend: hoje o CI só compila (`tsc -b` + `vite build`) — `keystone` (ADR da ferramenta) → `scalpel`
+- [ ] T-019 Migração do Alembic na produção com `sslmode=verify-full` em vez de `sslmode=require` (`docs/deploy-replit.md`, "Passo 2, comandos") — `node-runner` — segurança, exige aprovação do Fabio
+  - **Hoje (decisão de 26/10/2026):** o documento exige `sslmode=require`, que obriga TLS mas não valida o certificado do servidor.
+  - **Antes de trocar:** confirmar qual CA assina o certificado do provedor do banco do Replit e testar a conexão com `verify-full` no Shell.
 
 ## P3: fontes novas (cada uma exige ADR e aprovação para publicar)
 - [ ] T-009 Assembleia Legislativa de SP (ALESP)

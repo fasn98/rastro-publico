@@ -374,6 +374,14 @@ são CPF, como o do documento fiscal).
   TSE, `deputado_distrital`), e não estaduais (cargo 7).
 - `GET /api/municipios/{codigo}/emendas`: emendas com destino ao município e
   "Parlamentares que destinaram emendas a este município".
+- `GET /api/ufs/{uf}/emendas-sem-municipio`: quantas emendas o arquivo do Portal atribui à
+  UF (coluna "UF", `pol_emenda.uf_destino`, migração 0024) e quantas delas não informam o
+  município de destino (localidade "MÚLTIPLO" ou o estado inteiro). A resposta traz o link,
+  o recorte arquivado e o SHA-256 e o tamanho do arquivo original do Portal. Só responde
+  para UFs da coleta de emendas mais recente: cada coleta regrava todas as linhas, e nas
+  outras UFs o recorte só tem as emendas de autores delas. Sai com a trava
+  `pol_publicar_emendas`. Vai para a nota das páginas do município e da UF (pedido do Fabio
+  em 26/10/2026).
 
 ## Verificação contra a fonte (06/10/2026)
 

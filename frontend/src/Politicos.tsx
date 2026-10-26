@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { daUf, municipiosComPoliticos, NOME_UF, ufDoCodigo, ufsComPoliticos, type Municipio } from "./api";
+import {
+  daUf,
+  type EmendasSemMunicipio,
+  municipiosComPoliticos,
+  type Municipio,
+  NOME_UF,
+  ufDoCodigo,
+  ufsComPoliticos,
+} from "./api";
 import { AUDITORIA_ATIVA, obterManifesto, type SituacaoFonte, urlAuditoria } from "./dados";
 import { FONTE_DO_CARGO } from "./Fontes";
 import {
@@ -12,6 +20,7 @@ import {
   obterEmendas,
   obterCota,
   obterEmendasMunicipio,
+  obterEmendasSemMunicipio,
   obterEleito,
   obterPolitico,
   obterPrefeitos,
@@ -72,6 +81,27 @@ export function LinkFonte({ url, sha256, recebidoEm }: {
   );
 }
 
+/** Quantas emendas que a fonte atribui à UF não informam o município de destino (por isso
+ * não aparecem em nenhuma página de município), com o link e a versão do arquivo. */
+export function NotaEmendasSemMunicipio({ nota }: { nota: EmendasSemMunicipio }) {
+  const periodo =
+    nota.ano_inicial === nota.ano_final ? `${nota.ano_inicial}` : `${nota.ano_inicial} a ${nota.ano_final}`;
+  return (
+    <p className="nota">
+      No arquivo de emendas parlamentares do Portal da Transparência, {inteiro(nota.sem_municipio)} das{" "}
+      {inteiro(nota.total)} emendas de {nota.uf} de {periodo} não informam o município de destino
+      (localidade “Múltiplo” ou o estado inteiro) e não aparecem nas páginas dos municípios.{" "}
+      {nota.sha256_arquivo_original && (
+        <span title={`SHA-256 ${nota.sha256_arquivo_original}`}>
+          Versão do arquivo: SHA-256 {nota.sha256_arquivo_original.slice(0, 12)}…
+          {nota.tamanho_arquivo_original !== null && ` (${inteiro(nota.tamanho_arquivo_original)} bytes)`}.{" "}
+        </span>
+      )}
+      <LinkFonte url={nota.url_fonte} sha256={nota.sha256} recebidoEm={nota.recebido_em} />
+    </p>
+  );
+}
+
 function Fontes({ fontes }: { fontes: Fonte[] }) {
   if (!fontes.length) return null;
   return (
@@ -118,6 +148,7 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
   const [rep, setRep] = useState<Representantes | null>(null);
   const [semRepresentantes, setSemRepresentantes] = useState(false);
   const [emendas, setEmendas] = useState<Emendas | null>(null);
+  const [semMunicipio, setSemMunicipio] = useState<EmendasSemMunicipio | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [fontes, setFontes] = useState<SituacaoFonte[]>([]);
   useEffect(() => {
@@ -164,6 +195,7 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
   useEffect(() => {
     setRep(null);
     setEmendas(null);
+    setSemMunicipio(null);
     setSemRepresentantes(false);
     // UF sem políticos no site: nem o arquivo do município é lido (ele pode nem existir)
     if (cod === null || ufs === null || !ufs.includes(ufDoCodigo(cod))) return;
@@ -171,6 +203,7 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
       .then((r) => (r === null ? setSemRepresentantes(true) : setRep(r)))
       .catch((e: Error) => setErro(e.message));
     obterEmendasMunicipio(cod).then(setEmendas).catch((e: Error) => setErro(e.message));
+    obterEmendasSemMunicipio(cod).then(setSemMunicipio).catch(() => setSemMunicipio(null));
   }, [cod, ufs]);
 
   return (
@@ -310,6 +343,7 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
           ))}
 
           <h3>Emendas recebidas</h3>
+          {semMunicipio && <NotaEmendasSemMunicipio nota={semMunicipio} />}
           {emendas && <TabelaEmendas emendas={emendas} mostrarAutor />}
           <Contestar titulo={`representantes de ${rep.municipio.nome}/${rep.municipio.uf}`} />
         </>
