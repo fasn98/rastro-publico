@@ -674,7 +674,15 @@ def emendas_sem_municipio(uf: str, session: SessionDep):
     total, sem, ano_min, ano_max, rid = session.execute(
         select(
             func.count(),
-            func.count().filter(PolEmenda.cod_ibge_destino.is_(None)),
+            # sem código e com a localidade "MÚLTIPLO" ou "<UF> (UF)": as que de fato não
+            # informam o município (no arquivo de 23/10/2026, todas as sem código são assim)
+            func.count().filter(
+                PolEmenda.cod_ibge_destino.is_(None),
+                or_(
+                    PolEmenda.localidade_gasto == "MÚLTIPLO",
+                    PolEmenda.localidade_gasto.like("% (UF)"),
+                ),
+            ),
             func.min(PolEmenda.ano),
             func.max(PolEmenda.ano),
             func.max(PolEmenda.resposta_id),
