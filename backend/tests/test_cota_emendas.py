@@ -78,7 +78,11 @@ def _zip_emendas() -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         texto = (POL / "transparencia_emendas_amostra.csv").read_text()
-        z.writestr("EmendasParlamentares.csv", texto.replace("\n", "\r\n").encode("latin-1"))
+        # data fixa no cabeçalho do zip: sem ela, o zipfile grava a hora atual e duas chamadas
+        # em segundos diferentes dão bytes (e SHA-256) diferentes
+        info = zipfile.ZipInfo("EmendasParlamentares.csv", date_time=(1980, 1, 1, 0, 0, 0))
+        info.compress_type = zipfile.ZIP_DEFLATED
+        z.writestr(info, texto.replace("\n", "\r\n").encode("latin-1"))
     return buf.getvalue()
 
 
