@@ -323,7 +323,7 @@ pública e comparar com `sha256_original`.
 
 | Fonte | O que é removido |
 |---|---|
-| TSE, candidatos | as 17 colunas da tabela acima; só as linhas de SP |
+| TSE, candidatos | as 17 colunas da tabela acima; só as linhas da UF coletada |
 | Câmara, cota | `cpf`, `nuCarteiraParlamentar`, `txtPassageiro`; CPF e nome de fornecedor pessoa física; CPF e e-mail no nome do fornecedor; CPF no número do documento |
 | Câmara, listas de deputados | `email` (e-mail de gabinete) |
 | Senado, lista de senadores | `EmailParlamentar` |
