@@ -292,7 +292,10 @@ def test_emendas_da_uf_sem_municipio(session, cliente, monkeypatch):
     from rastro.models import Coleta
     from rastro.politicos.modelos import PolColetaUf
 
-    respx.get(transparencia.URL_ARQUIVO).respond(content=_zip_emendas())
+    # o zip é montado uma vez só: o cabeçalho leva a hora da montagem, e duas montagens em
+    # segundos diferentes dariam SHA-256 diferentes
+    original = _zip_emendas()
+    respx.get(transparencia.URL_ARQUIVO).respond(content=original)
 
     def coletar(s, c):
         return transparencia.coletar_arquivo(s, c, "SP", 2023, {})["linhas"]
@@ -316,7 +319,7 @@ def test_emendas_da_uf_sem_municipio(session, cliente, monkeypatch):
         assert (n["ano_inicial"], n["ano_final"]) == (2023, 2026)
         assert n["url_fonte"].startswith("https://portaldatransparencia.gov.br/")
         resp = session.get(RespostaBruta, n["resposta_id"])
-        assert n["sha256_arquivo_original"] == resp.sha256_original == sha256(_zip_emendas())
+        assert n["sha256_arquivo_original"] == resp.sha256_original == sha256(original)
         assert api.get("/api/ufs/BA/emendas-sem-municipio").status_code == 404
         # coleta seguinte só da BA: as linhas de SP que sobram são só de autores, e a nota
         # de SP deixa de sair (vale a UF da coleta mais recente)
