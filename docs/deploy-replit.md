@@ -201,7 +201,8 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 >   prefixo por `postgresql+psycopg://` e mantém os parâmetros. Se a linha impressa não
 >   trouxer `sslmode=require`, repita o comando 1 colando a string com `?sslmode=require` no
 >   fim (ou `&sslmode=require`, se ela já tiver `?`). Sem isso, o driver aceita conexão sem
->   TLS.
+>   TLS. O `require` não valida o certificado do servidor; a troca por `verify-full` está no
+>   backlog (T-019).
 >
 > **Na tela de Publish/Republish, nunca aceite mudança de banco proposta pelo Replit.** As
 > mudanças de esquema da produção entram só pelo Alembic, no passo 2. Com produção e
