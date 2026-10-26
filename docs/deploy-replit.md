@@ -204,10 +204,23 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 >   TLS. O `require` não valida o certificado do servidor; a troca por `verify-full` está no
 >   backlog (T-019).
 >
+> **Nenhum Publish/Republish antes de a produção estar migrada pelo Alembic.** O passo 3 só
+> começa depois de o comando 2 terminar em `(head)` com a string de produção (ou de o
+> comando 1 já mostrar `(head)`). Em 26/10/2026, o Publish das 12:45 foi feito com a
+> produção ainda na 0023; a 0024 foi aplicada pelo Alembic às 13:05, sem erro. Como a 0024
+> usa `add_column` e `create_index` sem `IF NOT EXISTS`, isso mostra que o Publish não criou
+> a coluna. Entre 12:45 e 13:05, o banco de produção não tinha `pol_emenda.uf_destino`, que
+> o código do #66 usa.
+>
 > **Na tela de Publish/Republish, nunca aceite mudança de banco proposta pelo Replit.** As
 > mudanças de esquema da produção entram só pelo Alembic, no passo 2. Com produção e
 > desenvolvimento na mesma migração, a tela não deve propor nada. Se propuser, não aplique:
 > pare e confira com `alembic current` nos dois bancos.
+>
+> **O Agent do Replit não mexe no banco de produção.** Não peça a ele, nem aceite dele,
+> migração, SQL, correção de esquema ou de dados na produção, mesmo que ele proponha como
+> conserto de uma diferença entre os bancos. A produção só muda pelo Alembic, no passo 2,
+> ou pela coleta agendada.
 
 > **No painel Git do Replit, use apenas Pull; nunca Sync Changes nem Push. Os commits locais
 > do Replit são registros de publicação e configuração do app e não devem ir para o
