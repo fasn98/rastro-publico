@@ -18,7 +18,11 @@ jobs:
         working-directory: /tmp
         run: |
           sudo systemctl start postgresql.service
-          until pg_isready -h localhost -q; do sleep 1; done
+          for i in $(seq 60); do pg_isready -h localhost -q && break; sleep 1; done
+          if ! pg_isready -h localhost -q; then
+            echo "::error::PostgreSQL do runner não ficou pronto em 60 s"
+            exit 1
+          fi
           sudo -u postgres psql -v ON_ERROR_STOP=1 \
             -c "CREATE USER rastro WITH SUPERUSER PASSWORD 'rastro'" \
             -c "CREATE DATABASE rastro_teste OWNER rastro"
