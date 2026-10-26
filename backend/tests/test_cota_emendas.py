@@ -281,3 +281,58 @@ def test_codigo_de_autor_diferente_desfaz_o_vinculo(session, cliente, deputados)
     autores = {"TABATA AMARAL": Autor(deputados[204534], "Tabata Amaral", 2024, 2027)}
     r = transparencia.coletar_arquivo(session, cliente, "SP", 2023, autores)
     assert r["codigo_de_autor_ambiguo"] == [deputados[204534]] and r["ligadas"] == 0
+
+
+@respx.mock
+def test_emendas_da_uf_sem_municipio(session, cliente, monkeypatch):
+    """Nota da página do município e da UF: emendas que o arquivo atribui à UF (coluna "UF")
+    e quantas não informam o município. Na amostra real, SP desde 2023 tem 6 linhas, 2 sem
+    município ("SÃO PAULO (UF)" e "MÚLTIPLO"); a de UF "Múltiplo" não conta para nenhuma."""
+    from rastro.coletores.base import executar
+    from rastro.models import Coleta
+    from rastro.politicos.modelos import PolColetaUf
+
+    respx.get(transparencia.URL_ARQUIVO).respond(content=_zip_emendas())
+
+    def coletar(s, c):
+        return transparencia.coletar_arquivo(s, c, "SP", 2023, {})["linhas"]
+
+    executar(session, "pol-emendas", coletar, cliente)
+    por_codigo = {e.codigo_emenda: e for e in session.scalars(select(PolEmenda))}
+    assert por_codigo["202630880003"].uf_destino == "SP"  # MÚLTIPLO com UF SÃO PAULO
+    assert por_codigo["202339090001"].uf_destino == "SP"
+    app.dependency_overrides[get_session] = lambda: session
+    try:
+        api = TestClient(app)
+        # sem coleta registrada da UF, a nota não sai (o recorte só é completo nas UFs coletadas)
+        assert api.get("/api/ufs/SP/emendas-sem-municipio").status_code == 404
+        coleta = session.scalars(select(Coleta).where(Coleta.fonte == "pol-emendas")).one()
+        session.add(
+            PolColetaUf(coleta_id=coleta.id, fonte="pol-emendas", uf="SP", status="sucesso")
+        )
+        session.commit()
+        n = api.get("/api/ufs/sp/emendas-sem-municipio").json()
+        assert (n["uf"], n["total"], n["sem_municipio"]) == ("SP", 6, 2)
+        assert (n["ano_inicial"], n["ano_final"]) == (2023, 2026)
+        assert n["url_fonte"].startswith("https://portaldatransparencia.gov.br/")
+        resp = session.get(RespostaBruta, n["resposta_id"])
+        assert n["sha256_arquivo_original"] == resp.sha256_original == sha256(_zip_emendas())
+        assert api.get("/api/ufs/BA/emendas-sem-municipio").status_code == 404
+        # coleta seguinte só da BA: as linhas de SP que sobram são só de autores, e a nota
+        # de SP deixa de sair (vale a UF da coleta mais recente)
+        executar(
+            session,
+            "pol-emendas",
+            lambda s, c: transparencia.coletar_arquivo(s, c, "BA", 2023, {})["linhas"],
+            cliente,
+        )
+        nova = max(session.scalars(select(Coleta.id).where(Coleta.fonte == "pol-emendas")))
+        session.add(PolColetaUf(coleta_id=nova, fonte="pol-emendas", uf="BA", status="sucesso"))
+        session.commit()
+        assert api.get("/api/ufs/SP/emendas-sem-municipio").status_code == 404
+        ba = api.get("/api/ufs/BA/emendas-sem-municipio").json()
+        assert (ba["total"], ba["sem_municipio"]) == (1, 0)
+        _trava(monkeypatch, "RASTRO_POL_PUBLICAR_EMENDAS", "0")
+        assert api.get("/api/ufs/BA/emendas-sem-municipio").status_code == 404
+    finally:
+        app.dependency_overrides.clear()

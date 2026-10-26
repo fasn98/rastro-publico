@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { daUf, NOME_UF, obterEstado, type ArquivoEstado } from "./api";
 import { AUDITORIA_ATIVA, urlAuditoria } from "./dados";
 import { LegendaLimites, Medidor, num, PERIODO, pct, reais, Status } from "./Indicadores";
+import { NotaEmendasSemMunicipio } from "./Politicos";
 
 /** Governo do estado ou DF (ADR-0020): pessoal, liquidez e investimento, sem ranking e sem
  * autonomia (a fórmula do ranking é municipal). */
@@ -161,6 +162,12 @@ export default function PaginaEstado({ uf, noronha }: { uf: string; noronha: boo
               </p>
             )}
           </div>
+        </section>
+      )}
+      {dados.emendas_sem_municipio && (
+        <section aria-labelledby="emendas-uf">
+          <h3 id="emendas-uf">Emendas parlamentares sem município de destino</h3>
+          <NotaEmendasSemMunicipio nota={dados.emendas_sem_municipio} />
         </section>
       )}
     </section>
