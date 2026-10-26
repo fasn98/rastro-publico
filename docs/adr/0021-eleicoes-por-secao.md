@@ -77,8 +77,16 @@ identificador do usuário que gerou a mídia.
    O TSE substitui pacotes já publicados: o pacote de arquivos de urna do 1º turno de 2026
    foi criado em 06/10/2026 e tem `Last-Modified` de 22/10/2026. Por isso:
    - **Pacote em lote:** o SHA-256 vale para o pacote inteiro e também para cada arquivo
-     lido de dentro dele. A leitura por faixas (HTTP Range) é interrompida se o
-     `Last-Modified` mudar no meio.
+     lido de dentro dele.
+   - **Leitura por faixas (HTTP Range):** exige um validador estável. O pacote precisa
+     informar `ETag` e `Last-Modified`; sem eles, a leitura por faixas é recusada. Cada
+     faixa é pedida com `If-Match: <ETag>`, e a resposta precisa vir com:
+     - status 206;
+     - o mesmo `ETag` e o mesmo `Last-Modified`;
+     - o mesmo tamanho total em `Content-Range`.
+
+     Se qualquer um faltar ou mudar, a leitura é interrompida e nada do que foi lido é
+     usado. Isso impede juntar bytes de duas versões do pacote.
    - **Nova versão da fonte:** os números são recalculados e a versão anterior fica
      registrada, com a data em que deixou de valer. Número de uma versão nunca é misturado
      com número de outra.
