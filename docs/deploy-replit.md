@@ -111,14 +111,35 @@ A API de auditoria deve usar um usuário **só de leitura**, que enxerga apenas 
 tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_resposta`,
 `conta_demonstrativo`) e não consegue gravar nada.
 
-1. No **Shell** do rastro-coleta, com o `DATABASE_URL` **de produção** carregado (copie a
-   connection string em Database → banco de produção → Settings):
+1. No **Shell** do rastro-coleta, a partir da raiz do projeto (`cd ~/workspace`), use a
+   connection string **de produção** (copie em Database → banco de produção → Settings).
+   São dois comandos, com uma conferência no meio, no mesmo padrão do passo 2 da migração
+   (ver "Passo 2, comandos", em Operação):
 
-   ```bash
-   cd backend && DATABASE_URL='<connection string de produção>' uv run rastro criar-usuario-auditoria
-   ```
+   a. Conferir o destino, sem gravar nada (cole a string de produção quando o `read`
+      pedir; ela não aparece na tela nem no histórico):
 
-   O comando gera uma senha forte (256 bits, aleatória, só para este usuário), cria o
+      ```bash
+      read -rs DATABASE_URL; export DATABASE_URL; unset RASTRO_DATABASE_URL; cd backend && if [ -z "$DATABASE_URL" ]; then echo "DATABASE_URL vazio: pare"; else uv run python -c "from rastro.db import get_engine; print(get_engine().url.render_as_string(hide_password=True))"; fi
+      ```
+
+   b. Só se a linha impressa for o banco de produção (host e nome do banco) e trouxer
+      `sslmode=require`:
+
+      ```bash
+      uv run rastro criar-usuario-auditoria
+      ```
+
+   - **O `unset RASTRO_DATABASE_URL` é obrigatório.** Se essa variável existir,
+     `config._url_do_ambiente` ignora o `DATABASE_URL`, e o usuário é criado no banco
+     errado sem avisar.
+   - **Não rode o comando b com o `DATABASE_URL` vazio.** Sem ele, o código cai no padrão
+     `localhost`. O comando a para nesse caso.
+   - Se a linha impressa não trouxer `sslmode=require`, repita o comando a colando a string
+     com `?sslmode=require` no fim (ou `&sslmode=require`, se ela já tiver `?`). A string
+     do usuário de auditoria impressa pelo comando b herda esse parâmetro.
+
+   O comando b gera uma senha forte (256 bits, aleatória, só para este usuário), cria o
    usuário `rastro_auditoria` com leitura apenas dessas 4 tabelas e com toda transação em
    modo só leitura, e imprime **uma vez** a string de conexão dele. Rodar de novo troca a
    senha.
@@ -127,8 +148,8 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
    secrets" → "Deployment secrets") e ponha `DATABASE_URL` = a string impressa, sem
    espaços nem aspas nas pontas. Os Secrets do editor (Tools → Secrets) **não** valem para
    o app publicado: se a string ficar só lá, a auditoria continua com a anterior ou dá
-   erro 500 ao conectar (traceback em `pool ... checkout`). Depois, **Republish**. Apague a
-   linha do histórico do Shell (`history -c`). Teste: `…/api/respostas/1` devolve um JSON
+   erro 500 ao conectar (traceback em `pool ... checkout`). Depois, **Republish**. Feche o
+   Shell: a string do usuário de auditoria fica impressa na tela. Teste: `…/api/respostas/1` devolve um JSON
    que começa com `{"id":1,`.
 3. **Se o Replit não permitir** (o comando termina com `ERRO: o banco não permitiu criar
    o usuário só de leitura`): use a connection string principal no rastro-auditoria e
@@ -185,8 +206,10 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 > **Passo 2, comandos** (forma decidida pelo Fabio em 26/10/2026, na 0024). São dois
 > comandos, com uma conferência no meio:
 >
-> 1. Conferir o destino, sem migrar nada (cole a string de produção quando o `read` pedir;
->    ela não aparece na tela nem no histórico):
+> 1. Conferir o destino, sem migrar nada, a partir da raiz do projeto (`cd ~/workspace`;
+>    o comando entra em `backend`). Cole a string de produção quando o `read` pedir; ela
+>    não aparece na tela nem no histórico, e o cursor fica parado até você colar e apertar
+>    Enter:
 >    `read -rs DATABASE_URL; export DATABASE_URL; unset RASTRO_DATABASE_URL; cd backend && if [ -z "$DATABASE_URL" ]; then echo "DATABASE_URL vazio: pare"; else uv run python -c "from rastro.db import get_engine; print(get_engine().url.render_as_string(hide_password=True))" && uv run alembic current; fi`
 > 2. Só se a linha impressa for o banco de produção (host e nome do banco) e trouxer
 >    `sslmode=require`: `uv run alembic upgrade head && uv run alembic current`, e depois
