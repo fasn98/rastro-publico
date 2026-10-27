@@ -194,7 +194,10 @@ emenda ↔ documento deve vir do documento, nunca só do CNPJ.
 - **Teste:**
   - Município de Painel, de 07/2024 a 06/2025: 1.325 contratos.
   - EBSERH (sede, CNPJ 15.126.437/0001-43), de 11 a 12/2024: 868 contratos.
-  - EMENDA_PNCP_PAINEL: (preenchido abaixo, se a consulta paginada terminar)
+  - Nos 1.325 contratos de Painel, `emendaParlamentar` veio **vazio (null) em todos**. A
+    consulta foi paginada, com 4 s entre as páginas e sem novo 429. O campo existe, mas não
+    serve como ligação com a emenda nessa amostra. O vínculo continua sendo pelo CNPJ do
+    fornecedor e pelo período.
 
 ## 4. LGPD
 
