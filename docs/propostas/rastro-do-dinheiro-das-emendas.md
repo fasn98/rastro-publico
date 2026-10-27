@@ -1,7 +1,7 @@
 # Proposta: módulo "Rastro do dinheiro das emendas"
 
-- **Status:** proposta para decisão do Fabio. Sem código e sem publicação. A ADR vem só depois
-  da aprovação.
+- **Status:** proposta em revisão. As decisões do Fabio de 27/10/2026 estão na seção 7. Sem
+  código e sem publicação. A ADR vem depois da revisão.
 - **Data do levantamento:** 27/10/2026, consultas feitas entre 13h30 e 15h (UTC).
 - **Autor:** sessão de políticos (Claude).
 
@@ -165,9 +165,15 @@ emenda ↔ documento deve vir do documento, nunca só do CNPJ.
   - Simples: 0,3 GB;
   - tabelas de CNAE, municípios, naturezas e qualificações.
 - **Atualização:** mensal. Há pastas mensais de 2026-07 a 2026-10.
-- **Licença:** não confirmada em fonte oficial nesta pesquisa. Precisa ser conferida no
-  [conjunto do dados.gov.br](https://dados.gov.br/dados/conjuntos-dados/cadastro-nacional-da-pessoa-juridica---cnpj)
-  antes da ADR.
+- **Licença: não confirmada em fonte oficial.**
+  - A ficha do [conjunto no dados.gov.br](https://dados.gov.br/dados/conjuntos-dados/cadastro-nacional-da-pessoa-juridica---cnpj)
+    não abriu daqui: os metadados exigem login (401).
+  - A [página de dados abertos da Receita](https://www.gov.br/receitafederal/pt-br/acesso-a-informacao/dados-abertos)
+    só traz a licença do conteúdo do site, Creative Commons Atribuição-SemDerivações 3.0, que não
+    é a licença dos dados.
+  - Fontes secundárias citam "Creative Commons Atribuição" na ficha do dados.gov.br, sem
+    confirmação.
+  - Para decidir: abrir a ficha do conjunto num navegador e registrar a licença e a data na ADR.
 - **Campos úteis:**
   - Empresas: razão social, natureza jurídica, capital social, porte.
   - Estabelecimentos: CNPJ completo, situação cadastral e data, data de início de atividade,
@@ -233,6 +239,9 @@ emenda ↔ documento deve vir do documento, nunca só do CNPJ.
 
 ## 5. Neutralidade: proposta de tela
 
+**Em destaque, no topo de cada tela:** a data da última carga de cada fonte usada (decisão 4).
+Exemplo: "Transferegov: dados de 17/07/2026".
+
 **Ficha da emenda:**
 - código, autor, tipo, função e ação;
 - valores empenhado, liquidado e pago, com fonte e data da carga.
@@ -273,19 +282,72 @@ emenda ↔ documento deve vir do documento, nunca só do CNPJ.
 | Receita CNPJ | 7,8 GB compactados por mês | ~1 h de download e filtro em streaming, só para os ~150 mil CNPJs de interesse |
 | PNCP | por órgão e por data, com limite 429 | lento: horas a dias. Coletar só órgãos e entes que receberam emendas |
 
-## 7. Decisões para o Fabio
+## 7. Decisões do Fabio (27/10/2026)
 
-1. Aprovar a cadeia de vínculos:
-   - emenda → documento: só por documento oficial (API `emendas/documentos` ou `Autor Emenda` no
-     empenho);
-   - documento → favorecido;
-   - convênio → pagamentos do convenente;
-   - CNPJ → cadastro.
-2. Chave do Portal: testar no Replit ou renovar.
-3. Testar a API do Transferegov (convênios e transferências especiais) a partir do Replit.
-4. Levar a regra de LGPD da seção 4 ao parecer, incluindo o CPF completo encontrado em
-   `siconv_obtv_convenente`.
-5. Confirmar a licença dos dados do CNPJ antes da ADR.
+1. **Cadeia de vínculos aprovada.** Regra obrigatória: todo vínculo vem de um documento oficial.
+   - emenda → empenho → pagamento → favorecido;
+   - convênio → pagamento do convenente → fornecedor.
+   - **Nunca ligar só pelo CNPJ.** O CNPJ serve para buscar documentos e para trazer o cadastro
+     da empresa, não para afirmar que um pagamento pertence a uma emenda.
+2. **Chave do Portal e API do Transferegov:** um script só de leitura, para rodar no Shell do
+   rastro-coleta, testa:
+   - `emendas/documentos/{codigo}`, `despesas/documentos/{codigo}` e
+     `despesas/documentos-por-favorecido` com a amostra de SC;
+   - `transferenciasespeciais/plano_acao_especial`.
+   Ele imprime só status HTTP, contagens e conferências sim/não. O script fica fora deste PR.
+3. **LGPD: começa pela opção mais restritiva** (seção 4, em vigor até o parecer):
+   - nenhum CPF, nem mascarado;
+   - pessoa física só como "pessoa física", com valor e data;
+   - MEI sem razão social;
+   - só sócios pessoa jurídica.
+   - **Regra nova:** as colunas de CPF do Transferegov (ex.: `IDENTIF_FAVORECIDO_OBTV_CONV` em
+     `siconv_obtv_convenente`, `IDENTIF_FORNECEDOR` em `siconv_pagamento` quando não for CNPJ)
+     são descartadas na leitura, em streaming. Nunca entram no banco nem no arquivo bruto.
+   - Um teste falha se aparecer CPF, mascarado ou não, em qualquer tabela ou arquivo gerado.
+4. **Data da última carga de cada fonte em destaque na tela.** Exemplos:
+   - Transferegov: 17/07/2026;
+   - Portal: Last-Modified do arquivo;
+   - Receita: mês da pasta;
+   - PNCP: data da coleta.
+5. **Licença do cadastro de CNPJ:** pendente de confirmação em fonte oficial (ver 3.1).
+6. **ADR:** só depois da revisão desta proposta.
+
+## 8. Resumo para o parecer jurídico
+
+**Finalidade.** Mostrar, com fonte oficial, para quem foi pago o dinheiro de cada emenda
+parlamentar: favorecidos e, nos convênios, fornecedores do convenente. A ficha das empresas traz
+dados cadastrais públicos.
+
+**Fontes.** Todas oficiais e públicas:
+- Portal da Transparência (CGU);
+- Transferegov (MGI);
+- cadastro aberto de CNPJ (Receita Federal);
+- PNCP.
+
+**Dados pessoais que as fontes trazem:**
+- nome e CPF (às vezes completo) de pessoas físicas pagas;
+- razão social de MEI e de empresário individual, que é o nome da pessoa;
+- nome, CPF parcial, faixa etária e data de entrada de sócios pessoa física;
+- endereço e contato de MEI.
+
+**Regra adotada (a mais restritiva, até o parecer):**
+1. Nenhum CPF, nem mascarado nem parcial, em banco, arquivo bruto ou tela. As colunas de CPF são
+   descartadas na leitura, em streaming.
+2. Pessoa física aparece só como "pessoa física", com valor e data, sem nome.
+3. MEI e empresário individual: sem razão social, sem endereço e sem contato. Ficam CNPJ,
+   natureza jurídica, CNAE, município e datas.
+4. Sócios: só sócios pessoa jurídica. Nenhum sócio pessoa física.
+5. Teste automático que falha se aparecer CPF ou nome de pessoa física em arquivo gerado.
+
+**Perguntas ao parecer:**
+- a. O CNPJ de MEI pode ser exibido? Hoje ele está na regra. Ele não é o CPF, mas leva à pessoa
+  pela consulta pública da Receita.
+- b. Sócios pessoa física de empresas que receberam dinheiro público podem ser exibidos com nome e
+  qualificação, sem CPF, com base no interesse público e na publicidade dos dados de origem?
+- c. O nome de pessoa física favorecida, que o Portal publica, pode aparecer, ou fica só "pessoa
+  física"?
+- d. O arquivo `siconv_obtv_convenente` do governo traz CPF completo. Basta descartá-lo na leitura,
+  ou é preciso também comunicar o órgão?
 
 ## Limitações desta pesquisa
 
