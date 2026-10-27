@@ -40,7 +40,9 @@ Três fatos dos arquivos oficiais pesaram na decisão:
 
 **Linguagem e apresentação** (pedidos do Fabio de 26/10/2026, mantidos):
 - Usar "variação entre turnos". Nunca "migração", "transferência", "virada" ou "eleitores de X foram para Y".
-- Texto fixo: "Os boletins mostram o total de cada seção em cada turno. O voto é secreto: não é possível saber como cada eleitor mudou de um turno para o outro."
+- Texto fixo (textos finais do Fabio, 27/10/2026):
+  - seção comum: "Os boletins mostram o total de cada seção em cada turno. O voto é secreto: não é possível saber como cada eleitor mudou de um turno para o outro."
+  - grupo com agregadas, seguido da lista das seções do grupo: "Os boletins mostram o total de cada urna em cada turno. Esta urna recebeu os eleitores das seções listadas abaixo. O voto é secreto: não é possível saber como cada eleitor mudou de um turno para o outro."
 - Nenhum modelo de inferência ecológica.
 - Percentual dos candidatos sobre os votos válidos, pelo critério do TSE (padrão), ou sobre o comparecimento, com a base escrita em cada linha.
   - Ficam fora dos válidos: brancos, nulos, nulos técnicos e os votos de destinação "Anulado" ou "Anulado sub judice".
