@@ -36,7 +36,16 @@ exportado a partir dela):
 turno pendente para aquele cargo/UF. O coletor marca a pendência (`pol_pendencia.tipo =
 "segundo_turno"`) quando a eleição mais recente tem candidatos com situação "2º TURNO" e
 ainda nenhum eleito no 2º turno; a seção de 2026 omite esse cargo naquela UF. No arquivo
-de 05/10/2026 isso ocorre para governador em AC, AM, DF, ES, RJ, RN e TO; em SP não ocorre.
+de 05/10/2026 isso ocorria para governador em AC, AM, DF, ES, RJ, RN e TO; em SP, não. No arquivo
+de 27/10/2026 (gerado às 19:30:36), o governador do RJ consta eleito no 1º turno, e AC, AM, DF,
+ES, RN e TO têm eleito no 2º turno (eleição 6260): a regra não marca mais pendência para
+governador. A lista de UFs com 2º turno sai sempre do arquivo do TSE, nunca de uma lista fixa.
+
+**Suplementar sem eleito.** Quando a eleição suplementar mais recente ainda não tem eleito, o
+cargo fica pendente. O motivo diz "marcada para dd/mm/aaaa, ainda sem resultado no arquivo" se a
+eleição é posterior à data do arquivo (DT_GERACAO), ou "realizada em dd/mm/aaaa: o arquivo do
+TSE (versão de dd/mm/aaaa) não traz eleito" se já ocorreu. Exemplo: Narandiba/SP, suplementar de
+25/10/2026, no arquivo de 28/10/2026.
 
 **Linha do tempo do mandato.**
 - Fonte: `GET /api/v2/deputados/{id}/historico`.
