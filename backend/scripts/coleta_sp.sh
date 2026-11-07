@@ -32,14 +32,18 @@ trap 'codigo=$?; echo "ERRO: a etapa \"${BASH_COMMAND}\" terminou com código ${
 RAIZ="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$RAIZ/backend"
 # UFs das emendas (Secret opcional), conferidas antes de qualquer coleta
+UFS_BR="AC AL AM AP BA CE DF ES GO MA MG MS MT PA PB PE PI PR RJ RN RO RR RS SC SE SP TO"
 EMENDAS_UFS="${RASTRO_POL_EMENDAS_UFS:-SP SC}"
 read -r -a LISTA_EMENDAS_UFS <<< "$EMENDAS_UFS"
 for u in "${LISTA_EMENDAS_UFS[@]}"; do
-  [[ "$u" =~ ^[A-Z]{2}$ ]] || { echo "ERRO: RASTRO_POL_EMENDAS_UFS com UF inválida: \"$u\" (use siglas separadas por espaço, ex.: SP SC RS)" >&2; exit 1; }
+  [[ " $UFS_BR " == *" $u "* ]] || { echo "ERRO: RASTRO_POL_EMENDAS_UFS com UF inválida: \"$u\" (use siglas separadas por espaço, ex.: SP SC RS)" >&2; exit 1; }
 done
-# a gravação das emendas substitui todas as linhas: SP e SC (publicadas) não podem sair da lista
-for u in SP SC; do
-  [[ " ${LISTA_EMENDAS_UFS[*]} " == *" $u "* ]] || { echo "ERRO: RASTRO_POL_EMENDAS_UFS sem $u, cujas emendas estão publicadas (ex.: SP SC RS)" >&2; exit 1; }
+# a gravação das emendas substitui todas as linhas: SP, SC e as UFs liberadas
+# (RASTRO_POL_UFS_LIBERADAS, separadas por vírgula) não podem sair da lista
+LIBERADAS="${RASTRO_POL_UFS_LIBERADAS:-}"
+for u in SP SC ${LIBERADAS//,/ }; do
+  u="${u^^}"
+  [[ " ${LISTA_EMENDAS_UFS[*]} " == *" $u "* ]] || { echo "ERRO: RASTRO_POL_EMENDAS_UFS sem $u, cujas emendas estão publicadas ou liberadas (ex.: SP SC RS)" >&2; exit 1; }
 done
 echo "Emendas das UFs: ${LISTA_EMENDAS_UFS[*]}"
 ANO_ATUAL="$(date +%Y)"
