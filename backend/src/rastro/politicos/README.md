@@ -266,11 +266,17 @@ só aparece ligada à página de um político quando:
 1. o nome do autor, sem o sufixo "(EX-PARLAMENTAR ...)", é igual (normalizado) ao de
    exatamente **um** parlamentar federal da legislatura 57, de qualquer UF (901 nomes da
    Câmara e do Senado);
-2. esse parlamentar é de SP;
+2. esse parlamentar é de uma das UFs da coleta de emendas (`RASTRO_POL_EMENDAS_UFS`);
 3. o ano da emenda cai no mandato: o orçamento do ano Y é votado em Y-1;
-4. todas as emendas ligadas a ele têm o mesmo "Código do Autor".
+4. todas as emendas ligadas a ele têm o mesmo "Código do Autor";
+5. a UF do parlamentar está publicada: SP ou uma UF de `RASTRO_POL_UFS_LIBERADAS`
+   (decisão do Fabio, 17/11/2026). Uma UF coletada antes da liberação, para conferência no
+   portão, não grava vínculo. Sem isso, a página de um município publicado ligaria a uma
+   página de político que o site não exporta, e a verificação barraria a publicação. Caso
+   real: emenda de 2024 de Helio Lopes (RJ) para São Paulo (`tests/test_vinculo_ufs.py`).
 
-Nos demais casos, o autor aparece exatamente como está na fonte, sem link.
+Nos demais casos, o autor aparece exatamente como está na fonte, sem link. O destino da
+emenda aparece sempre como texto na página do político, sem link para o município.
 
 Resultado em 06/10/2026:
 - 2.505 das 3.375 linhas ligadas, a 78 parlamentares de SP;
