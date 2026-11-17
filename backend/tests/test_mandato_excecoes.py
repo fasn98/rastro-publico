@@ -107,6 +107,33 @@ def test_emendas_herdadas_ligadas_ao_sucessor_com_rotulo(session, cliente, deput
     assert por_codigo["202542000001"].politico_id == deputados[175765]
 
 
+@respx.mock
+def test_excecao_de_uf_nao_liberada_entra_no_arquivo_sem_vinculo(
+    session, cliente, deputados, monkeypatch
+):
+    """Regra 5 (17/11/2026): a exceção de político de UF ainda não liberada continua no
+    recorte do arquivo, sem vínculo, e o portão da UF só confere que a linha existe. As
+    exceções reais são de deputados de SP (sempre publicada); a UF não liberada é simulada
+    trocando a lista de UFs publicadas, sem mudar nenhum dado. O recorte pedido é de outra
+    UF (RS), para que as linhas entrem só pela tabela de exceções."""
+    from rastro.politicos import portao
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        texto = (POL / "transparencia_emendas_herdadas.csv").read_text()
+        z.writestr("EmendasParlamentares.csv", texto.replace("\n", "\r\n").encode("latin-1"))
+    respx.get(transparencia.URL_ARQUIVO).respond(content=buf.getvalue())
+    monkeypatch.setattr(vinculo, "ufs_publicadas", lambda: set())
+    excecoes = vinculo.excecoes_por_texto(session, set())
+    assert {pid for pid, _ in excecoes.values()} == {None} and len(excecoes) == 2
+    r = transparencia.coletar_arquivo(session, cliente, "RS", 2023, {}, excecoes)
+    assert (r["linhas"], r["ligadas"], r["por_excecao"]) == (2, 0, 0)
+    assert all(e.politico_id is None for e in session.scalars(select(PolEmenda)))
+    assert portao._excecoes(session, "SP") == []  # UF não liberada: a linha basta
+    monkeypatch.setattr(vinculo, "ufs_publicadas", lambda: {"SP"})
+    assert len(portao._excecoes(session, "SP")) == 2  # liberada: exige o vínculo
+
+
 # ------------------------------------------------------------- linha do tempo
 
 

@@ -15,12 +15,18 @@ Respostas reais gravadas:
   - 202436110016: Luiza Erundina para Esteio (RS), 2024.
 - `camara_deputados_rj_atual.json` e `camara_deputados_rj_leg57.json`: respostas da API da
   Câmara (/deputados?siglaUf=RJ, sem e com idLegislatura=57), em 17/11/2026.
+- `camara_deputados_leg57_paginas.json.gz`: as 9 páginas da lista completa da legislatura 57
+  na Câmara (/deputados?idLegislatura=57&itens=100, 877 itens), texto de cada resposta como
+  recebido em 17/11/2026; `senado_senadores_leg57.json.gz`: a resposta de
+  /senador/lista/legislatura/57.json do Senado, de 17/11/2026. Com elas, `vinculo.universo`
+  roda de verdade e confere que os nomes dos autores são únicos na legislatura.
 
 Caso pedido (autor do RS e município de SP): no arquivo de 13/11/2026, nenhum parlamentar do
 RS da legislatura 57 tem emenda de 2023 em diante para município de SP ou de SC. O caso real
 mais próximo é o de um deputado do RJ (UF também não liberada) para São Paulo, usado aqui.
 """
 
+import gzip
 import io
 import json
 import zipfile
@@ -37,7 +43,7 @@ from rastro.coletores.arquivo import ArquivoBruto
 from rastro.coletores.base import executar, novo_cliente
 from rastro.config import get_settings
 from rastro.models import Municipio
-from rastro.politicos import camara, coletar, transparencia, vinculo
+from rastro.politicos import camara, coletar, senado, transparencia, vinculo
 from rastro.politicos.modelos import PolEmenda
 
 POL = FIXTURES / "politicos"
@@ -47,10 +53,18 @@ ERUNDINA = 74784  # id na Câmara, SP
 SAO_PAULO, ESTEIO = 3550308, 4307708
 
 
+PAGINAS_LEG57 = json.loads(
+    gzip.decompress((POL / "camara_deputados_leg57_paginas.json.gz").read_bytes())
+)
+
+
 def _deputados(request: httpx.Request) -> httpx.Response:
     from test_politicos import _deputados as _deputados_sp
 
     p = request.url.params
+    if "siglaUf" not in p:  # lista completa da legislatura (vinculo.universo)
+        texto = PAGINAS_LEG57[p.get("pagina", "1")]
+        return httpx.Response(200, content=texto.encode(), headers=JSON)
     if p.get("siglaUf") != "RJ":
         return _deputados_sp(request)
     nome = (
@@ -86,19 +100,17 @@ def coletado(session, engine, monkeypatch):
             sp = camara.coletar_deputados(session, c, "SP")
             rj = camara.coletar_deputados(session, c, "RJ")
     assert ERUNDINA in sp and HELIO_LOPES in rj  # premissa
-    # a lista da legislatura 57 (Câmara e Senado) vem de `vinculo.universo`; aqui, os dois
-    # autores do caso, com os ids reais (nomes únicos na legislatura, conferido em 17/11/2026)
-    universo = {
-        transparencia.normalizar_nome("Luiza Erundina"): {f"camara:{ERUNDINA}"},
-        transparencia.normalizar_nome("Helio Lopes"): {f"camara:{HELIO_LOPES}"},
-    }
-    monkeypatch.setattr(vinculo, "universo", lambda client: universo)
     return session, {"sp": sp, "rj": rj}
 
 
 def _coletar(banco, engine, ufs: list[str]) -> dict[str, PolEmenda]:
     with respx.mock:
         respx.get(transparencia.URL_ARQUIVO).respond(content=_zip_emendas())
+        respx.get(f"{camara.API}/deputados").mock(side_effect=_deputados)
+        respx.get(f"{senado.API}/senador/lista/legislatura/57.json").respond(
+            content=gzip.decompress((POL / "senado_senadores_leg57.json.gz").read_bytes()),
+            headers=JSON,
+        )
         with novo_cliente(req_por_segundo=0, arquivo=ArquivoBruto(engine)) as c:
             coleta = executar(
                 banco, "pol-emendas", coletar.coletor_emendas_arquivo(ufs, [2024, 2025, 2026]), c

@@ -245,7 +245,8 @@ def coletar_arquivo(
     O município de destino vem da coluna oficial "Código Município IBGE" (não do texto).
     `autores`: nome normalizado -> `vinculo.Autor` (só os confirmáveis); a ligação com a
     página do político segue as regras de `vinculo`.
-    `excecoes`: texto exato do autor -> (pol_politico.id, rótulo), da tabela aprovada.
+    `excecoes`: texto exato do autor -> (pol_politico.id, rótulo), da tabela aprovada; com o
+    id nulo (UF ainda não liberada, regra 5 de `vinculo`), a linha entra sem vínculo.
     O arquivo bruto guarda só esse recorte do CSV (o arquivo não traz dados pessoais),
     com o SHA-256 do ZIP original.
     """
@@ -285,7 +286,7 @@ def coletar_arquivo(
         ano = int(r["Ano da Emenda"])
         autor = autores.get(normalizar_nome(nome_autor))
         politico_id = vinculo = nota = None
-        if nome_autor in excecoes:
+        if nome_autor in excecoes and excecoes[nome_autor][0] is not None:
             politico_id, nota = excecoes[nome_autor]
             vinculo = "excecao"
         elif autor is not None:

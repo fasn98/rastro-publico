@@ -270,7 +270,7 @@ só aparece ligada à página de um político quando:
 3. o ano da emenda cai no mandato: o orçamento do ano Y é votado em Y-1;
 4. todas as emendas ligadas a ele têm o mesmo "Código do Autor";
 5. a UF do parlamentar está publicada: SP ou uma UF de `RASTRO_POL_UFS_LIBERADAS`
-   (decisão do Fabio, 17/11/2026). Uma UF coletada antes da liberação, para conferência no
+   (ADR-0023, decisão do Fabio de 17/11/2026). Uma UF coletada antes da liberação, para conferência no
    portão, não grava vínculo. Sem isso, a página de um município publicado ligaria a uma
    página de político que o site não exporta, e a verificação barraria a publicação. Caso
    real: emenda de 2024 de Helio Lopes (RJ) para São Paulo (`tests/test_vinculo_ufs.py`).

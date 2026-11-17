@@ -119,10 +119,14 @@ def carregar_excecoes(caminho: Path = ARQUIVO_EXCECOES) -> list[dict]:
         return tomllib.load(f).get("excecao", [])
 
 
-def excecoes_por_texto(session: Session, ufs: set[str] | None = None) -> dict[str, tuple[int, str]]:
+def excecoes_por_texto(
+    session: Session, ufs: set[str] | None = None
+) -> dict[str, tuple[int | None, str]]:
     """Texto exato do autor na fonte -> (pol_politico.id, rótulo), para as exceções.
 
-    `ufs`: só as exceções de parlamentares dessas UFs (regra 5); sem ela, todas."""
+    `ufs`: UFs que gravam vínculo (regra 5). A exceção de político de outra UF continua na
+    lista, com o id nulo: a linha entra no recorte do arquivo (o portão confere que ela
+    existe) e fica sem vínculo até a UF ser liberada. Sem `ufs`, todas com o id."""
     linhas = session.execute(
         select(PolPolitico.id_fonte, PolPolitico.id, PolPolitico.uf).where(
             PolPolitico.fonte == "camara"
@@ -132,7 +136,8 @@ def excecoes_por_texto(session: Session, ufs: set[str] | None = None) -> dict[st
     saida = {}
     for e in carregar_excecoes():
         achado = ids.get(str(e["camara_id"]))
-        if achado is None or (ufs is not None and achado[1] not in ufs):
+        if achado is None:
             continue
-        saida[e["texto_fonte"]] = (achado[0], e["rotulo"])
+        pid, uf = achado
+        saida[e["texto_fonte"]] = (pid if ufs is None or uf in ufs else None, e["rotulo"])
     return saida
