@@ -22,12 +22,30 @@
 #   RASTRO_SIMULAR=1       (opcional) coleta, exporta e verifica, mas não publica o site
 #   RASTRO_LOTE_LIMITE_MIN (opcional) minutos do lote RREO/RGF por execução (padrão 420)
 #   RASTRO_POLITICOS_LIMITE_MIN (opcional) minutos da coleta de políticos (padrão 90)
+#   RASTRO_POL_EMENDAS_UFS (opcional) UFs das emendas, separadas por espaço (padrão "SP SC").
+#                          Coletar não publica: a UF só entra no site com o portão de
+#                          políticos e com RASTRO_POL_UFS_LIBERADAS (aprovação do Fabio).
 set -euo pipefail
 # qualquer etapa que falhar diz qual foi e com que código (137 = processo morto pelo
 # sistema, em geral por falta de memória; 143 = encerrado pelo agendador)
 trap 'codigo=$?; echo "ERRO: a etapa \"${BASH_COMMAND}\" terminou com código ${codigo}$( [ "$codigo" -eq 137 ] && echo " (processo morto pelo sistema: provável falta de memória)")" >&2' ERR
 RAIZ="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$RAIZ/backend"
+# UFs das emendas (Secret opcional), conferidas antes de qualquer coleta
+UFS_BR="AC AL AM AP BA CE DF ES GO MA MG MS MT PA PB PE PI PR RJ RN RO RR RS SC SE SP TO"
+EMENDAS_UFS="${RASTRO_POL_EMENDAS_UFS:-SP SC}"
+read -r -a LISTA_EMENDAS_UFS <<< "$EMENDAS_UFS"
+for u in "${LISTA_EMENDAS_UFS[@]}"; do
+  [[ " $UFS_BR " == *" $u "* ]] || { echo "ERRO: RASTRO_POL_EMENDAS_UFS com UF inválida: \"$u\" (use siglas separadas por espaço, ex.: SP SC RS)" >&2; exit 1; }
+done
+# a gravação das emendas substitui todas as linhas: SP, SC e as UFs liberadas
+# (RASTRO_POL_UFS_LIBERADAS, separadas por vírgula) não podem sair da lista
+LIBERADAS="${RASTRO_POL_UFS_LIBERADAS:-}"
+for u in SP SC ${LIBERADAS//,/ }; do
+  u="${u^^}"
+  [[ " ${LISTA_EMENDAS_UFS[*]} " == *" $u "* ]] || { echo "ERRO: RASTRO_POL_EMENDAS_UFS sem $u, cujas emendas estão publicadas ou liberadas (ex.: SP SC RS)" >&2; exit 1; }
+done
+echo "Emendas das UFs: ${LISTA_EMENDAS_UFS[*]}"
 ANO_ATUAL="$(date +%Y)"
 # início desta coleta: a exportação compara a última atualização de cada fonte com ele
 RASTRO_INICIO_COLETA="$(date -u +%Y-%m-%dT%H:%M:%S+00:00)"
@@ -76,9 +94,10 @@ RASTRO_POLITICOS_LIMITE_MIN="${RASTRO_POLITICOS_LIMITE_MIN:-90}" \
   uv run rastro politicos --uf TODAS --anos "2023-$ANO_ATUAL" --fontes camara senado tse \
   || echo "AVISO: coleta de políticos com falhas; seguem os dados anteriores (resumo no fim)"
 # depois da coleta nacional: a gravação das emendas substitui todas as linhas, e o vínculo
-# fica restrito aos autores de SP e de SC
+# fica restrito aos autores das UFs de RASTRO_POL_EMENDAS_UFS (padrão SP e SC; o Fabio
+# acrescenta uma UF por vez, na ordem Sul -> Norte, decisão de 07/11/2026)
 RASTRO_POLITICOS_LIMITE_MIN="${RASTRO_POLITICOS_LIMITE_MIN:-90}" \
-  uv run rastro politicos --uf SP SC --anos "2023-$ANO_ATUAL" --fontes emendas emendas-api \
+  uv run rastro politicos --uf "${LISTA_EMENDAS_UFS[@]}" --anos "2023-$ANO_ATUAL" --fontes emendas emendas-api \
   || echo "AVISO: coleta das emendas com falhas; seguem os dados anteriores (resumo no fim)"
 
 echo "== ranking e verificação do arquivo bruto"
