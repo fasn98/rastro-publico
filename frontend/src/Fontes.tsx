@@ -1,4 +1,5 @@
-import type { Manifesto, SituacaoFonte } from "./dados";
+import { useEffect, useState } from "react";
+import { type Manifesto, obterManifesto, type SituacaoEmendas, type SituacaoFonte } from "./dados";
 
 const data = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("pt-BR") : "—");
 
@@ -32,6 +33,28 @@ export function AvisoFontes({ manifesto }: { manifesto: Manifesto | null }) {
     <p className="aviso-fontes" role="status">
       Nesta coleta, {lista.length === 1 ? "uma fonte não foi atualizada" : `${lista.length} fontes não foram atualizadas`}:{" "}
       {lista.map((f) => `${f.nome} (${situacao(f).replace(/^Não atualizada nesta coleta: /, "")})`).join("; ")}.{" "}
+      <a href="#/fontes">Status das fontes</a>
+    </p>
+  );
+}
+
+/** Emendas da UF quando a coleta mais recente não foi concluída: o site segue com os dados
+ * anteriores, com a data; depois de 7 dias sem coleta concluída, o aviso fica destacado (a UF
+ * continua no site). Decisão do Fabio, 17/11/2026. */
+export function AvisoColetaEmendas({ uf }: { uf: string }) {
+  const [sit, setSit] = useState<SituacaoEmendas | null>(null);
+  useEffect(() => {
+    obterManifesto()
+      .then((m) => setSit(m?.emendas_coleta?.[uf] ?? null))
+      .catch(() => setSit(null));
+  }, [uf]);
+  if (!sit || !sit.dados_anteriores || !sit.dados_de) return null;
+  const texto = `Dados de ${data(sit.dados_de)}; a coleta mais recente não foi concluída.`;
+  if (!sit.desatualizada) return <p className="nota">{texto}</p>;
+  return (
+    <p className="aviso-fontes aviso-desatualizado" role="status">
+      <strong>Dados de emendas desatualizados.</strong> Nenhuma coleta de emendas foi concluída
+      desde {data(sit.falha_desde)}, há mais de 7 dias. {texto}{" "}
       <a href="#/fontes">Status das fontes</a>
     </p>
   );
