@@ -206,6 +206,12 @@ def main(argv: list[str] | None = None) -> int:
                 f"{marca} {f['fonte']:<16} última atualização: {f['ultima_atualizacao'] or 'nunca'}"
             )
         print(fontes.resumo(situacao))
+        # emendas: uma linha por UF não concluída, com o motivo (só o tipo do erro), a data
+        # dos dados anteriores e o aviso de mais de 7 dias (decisão do Fabio, 17/11/2026)
+        from rastro.politicos import situacao_emendas
+
+        with get_sessionmaker()() as session:
+            print(situacao_emendas.resumo(situacao_emendas.falhas_desde(session, desde)))
         return 0
 
     if args.comando == "conferir-codigo":

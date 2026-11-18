@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from rastro.db import get_session
 from rastro.models import Coleta, Municipio, RespostaBruta
-from rastro.politicos import gestoes, publicacao
+from rastro.politicos import gestoes, publicacao, situacao_emendas
 from rastro.politicos.modelos import (
     CARGOS_ESTADUAIS,
     CARGOS_MUNICIPAIS,
@@ -23,7 +23,6 @@ from rastro.politicos.modelos import (
     PREFEITO,
     SENADOR,
     VEREADOR,
-    PolColetaUf,
     PolComissao,
     PolDespesaCota,
     PolEmenda,
@@ -654,21 +653,12 @@ class EmendasSemMunicipio(BaseModel):
 
 @router.get("/ufs/{uf}/emendas-sem-municipio", response_model=EmendasSemMunicipio)
 def emendas_sem_municipio(uf: str, session: SessionDep):
-    """Só com a trava das emendas ligada e com a UF na coleta de emendas mais recente, com
-    sucesso: cada coleta regrava todas as linhas, e o recorte do arquivo só traz todas as
-    linhas da UF para as UFs daquela coleta (as outras têm só emendas de autores dela)."""
+    """Só com a trava das emendas ligada e com a UF na última coleta de emendas concluída
+    com sucesso: cada coleta regrava todas as linhas, e o recorte do arquivo só traz todas as
+    linhas da UF para as UFs daquela coleta (as outras têm só emendas de autores dela). Uma
+    coleta posterior não concluída não apaga nada: a nota segue com os dados anteriores."""
     uf = uf.upper()
-    recente = session.scalar(
-        select(func.max(PolColetaUf.coleta_id)).where(PolColetaUf.fonte == "pol-emendas")
-    )
-    da_uf = session.scalar(
-        select(PolColetaUf.status).where(
-            PolColetaUf.fonte == "pol-emendas",
-            PolColetaUf.uf == uf,
-            PolColetaUf.coleta_id == recente,
-        )
-    )
-    if not publicacao.emendas() or da_uf != "sucesso":
+    if not publicacao.emendas() or not situacao_emendas.uf_na_coleta_vigente(session, uf):
         raise HTTPException(404, "Emendas da UF não publicadas")
     filtro = (PolEmenda.fonte_dados == "arquivo", PolEmenda.uf_destino == uf)
     total, sem, ano_min, ano_max, rid = session.execute(

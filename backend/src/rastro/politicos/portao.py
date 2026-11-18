@@ -6,7 +6,10 @@ Conferências, só no banco (nenhuma consulta à rede):
 
 1. **Coletas:** a última coleta da UF em cada fonte (`pol_coleta_uf`) terminou com sucesso.
    Câmara, Senado, TSE e emendas do arquivo em lote. Fonte sem coleta da UF: "ainda não
-   coletada", para não ser lida como falha.
+   coletada", para não ser lida como falha. Emendas (decisão do Fabio, 17/11/2026): a
+   última coleta não concluída não reprova a UF quando a última coleta com sucesso do
+   arquivo a incluiu; o site mostra os dados anteriores com a data
+   (`situacao_emendas`).
 2. **Eleitos do TSE:** há eleitos da UF em 2022 e 2024 (o DF não tem eleição municipal). O
    cruzamento TSE↔IBGE em 100% já é exigido na coleta: falhou, nada é gravado. Cargo de
    2026 com 2º turno pendente fica oculto pela regra de sempre e não reprova a UF.
@@ -26,7 +29,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from rastro.config import get_settings
-from rastro.politicos import tse, vinculo
+from rastro.politicos import situacao_emendas, tse, vinculo
 from rastro.politicos.modelos import PolColetaUf, PolEmenda, PolPolitico
 
 log = logging.getLogger(__name__)
@@ -57,6 +60,10 @@ def _coletas(session: Session, uf: str, fontes: dict[str, tuple[str, str]]) -> l
         if ultima is None:
             motivos.append(f"{nome} da UF ainda não {coletados}")
         elif ultima.status != "sucesso":
+            if fonte == situacao_emendas.FONTE and (
+                (situacao_emendas.situacao(session, uf) or {}).get("dados_anteriores")
+            ):
+                continue  # segue com os dados anteriores, com a data no site
             motivos.append(
                 f"{nome}: última coleta terminou {ultima.status}"
                 + (f" ({ultima.motivo})" if ultima.motivo else "")

@@ -55,6 +55,17 @@ export type SituacaoFonte = {
   falha: string | null;
 };
 
+/** Coleta de emendas não concluída numa UF publicada (decisão do Fabio, 17/11/2026). */
+export type SituacaoEmendas = {
+  /** fim da última coleta concluída: os dados mostrados são dela */
+  dados_de: string | null;
+  /** primeira coleta não concluída depois dela */
+  falha_desde: string;
+  dados_anteriores: boolean;
+  /** mais de 7 dias sem coleta concluída: aviso destacado */
+  desatualizada: boolean;
+};
+
 export type Manifesto = {
   gerado_em: string;
   ultima_coleta: string | null;
@@ -64,6 +75,8 @@ export type Manifesto = {
   mapeamento: { versao: number; hash: string };
   contagens: Record<string, number>;
   fontes?: SituacaoFonte[];
+  /** emendas das UFs com políticos no site cuja última coleta não foi concluída (só elas) */
+  emendas_coleta?: Record<string, SituacaoEmendas>;
   /** travas de publicação no momento da exportação (Settings.pol_publicar_*) */
   travas?: Record<string, boolean>;
   /** portões por UF (ADR-0020); `politicos` só nas exportações com o portão de políticos */

@@ -345,6 +345,10 @@ def registrar_ufs(
         else:
             st, motivo = coleta.status, motivo_geral
         session.add(PolColetaUf(coleta_id=coleta.id, fonte=fonte, uf=uf, status=st, motivo=motivo))
+        if st != "sucesso":
+            # uma linha por UF no log da coleta: a UF e o motivo (o resumo da tentativa, só
+            # o tipo do erro, ex.: "HTTP 504 após 4 tentativas"; nunca trecho do conteúdo)
+            log.warning("%s %s: coleta não concluída (%s)", fonte, uf, motivo or st)
     session.commit()
 
 
