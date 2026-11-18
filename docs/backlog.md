@@ -1,6 +1,6 @@
 # Backlog — Rastro Público
 
-> Atualizado em 2026-10-26 (antes: 2026-10-10 e 2026-10-08, na migração para o fluxo do squad). Ordem aprovada pelo Fabio em
+> Atualizado em 2026-11-18 (antes: 2026-10-26, 2026-10-16, 2026-10-10 e 2026-10-08, na migração para o fluxo do squad). Ordem aprovada pelo Fabio em
 > 2026-10-08. Nenhuma implementação começa até o Fabio liberar a tarefa. Prioridade: P1 (agora), P2 (próximo), P3 (depois).
 
 ## Aguardando aprovação do Fabio
@@ -28,8 +28,9 @@
 - [ ] T-012 Análise de matérias estranhas ao objeto das proposições
 - [ ] T-013 Doadores de campanha (TSE, prestação de contas)
 - [ ] T-014 Expandir além de SP — **em andamento** (ADR-0020, aceito em 2026-10-09). Em 2026-10-10, a parte fiscal de 11 UFs passou no portão e está no site (AC, AL, AM, AP, DF, ES, MS, RJ, RO, RR, SE); as demais seguem nas execuções diárias.
-- [ ] T-015 Portão de qualidade dos políticos por UF (`ufs.{UF}.politicos` no manifesto) — sessão de políticos
-- [ ] T-016 Publicar os políticos das UFs além de SP — **aguardando aprovação do Fabio** (publicação de dado novo), depois de T-015
+- [x] T-015 Portão de qualidade dos políticos por UF (`ufs.{UF}.politicos` no manifesto) — sessão de políticos — PR #55, aprovado pelo Fabio, mesclado em 2026-10-15
+- [ ] T-016 Publicar os políticos das UFs além de SP — **em andamento, UF por UF (Sul → Norte)**. Feito: PR #56 mesclado em 2026-10-26 (trava `RASTRO_POL_UFS_LIBERADAS`); SC publicada (`RASTRO_POL_UFS_LIBERADAS=SC`; o manifesto publicado mostra `ufs.SC.politicos.publicada = true`). Emendas: PR #76 (vínculo só com autor de UF publicada, ADR-0023) e PR #77 (falha na coleta mantém os dados anteriores, com data e aviso após 7 dias, ADR-0024) no `main`. Próxima: RS, **ainda fora de `RASTRO_POL_EMENDAS_UFS`** até o Fabio mandar incluir; depois da coleta, relatório do portão com contagens e 3 políticos de amostra, e cada UF nova só sai com a aprovação do Fabio (publicação de dado novo)
+- [ ] T-017 DF: onde ficam os representantes e as emendas de Brasília — **aguardando decisão do Fabio, depois de 25/10/2026** (mudança de formato). O DF não tem município no SICONFI, então a exportação não grava `municipios/5300108.json`. Com o DF liberado, sairiam as páginas dos políticos e os eleitos, mas "Quem representa você" não teria Brasília. Opções: (a) arquivo de Brasília só com representantes e emendas; (b) essas seções na página do DF. **Até a decisão, o DF não entra em `RASTRO_POL_UFS_LIBERADAS`** (Fabio, 16/10/2026) — sessão de políticos
 
 ## Pronto (antes do squad; ver o git log e os READMEs)
 - [x] Coleta SICONFI (RREO, RGF, extrato), IBGE e lote retomável
