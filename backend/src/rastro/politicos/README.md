@@ -36,7 +36,16 @@ exportado a partir dela):
 turno pendente para aquele cargo/UF. O coletor marca a pendência (`pol_pendencia.tipo =
 "segundo_turno"`) quando a eleição mais recente tem candidatos com situação "2º TURNO" e
 ainda nenhum eleito no 2º turno; a seção de 2026 omite esse cargo naquela UF. No arquivo
-de 05/10/2026 isso ocorre para governador em AC, AM, DF, ES, RJ, RN e TO; em SP não ocorre.
+de 05/10/2026 isso ocorria para governador em AC, AM, DF, ES, RJ, RN e TO; em SP, não. No arquivo
+de 27/10/2026 (gerado às 19:30:36), o governador do RJ consta eleito no 1º turno, e AC, AM, DF,
+ES, RN e TO têm eleito no 2º turno (eleição 6260): a regra não marca mais pendência para
+governador. A lista de UFs com 2º turno sai sempre do arquivo do TSE, nunca de uma lista fixa.
+
+**Suplementar sem eleito.** Quando a eleição suplementar mais recente ainda não tem eleito, o
+cargo fica pendente. O motivo diz "marcada para dd/mm/aaaa, ainda sem resultado no arquivo" se a
+eleição é posterior à data do arquivo (DT_GERACAO), ou "realizada em dd/mm/aaaa: o arquivo do
+TSE (versão de dd/mm/aaaa) não traz eleito" se já ocorreu. Exemplo: Narandiba/SP, suplementar de
+25/10/2026, no arquivo de 28/10/2026.
 
 **Linha do tempo do mandato.**
 - Fonte: `GET /api/v2/deputados/{id}/historico`.
@@ -124,6 +133,13 @@ banco:
 Emenda sem vínculo por ambiguidade (nome repetido, mais de um "Código do Autor") não
 reprova a UF: a regra já a mostra sem link. Um erro na avaliação vira reprovação, sem
 derrubar o portão fiscal.
+
+**Políticos de outras UFs no site** (`RASTRO_POL_UFS_LIBERADAS`, ex.: `SC`; vazia por
+padrão). Condições do Fabio em 15/10/2026: (a) nenhuma UF fora de SP antes de 25/10, e o
+relatório da UF passa por ele antes do merge que a libera; (b) a UF só sai com o portão
+fiscal e o de políticos aprovados. A exportação grava então os representantes e as emendas
+dos municípios da UF, os eleitos e as páginas dos deputados e senadores dela; `verificar`
+recusa dado de político de UF não publicada.
 
 **Tempos medidos em 06/10/2026, SP:**
 - Câmara (com cota) e Senado, ano de 2025, numa só execução: 3 min 10 s. Foram 90
@@ -250,11 +266,17 @@ só aparece ligada à página de um político quando:
 1. o nome do autor, sem o sufixo "(EX-PARLAMENTAR ...)", é igual (normalizado) ao de
    exatamente **um** parlamentar federal da legislatura 57, de qualquer UF (901 nomes da
    Câmara e do Senado);
-2. esse parlamentar é de SP;
+2. esse parlamentar é de uma das UFs da coleta de emendas (`RASTRO_POL_EMENDAS_UFS`);
 3. o ano da emenda cai no mandato: o orçamento do ano Y é votado em Y-1;
-4. todas as emendas ligadas a ele têm o mesmo "Código do Autor".
+4. todas as emendas ligadas a ele têm o mesmo "Código do Autor";
+5. a UF do parlamentar está publicada: SP ou uma UF de `RASTRO_POL_UFS_LIBERADAS`
+   (ADR-0023, decisão do Fabio de 17/11/2026). Uma UF coletada antes da liberação, para conferência no
+   portão, não grava vínculo. Sem isso, a página de um município publicado ligaria a uma
+   página de político que o site não exporta, e a verificação barraria a publicação. Caso
+   real: emenda de 2024 de Helio Lopes (RJ) para São Paulo (`tests/test_vinculo_ufs.py`).
 
-Nos demais casos, o autor aparece exatamente como está na fonte, sem link.
+Nos demais casos, o autor aparece exatamente como está na fonte, sem link. O destino da
+emenda aparece sempre como texto na página do político, sem link para o município.
 
 Resultado em 06/10/2026:
 - 2.505 das 3.375 linhas ligadas, a 78 parlamentares de SP;
@@ -316,7 +338,7 @@ pública e comparar com `sha256_original`.
 
 | Fonte | O que é removido |
 |---|---|
-| TSE, candidatos | as 17 colunas da tabela acima; só as linhas de SP |
+| TSE, candidatos | as 17 colunas da tabela acima; só as linhas da UF coletada |
 | Câmara, cota | `cpf`, `nuCarteiraParlamentar`, `txtPassageiro`; CPF e nome de fornecedor pessoa física; CPF e e-mail no nome do fornecedor; CPF no número do documento |
 | Câmara, listas de deputados | `email` (e-mail de gabinete) |
 | Senado, lista de senadores | `EmailParlamentar` |
@@ -367,6 +389,14 @@ são CPF, como o do documento fiscal).
   TSE, `deputado_distrital`), e não estaduais (cargo 7).
 - `GET /api/municipios/{codigo}/emendas`: emendas com destino ao município e
   "Parlamentares que destinaram emendas a este município".
+- `GET /api/ufs/{uf}/emendas-sem-municipio`: quantas emendas o arquivo do Portal atribui à
+  UF (coluna "UF", `pol_emenda.uf_destino`, migração 0024) e quantas delas não informam o
+  município de destino (localidade "MÚLTIPLO" ou o estado inteiro). A resposta traz o link,
+  o recorte arquivado e o SHA-256 e o tamanho do arquivo original do Portal. Só responde
+  para UFs da coleta de emendas mais recente: cada coleta regrava todas as linhas, e nas
+  outras UFs o recorte só tem as emendas de autores delas. Sai com a trava
+  `pol_publicar_emendas`. Vai para a nota das páginas do município e da UF (pedido do Fabio
+  em 26/10/2026).
 
 ## Verificação contra a fonte (06/10/2026)
 

@@ -49,6 +49,9 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           RASTRO_TRANSPARENCIA_CHAVE: ${{ secrets.RASTRO_TRANSPARENCIA_CHAVE }}
+          # UFs das emendas e UFs liberadas: os mesmos valores dos Secrets do Replit (vazios = padrão)
+          RASTRO_POL_EMENDAS_UFS: ${{ secrets.RASTRO_POL_EMENDAS_UFS }}
+          RASTRO_POL_UFS_LIBERADAS: ${{ secrets.RASTRO_POL_UFS_LIBERADAS }}
           RASTRO_URL_AUDITORIA: ${{ vars.RASTRO_URL_AUDITORIA || secrets.RASTRO_URL_AUDITORIA }}
           RASTRO_GITHUB_TOKEN: ${{ github.token }}
           RASTRO_SIMULAR: ${{ inputs.publicar && '0' || '1' }}

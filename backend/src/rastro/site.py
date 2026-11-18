@@ -11,7 +11,8 @@ Estrutura gerada em `<saida>/` (formato 3):
                                         grupo (exportação incremental e verificação)
     municipios.json                     lista para a busca (feita no navegador)
     municipios/{cod}.json               detalhe, série de indicadores, nota, emendas, os
-                                        representantes e os prefeitos eleitos do município
+                                        representantes e os prefeitos eleitos do município;
+                                        emendas da UF sem município de destino (nota)
     representantes/{hash}.json          seção de representantes repetida em vários municípios
                                         (estado, federal, eleitos 2026): um arquivo por
                                         conteúdo distinto, referenciado como {"ref": ...}
@@ -47,6 +48,12 @@ os arquivos já gravados; os demais arquivos são recalculados e só regravados 
 Travas de publicação (`Settings.pol_publicar_*`): a exportação lê tudo pela API, que já
 esconde o que está travado (políticos do TSE, eleitos 2026, emendas). O que a API não
 mostra não entra no site; o estado das travas vai no manifesto.
+
+Políticos de outras UFs (`Settings.pol_ufs_liberadas`, vazia até a aprovação do Fabio,
+depois de 25/10/2026): uma UF da lista sai com representantes, emendas, eleitos e páginas
+dos políticos só se estiver aprovada no portão de políticos e com a parte fiscal no site
+(`ufs.{UF}.politicos.publicada` no manifesto). `verificar` recusa qualquer dado de
+político de UF não publicada.
 
 Os únicos dados que continuam dinâmicos são os da auditoria (resposta bruta e verificação
 do SHA-256), servidos pela API de auditoria.
@@ -589,13 +596,18 @@ def _exportar_fiscal(
     uf_politicos: str,
     sem_ranking: bool,
     saida: Path,
+    politicos_extra: list[str] = (),
+    politicos_municipio=None,
+    emendas_uf=None,
 ) -> dict:
     """Arquivos fiscais por UF (ADR-0020), só das UFs aprovadas no portão.
 
     Cada UF é um grupo do índice (`uf:XX`). Reprovada, ela fica com a versão publicada
     antes, se houver, ou fora do site. Os municípios da UF dos políticos (SP) continuam nos
-    arquivos de sempre, com representantes e emendas; nas outras UFs, esses campos vão
-    nulos (políticos ainda não coletados lá).
+    arquivos de sempre, com representantes e emendas. Nas UFs de `politicos_extra`
+    (liberadas e aprovadas nos dois portões), `politicos_municipio(cod)` dá esses campos;
+    nas outras, vão nulos. `emendas_uf(uf)` dá a nota das emendas da UF sem município de
+    destino (página da UF), só na UF dos políticos e nas de `politicos_extra`.
     """
     situacao: dict[str, dict] = {}
     for uf in sorted(portao):
@@ -614,8 +626,15 @@ def _exportar_fiscal(
                             "nota": None
                             if sem_ranking
                             else get(f"/api/ranking/{cod}", opcional=True),
-                            "representantes": None,
-                            "emendas": None,
+                            **(
+                                politicos_municipio(cod)
+                                if uf in politicos_extra
+                                else {
+                                    "representantes": None,
+                                    "emendas": None,
+                                    "emendas_sem_municipio": None,
+                                }
+                            ),
                         },
                     )
             estado = s.scalars(
@@ -639,6 +658,9 @@ def _exportar_fiscal(
                             }
                             for a in serie
                         ],
+                        "emendas_sem_municipio": emendas_uf(uf)
+                        if emendas_uf and uf in (uf_politicos, *politicos_extra)
+                        else None,
                     },
                 )
             if uf != "DF" and not sem_ranking:
@@ -665,9 +687,17 @@ def _exportar_fiscal(
                 "motivos": r.get("motivos", []),
                 **{k: r[k] for k in ("completude", "arquivo_bruto", "sorteados") if k in r},
             },
-            # portão de políticos (aprovado em 15/10/2026); a exportação dos políticos fora
-            # de SP ainda não usa este resultado
-            **({"politicos": r["politicos"]} if "politicos" in r else {}),
+            # portão de políticos (aprovado em 15/10/2026) e se os políticos da UF saíram
+            **(
+                {
+                    "politicos": {
+                        **r["politicos"],
+                        "publicada": uf == uf_politicos or uf in politicos_extra,
+                    }
+                }
+                if "politicos" in r
+                else {}
+            ),
         }
 
     no_site = sorted(u for u, x in situacao.items() if x["fiscal"]["publicada"] != "fora")
@@ -807,17 +837,38 @@ def exportar(
             s, datetime.fromisoformat(inicio_coleta) if inicio_coleta else None
         )
 
+        # UFs além da UF da exportação com os políticos no site: liberadas pelo Fabio
+        # (pol_ufs_liberadas), aprovadas no portão de políticos e com a parte fiscal no site
+        politicos_extra = sorted(
+            u
+            for u in get_settings().ufs_liberadas - {uf}
+            if portao is not None
+            and (portao.get(u) or {}).get("politicos", {}).get("aprovada")
+            and (portao[u].get("aprovada") or f"uf:{u}" in grupos_ant)
+        )
+        cods_extra = [c for u in politicos_extra for c, _ in _municipios_da_uf(s, u)]
+
+        # emendas da UF sem município de destino no arquivo do Portal (nota nas páginas do
+        # município e da UF); uma consulta por UF, repetida nos arquivos dos municípios
+        notas_uf: dict[str, dict | None] = {}
+
+        def emendas_uf(sigla: str) -> dict | None:
+            if sigla not in notas_uf:
+                r = get(f"/api/ufs/{sigla}/emendas-sem-municipio", opcional=True)
+                notas_uf[sigla] = arquivados.trocar(r) if r else None
+            return notas_uf[sigla]
+
         # representantes: as seções de estado e federais são iguais em todos os municípios
         # da UF; cada seção que se repete vira um arquivo só, nomeado pelo hash do conteúdo
         conhecidos: dict[int, dict] = {}
         reps = {}
-        for m in municipios:
-            rep = get(f"/api/municipios/{m.cod_ibge}/representantes")
+        for cod in [m.cod_ibge for m in municipios] + cods_extra:
+            rep = get(f"/api/municipios/{cod}/representantes")
             for sec in rep["secoes"]:
                 for g in sec["grupos"]:
                     conhecidos.update({p["id"]: p for p in g["politicos"]})
                     g["politicos"] = [_resumo_politico(p) for p in g["politicos"]]
-            reps[m.cod_ibge] = rep
+            reps[cod] = rep
         vezes: Counter[bytes] = Counter(
             _bytes(sec) for rep in reps.values() for sec in rep["secoes"]
         )
@@ -867,6 +918,7 @@ def exportar(
                         "secoes": [secao(sec) for sec in rep["secoes"]],
                     },
                     "emendas": arquivados.trocar(get(f"/api/municipios/{cod}/emendas")),
+                    "emendas_sem_municipio": emendas_uf(uf),
                     **prefeitos(cod),
                 },
             )
@@ -879,13 +931,14 @@ def exportar(
         out.json("metodologia.json", get("/api/metodologia"))
 
         # só os políticos que a API mostra (travas aplicadas), mais os citados nas páginas
-        deslocamento = 0
-        while True:
-            pagina = get(f"/api/politicos?uf={uf}&limite=500&deslocamento={deslocamento}")
-            conhecidos.update({p["id"]: p for p in pagina["itens"]})
-            deslocamento += len(pagina["itens"])
-            if not pagina["itens"] or deslocamento >= pagina["total"]:
-                break
+        for uf_pol in [uf, *politicos_extra]:
+            deslocamento = 0
+            while True:
+                pagina = get(f"/api/politicos?uf={uf_pol}&limite=500&deslocamento={deslocamento}")
+                conhecidos.update({p["id"]: p for p in pagina["itens"]})
+                deslocamento += len(pagina["itens"])
+                if not pagina["itens"] or deslocamento >= pagina["total"]:
+                    break
         federais = {i: p["fonte"] for i, p in conhecidos.items() if p["fonte"] != "tse"}
         tse = {i: p for i, p in conhecidos.items() if p["fonte"] == "tse"}
 
@@ -949,8 +1002,33 @@ def exportar(
             out.json(caminho, {"chave": chave, **compactar(detalhes)})
             grupos[nome] = {"impressao": imp_eleitos[chave], "arquivos": [caminho]}
 
+        def politicos_municipio(cod: int) -> dict:
+            rep = reps[cod]
+            return {
+                "representantes": {
+                    "municipio": rep["municipio"],
+                    "secoes": [secao(sec) for sec in rep["secoes"]],
+                },
+                "emendas": arquivados.trocar(get(f"/api/municipios/{cod}/emendas")),
+                "emendas_sem_municipio": emendas_uf(rep["municipio"]["uf"]),
+                **prefeitos(cod),
+            }
+
         ufs = (
-            _exportar_fiscal(s, get, out, portao, grupos_ant, grupos, uf, sem_ranking, saida)
+            _exportar_fiscal(
+                s,
+                get,
+                out,
+                portao,
+                grupos_ant,
+                grupos,
+                uf,
+                sem_ranking,
+                saida,
+                politicos_extra,
+                politicos_municipio,
+                emendas_uf,
+            )  # fmt: skip
             if portao is not None
             else None
         )
@@ -1237,6 +1315,45 @@ def _conferir_ufs(saida: Path, manifesto: dict) -> list[str]:
         citadas = set(dados.get("ufs", [])) | {i["uf"] for i in expandir(dados)}
         if citadas & fora:
             problemas.append(f"{caminho} cita UF fora do site: {sorted(citadas & fora)}")
+    return problemas + _conferir_politicos_por_uf(saida, manifesto)
+
+
+def _conferir_politicos_por_uf(saida: Path, manifesto: dict) -> list[str]:
+    """Nenhum dado de político de UF que não está publicada (pol_ufs_liberadas e os dois
+    portões; condições de 15/10/2026). A UF da exportação (SP) sempre tem os políticos."""
+    publicadas = {manifesto.get("uf")} | {
+        u for u, x in manifesto["ufs"].items() if (x.get("politicos") or {}).get("publicada")
+    }
+    sigla = {str(cod): uf for cod, uf in UF_POR_CODIGO.items()}
+    problemas = []
+    com_politicos = Counter()
+    for arq in (saida / "municipios").glob("*.json"):
+        uf = sigla.get(arq.stem[:2])
+        if uf in publicadas:
+            continue
+        d = json.loads(arq.read_bytes())
+        if any(
+            d.get(k) is not None for k in ("representantes", "emendas", "emendas_sem_municipio")
+        ):
+            com_politicos[uf] += 1
+    for uf, n in sorted(com_politicos.items()):
+        problemas.append(f"{uf} sem políticos publicados, mas {n} municípios trazem representantes")
+    for arq in (saida / "estados").glob("*.json"):
+        if arq.stem not in publicadas and json.loads(arq.read_bytes()).get("emendas_sem_municipio"):
+            problemas.append(f"estados/{arq.name}: nota de emendas de UF sem políticos publicados")
+    paginas = Counter()
+    for arq in (saida / "politicos").glob("*.json"):
+        uf = json.loads(arq.read_bytes()).get("uf")
+        if uf not in publicadas:
+            paginas[uf] += 1
+    for arq in (saida / "eleitos").glob("*.json"):
+        uf = arq.stem[3:5] if arq.stem.startswith("uf-") else sigla.get(arq.stem[2:4])
+        if uf not in publicadas:
+            paginas[uf] += 1
+    for uf, n in sorted(paginas.items()):
+        problemas.append(
+            f"{uf} sem políticos publicados, mas há {n} páginas de político ou eleitos"
+        )
     return problemas
 
 
@@ -1327,11 +1444,17 @@ def _conferir_travas(saida: Path, travas: dict) -> list[str]:
         ]
         for arq in arquivos:
             dados = json.loads(arq.read_bytes())
-            e = dados.get("emendas", dados) if arq.parent.name == "municipios" else dados
+            e = (dados.get("emendas") or {}) if arq.parent.name == "municipios" else dados
             if e.get("publicadas") or e.get("itens") or e.get("totais"):
                 problemas.append(
                     f"{arq.relative_to(saida)}: emendas exportadas com pol_publicar_emendas "
                     "desligada"
+                )
+        for arq in [*(saida / "municipios").glob("*.json"), *(saida / "estados").glob("*.json")]:
+            if json.loads(arq.read_bytes()).get("emendas_sem_municipio"):
+                problemas.append(
+                    f"{arq.relative_to(saida)}: nota de emendas sem município com "
+                    "pol_publicar_emendas desligada"
                 )
     if not travas.get("pol_publicar_gestoes"):
         # prefeitos eleitos por exercício (ADR-0018): fora da página do município

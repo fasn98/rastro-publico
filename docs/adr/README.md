@@ -27,6 +27,9 @@ aprovadas pelo Fabio.
 | [0018](0018-prefeitos-eleitos-por-exercicio.md) | Prefeitos eleitos em cada exercício do ranking (TSE) | Proposto |
 | [0019](0019-congelamento-ate-o-segundo-turno.md) | Escopo congelado na v1.1.0 até o segundo turno (25/10/2026) | Aceito |
 | [0020](0020-expansao-nacional.md) | Expansão nacional do escopo atual (v1.1.0) | Aceito |
+| [0021](0021-eleicoes-por-secao.md) | Eleições 2026 por seção: log bruto nunca armazenado; lote por UF | Proposto |
+| [0022](0022-comparacao-entre-turnos-por-secao.md) | Eleições 2026: comparação entre turnos por seção (agregadas pela principal, casos a explicar, seções sem par) | Aceito |
+| [0023](0023-vinculo-so-de-uf-publicada.md) | Vínculo de emenda só com autor de UF publicada | Aceito |
 
 O status fica numa linha `- **Status:** <valor>`, sem parênteses: o painel War Room lê essa
 linha, e todo status que começa com "Propos" aparece como pendente de aprovação.

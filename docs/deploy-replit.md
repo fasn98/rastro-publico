@@ -111,14 +111,37 @@ A API de auditoria deve usar um usuário **só de leitura**, que enxerga apenas 
 tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_resposta`,
 `conta_demonstrativo`) e não consegue gravar nada.
 
-1. No **Shell** do rastro-coleta, com o `DATABASE_URL` **de produção** carregado (copie a
-   connection string em Database → banco de produção → Settings):
+1. No **Shell** do rastro-coleta, a partir da raiz do projeto (`cd ~/workspace`), use a
+   connection string **de produção** (copie em Database → banco de produção → Settings).
+   São dois comandos, com uma conferência no meio, no mesmo padrão do passo 2 da migração
+   (ver "Passo 2, comandos", em Operação):
 
-   ```bash
-   cd backend && DATABASE_URL='<connection string de produção>' uv run rastro criar-usuario-auditoria
-   ```
+   a. Conferir o destino, sem gravar nada (cole a string de produção quando o `read`
+      pedir; ela não aparece na tela nem no histórico):
 
-   O comando gera uma senha forte (256 bits, aleatória, só para este usuário), cria o
+      ```bash
+      read -rs DATABASE_URL; export DATABASE_URL; unset RASTRO_DATABASE_URL; cd backend && if [ -z "$DATABASE_URL" ]; then echo "DATABASE_URL vazio: pare"; else uv run python -c "from rastro.db import get_engine; print(get_engine().url.render_as_string(hide_password=True))"; fi
+      ```
+
+   b. Só se a linha impressa for o banco de produção (host e nome do banco) e trouxer
+      `sslmode=require`:
+
+      ```bash
+      uv run rastro criar-usuario-auditoria
+      ```
+
+   - **O `unset RASTRO_DATABASE_URL` é obrigatório.** Se essa variável existir,
+     `config._url_do_ambiente` ignora o `DATABASE_URL`, e o usuário é criado no banco
+     errado sem avisar.
+   - **Não rode o comando b com o `DATABASE_URL` vazio.** Sem ele, o código cai no padrão
+     `localhost`. O comando a para nesse caso.
+   - Se a linha impressa não trouxer `sslmode=require`, repita o comando a com a string
+     corrigida: se ela já tiver `sslmode` com outro valor (`prefer`, `disable`...), troque o
+     valor por `require`; se não tiver `sslmode`, acrescente `?sslmode=require` no fim (ou
+     `&sslmode=require`, se ela já tiver `?`). Nunca deixe dois `sslmode` na mesma string.
+     A string do usuário de auditoria impressa pelo comando b herda esse parâmetro.
+
+   O comando b gera uma senha forte (256 bits, aleatória, só para este usuário), cria o
    usuário `rastro_auditoria` com leitura apenas dessas 4 tabelas e com toda transação em
    modo só leitura, e imprime **uma vez** a string de conexão dele. Rodar de novo troca a
    senha.
@@ -127,8 +150,8 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
    secrets" → "Deployment secrets") e ponha `DATABASE_URL` = a string impressa, sem
    espaços nem aspas nas pontas. Os Secrets do editor (Tools → Secrets) **não** valem para
    o app publicado: se a string ficar só lá, a auditoria continua com a anterior ou dá
-   erro 500 ao conectar (traceback em `pool ... checkout`). Depois, **Republish**. Apague a
-   linha do histórico do Shell (`history -c`). Teste: `…/api/respostas/1` devolve um JSON
+   erro 500 ao conectar (traceback em `pool ... checkout`). Depois, **Republish**. Feche o
+   Shell: a string do usuário de auditoria fica impressa na tela. Teste: `…/api/respostas/1` devolve um JSON
    que começa com `{"id":1,`.
 3. **Se o Replit não permitir** (o comando termina com `ERRO: o banco não permitiu criar
    o usuário só de leitura`): use a connection string principal no rastro-auditoria e
@@ -172,9 +195,8 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 > `backend/alembic/versions/`, como a 0021), a ordem no rastro-coleta é:
 > **1. Pull → 2. `alembic upgrade head` no Shell → 3. Republish**, nesta ordem, e fora de
 > uma execução em andamento. No passo 2, use a string do banco **de produção** (o Shell
-> carrega a do banco de desenvolvimento):
-> `cd backend && DATABASE_URL='<connection string de produção>' uv run alembic upgrade head`,
-> e depois `history -c`. A última linha deve citar a migração nova
+> carrega a do banco de desenvolvimento), na forma descrita em "Passo 2, comandos" abaixo.
+> A saída do `upgrade` deve citar a migração nova
 > (`Running upgrade ... -> 0021`); sem nenhuma linha "Running upgrade", o banco já estava em
 > dia. A coleta também roda `alembic upgrade head` no início de cada execução, mas aplicar
 > antes do Republish garante que o código novo nunca encontre o banco no formato antigo.
@@ -182,6 +204,54 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 > políticos (15/10/2026), a 0022 (CPF em texto livre) levou cerca de 1,5 min e a 0023 (cota:
 > CPF no número do documento e e-mail do fornecedor) cerca de 2,5 min. Se não forem
 > aplicadas no Shell, a primeira coleta depois do Republish as aplica e demora isso a mais.
+>
+> **Passo 2, comandos** (forma decidida pelo Fabio em 26/10/2026, na 0024). São dois
+> comandos, com uma conferência no meio:
+>
+> 1. Conferir o destino, sem migrar nada, a partir da raiz do projeto (`cd ~/workspace`;
+>    o comando entra em `backend`). Cole a string de produção quando o `read` pedir; ela
+>    não aparece na tela nem no histórico, e o cursor fica parado até você colar e apertar
+>    Enter:
+>    `read -rs DATABASE_URL; export DATABASE_URL; unset RASTRO_DATABASE_URL; cd backend && if [ -z "$DATABASE_URL" ]; then echo "DATABASE_URL vazio: pare"; else uv run python -c "from rastro.db import get_engine; print(get_engine().url.render_as_string(hide_password=True))" && uv run alembic current; fi`
+> 2. Só se a linha impressa for o banco de produção (host e nome do banco) e trouxer
+>    `sslmode=require`: `uv run alembic upgrade head && uv run alembic current`, e depois
+>    feche o Shell.
+>
+> - **O `unset RASTRO_DATABASE_URL` é obrigatório.** Se essa variável existir,
+>   `config._url_do_ambiente` ignora o `DATABASE_URL`, e a migração roda no banco errado sem
+>   avisar.
+> - **Não rode o comando 2 com o `DATABASE_URL` vazio.** Sem ele, o código cai no padrão
+>   `localhost`. O comando 1 para nesse caso.
+> - A string do Replit (`postgres://` ou `postgresql://`) serve como está: o código troca o
+>   prefixo por `postgresql+psycopg://` e mantém os parâmetros. Se a linha impressa não
+>   trouxer `sslmode=require`, repita o comando 1 com a string corrigida: se ela já tiver
+>   `sslmode` com outro valor (`prefer`, `disable`...), troque o valor por `require`; se não
+>   tiver `sslmode`, acrescente `?sslmode=require` no fim (ou `&sslmode=require`, se ela já
+>   tiver `?`). Nunca deixe dois `sslmode` na mesma string. Sem `require`, o driver aceita
+>   conexão sem TLS. O `require` não valida o certificado do servidor; a troca por
+>   `verify-full` está no backlog (T-019).
+>
+> **Nenhum Publish/Republish antes de a produção estar migrada pelo Alembic.** Vale para a
+> operação, depois da instalação. Na instalação (passos 3 a 8), os primeiros Publish criam
+> os apps (e o banco de produção, se o Replit só oferecer criá-lo ali, passo 5), e a
+> primeira coleta cria o esquema pelo Alembic. Na operação, o passo 3 só começa depois de o
+> comando 2 terminar em `(head)` com a string de produção (ou de o comando 1 já mostrar
+> `(head)`). Em 26/10/2026, o Publish das 12:45 foi feito com a
+> produção ainda na 0023; a 0024 foi aplicada pelo Alembic às 13:05, sem erro. Como a 0024
+> usa `add_column` e `create_index` sem `IF NOT EXISTS`, isso mostra que o Publish não criou
+> a coluna. Entre 12:45 e 13:05, o banco de produção não tinha `pol_emenda.uf_destino`, que
+> o código do #66 usa.
+>
+> **Na tela de Publish/Republish, nunca aceite mudança de banco proposta pelo Replit.** As
+> mudanças de esquema da produção entram só pelo Alembic, no passo 2. Com produção e
+> desenvolvimento na mesma migração, a tela não deve propor nada. Se propuser, não aplique:
+> pare e confira com `alembic current` nos dois bancos.
+>
+> **O Agent do Replit não mexe no banco de produção.** Não peça a ele, nem aceite dele,
+> migração, SQL, correção de esquema ou de dados na produção, mesmo que ele proponha como
+> conserto de uma diferença entre os bancos. A produção só muda pelo Alembic, no passo 2,
+> pela coleta agendada ou pelo `rastro criar-usuario-auditoria` rodado por você no Shell
+> (passo 7 da instalação, que cria ou renova o usuário só de leitura da auditoria).
 
 > **No painel Git do Replit, use apenas Pull; nunca Sync Changes nem Push. Os commits locais
 > do Replit são registros de publicação e configuração do app e não devem ir para o
@@ -199,13 +269,13 @@ tabelas de que ela precisa (`resposta_bruta`, `payload_bruto`, `demonstrativo_re
 | Prévia e lançamento | Enquanto o lançamento não for aprovado, todo build do site sai em **prévia**: faixa "Prévia — dados em validação" em todas as páginas e `<meta name="robots" content="noindex">` (fora dos buscadores). A prévia não esconde dados: ranking e links de auditoria continuam visíveis. O lançamento é um PR que troca o padrão de `RASTRO_PREVIA` para `0` em `backend/scripts/coleta_sp.sh`, com aprovação do Fabio. |
 | Carga nacional do RREO/RGF (ADR-0020) | A coleta lê todas as UFs (municípios, estados e DF), UF por UF, das menores para as maiores; primeiro 2023 a 2025, depois 2026 e 2022. Cada execução para de começar itens novos depois de `RASTRO_LOTE_LIMITE_MIN` minutos (padrão 420; Secret opcional) e continua na seguinte. O log mostra `Limite de tempo atingido: N itens continuam na próxima execução`, e o resto da coleta (ranking, site) roda normalmente. **Durante a carga, agendamento diário** (`20 4 * * *`). **Volte ao semanal** (`20 4 * * 1`) quando a carga terminar (`Lote N: X/X itens concluídos`, sem a linha do limite de tempo) e duas execuções completas seguidas tiverem `Duração da coleta` abaixo de 28.800 s (8 h). Num lote novo, o exercício corrente e o anterior são relidos sempre, e os mais antigos em rodízio de 4 semanas. |
 | Portão de qualidade por UF (ADR-0020) | Depois do ranking, o log lista cada UF: `AC: aprovada` ou `MG: reprovada (coleta incompleta: N ente-exercício(s) sem extrato lido ...)`, e no fim `Portão: N/27 UFs aprovadas: ...`. Durante a carga nacional, é normal a maioria estar reprovada por coleta incompleta. Só as aprovadas entram no site; uma UF reprovada que já estava no site fica com a versão anterior. O resultado de cada UF fica no `manifesto.json` publicado, em `ufs`. Reprovação por SHA-256 do bruto ou por célula diferente da fonte é problema a investigar (me mande o log). Se o próprio portão falhar, aparece `AVISO: o portão de qualidade falhou; o site sai só com SP, como antes`. |
-| Políticos de todas as UFs (aprovado em 10/10/2026) | A coleta diária lê deputados, senadores e TSE das 27 UFs; as **emendas, de SP e de SC** (SC desde 15/10/2026: nenhum conteúdo de SP muda; 447 arquivos de SP mudam só no SHA-256 da auditoria). Com as emendas de todas as UFs, emendas para municípios de SP ganham vínculo com deputados de outras UFs e os arquivos de SP mudam (links para páginas de político que o site não exporta); com a divisão, a exportação de SP fica idêntica à de um banco só com SP (conferido por SHA-256 em 10/10/2026). O site só publica os políticos de SP; as outras UFs e as emendas nacionais entram com o portão de políticos e a exportação por UF. Cada chamada para depois de `RASTRO_POLITICOS_LIMITE_MIN` minutos (padrão 90; Secret opcional): o log mostra `pol-...: não coletada (limite de tempo de 90 min atingido)` e a execução termina com AVISO, sem erro; a próxima continua de onde parou. |
+| Políticos de todas as UFs (aprovado em 10/10/2026) | A coleta diária lê deputados, senadores e TSE das 27 UFs; as **emendas, de SP e de SC** (SC desde 15/10/2026: nenhum conteúdo de SP muda; 447 arquivos de SP mudam só no SHA-256 da auditoria). As UFs das emendas vêm do Secret opcional `RASTRO_POL_EMENDAS_UFS` (siglas separadas por espaço; padrão `SP SC`): o Fabio acrescenta uma UF por vez, na ordem Sul → Norte (decisão de 07/11/2026). Coletar não publica: a UF só entra no site com o portão de políticos e com `RASTRO_POL_UFS_LIBERADAS`. A coleta para no início, antes de qualquer consulta, se a lista tiver sigla que não é UF ou não tiver SP, SC e todas as UFs de `RASTRO_POL_UFS_LIBERADAS` (a gravação das emendas substitui todas as linhas). Com as emendas de todas as UFs, emendas para municípios de SP ganham vínculo com deputados de outras UFs e os arquivos de SP mudam (links para páginas de político que o site não exporta); com a divisão, a exportação de SP fica idêntica à de um banco só com SP (conferido por SHA-256 em 10/10/2026). O site só publica os políticos de SP; as outras UFs e as emendas nacionais entram com o portão de políticos e a exportação por UF. Cada chamada para depois de `RASTRO_POLITICOS_LIMITE_MIN` minutos (padrão 90; Secret opcional): o log mostra `pol-...: não coletada (limite de tempo de 90 min atingido)` e a execução termina com AVISO, sem erro; a próxima continua de onde parou. |
 | Log começa com `AVISO: o código publicado (...) está N versão(ões) de código atrás do main (...)` | O Replit está rodando código antigo: faltou **Pull + Republish** no rastro-coleta. A coleta segue mesmo assim, com o código antigo, e o aviso se repete no fim do log. O primeiro hash é o do commit mais recente com o mesmo código que está no Replit; o segundo, o do `main`. `Código publicado em dia` = nada a fazer. A conferência compara os arquivos de `backend/` e `frontend/` com a API do GitHub; commits só de documentação não pedem Republish. |
 | Workflow "Coleta" do GitHub Actions | Só disparo manual, para diagnóstico (ADR-0016). **Não rode enquanto houver coleta no Replit**: confira a aba Schedule antes. A do Actions é cerca de 4,5 vezes mais lenta e seguraria a trava no banco, e a coleta agendada do Replit daquele dia sairia sem coletar. |
 | `IdleInTransactionSessionTimeout` (terminating connection due to idle-in-transaction timeout) | O banco de produção encerra a conexão que fica com uma transação aberta e ociosa além de `idle_in_transaction_session_timeout`; o valor aparece no início do log, na linha `Banco de produção: idle_in_transaction_session_timeout = ...` (`rastro conferir-producao`). **Em produção: `5min`** (execução 6qmcl, 09/10/2026). Nenhuma etapa pode deixar uma transação aberta e parada por 5 minutos. Em 09/10/2026 (execução 6pfw6) a exportação falhava assim, perto do fim (cerca de 5.000 a 5.500 s). Corrigido no código: a exportação lê em autocommit, e os coletores fecham a transação antes de ir à rede. **Não** se resolve aumentando o limite no servidor. Se voltar a acontecer, o traceback mostra o comando; teste novo em `tests/test_site_transacao_ociosa.py`. |
 | `npm error Exit handler never called!` ou `tsc: not found` no log | A instalação das dependências do frontend quebrou. Elas são instaladas no **build** do deployment (Republish), e a coleta só reinstala se faltar algo, com até 3 tentativas; o npm pode quebrar e ainda sair com código 0, por isso o script confere se `tsc` e `vite` ficaram instalados. Nada é publicado quando isso falha (o site continua como estava). Se o erro aparecer no build, faça o Republish de novo; se aparecer na coleta, a próxima execução tenta de novo. |
 | Execução terminou com erro | Só acontece quando algo crítico falha: banco, migrações, verificação do arquivo bruto, exportação ou verificação do site, ou o envio ao GitHub. Nesses casos nada é publicado e o site continua como estava; veja a última mensagem de erro no log. |
-| Código novo no `main` | nos dois apps: Git → **Pull** (nunca Sync Changes nem Push), depois **Publish** |
+| Código novo no `main` | nos dois apps: Git → **Pull** (nunca Sync Changes nem Push); se o `main` trouxer migração nova, migre a produção pelo Alembic (ver "Quando o `main` trouxer uma migração nova", em Operação) e confira `(head)`; só depois **Publish** |
 | Token vencendo | passo 1.4 |
 | App reiniciando sem parar (*crash loop*) | Publishing → **Logs**. Se aparecer `ERRO: RASTRO_PAPEL` ou `ERRO: o Secret RASTRO_PAPEL não está definido`, corrija o Secret em Publishing → Production app secrets (`coleta` ou `auditoria`) e publique de novo. Os Secrets de produção não aparecem no Shell do editor: para testar um valor lá, rode `RASTRO_PAPEL=<valor> bash backend/scripts/replit.sh --validar-papel` |
 | Forçar exportação do zero | a coleta parte do `dados/` publicado e só regrava o que mudou; para refazer tudo, rode `uv run rastro exportar-site --uf SP --saida <pasta> --completa` |

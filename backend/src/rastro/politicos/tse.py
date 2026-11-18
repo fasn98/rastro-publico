@@ -193,6 +193,13 @@ def _motivo(cargo_tse: str, posteriores: list[list[dict]]) -> str:
     base = f"Não consta {cargo_tse.lower()} eleito no arquivo do TSE."
     if posteriores:
         e = posteriores[-1][0]
+        # suplementar já realizada na data do arquivo (DT_GERACAO) e ainda sem eleito: diz só o
+        # que o arquivo mostra (ex.: Narandiba/SP, 25/10/2026, no arquivo de 28/10/2026)
+        if _data(e["DT_GERACAO"]) > _data(e["DT_ELEICAO"]):
+            return (
+                f"{base} {e['DS_ELEICAO']}, realizada em {e['DT_ELEICAO']}: o arquivo do TSE "
+                f"(versão de {e['DT_GERACAO']}) não traz eleito."
+            )
         quando = f"{e['DS_ELEICAO']} marcada para {e['DT_ELEICAO']}"
         return f"{base} {quando}, ainda sem resultado no arquivo."
     return base

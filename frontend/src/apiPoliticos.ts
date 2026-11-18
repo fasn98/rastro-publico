@@ -397,6 +397,10 @@ export async function obterEmendas(p: PoliticoDetalhe, ano: number | null): Prom
 export const obterEmendasMunicipio = async (cod: number) =>
   (await arquivoMunicipio(cod)).emendas as Emendas;
 
+/** Emendas da UF do município sem município de destino na fonte (nota); null se não houver. */
+export const obterEmendasSemMunicipio = async (cod: number) =>
+  (await arquivoMunicipio(cod)).emendas_sem_municipio ?? null;
+
 // --------------------------------------------- prefeitos eleitos por exercício (ADR-0018)
 
 export type Candidato = { nome: string; partido: string };

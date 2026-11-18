@@ -20,7 +20,8 @@ Não registradas na época.
 
 pytest + respx em `backend/tests/`, com respostas gravadas em `backend/tests/fixtures/`. As
 fixtures com dado pessoal (TSE, cota) são guardadas já redigidas (ADR-0007). Os testes de
-banco usam `rastro_teste` e são pulados sem ele; no CI há um PostgreSQL 16 de serviço.
+banco usam `rastro_teste` e são pulados sem ele; no CI, o PostgreSQL 16 pré-instalado no
+runner `ubuntu-24.04` (desde 26/10/2026; antes, um serviço `postgres:16`).
 
 ## Consequências
 

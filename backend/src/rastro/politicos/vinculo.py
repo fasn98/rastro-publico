@@ -10,7 +10,13 @@ página de um político quando, sem ambiguidade:
 2. esse parlamentar é um dos da UF no portal;
 3. o ano da emenda cai no mandato: o orçamento do ano Y é votado no ano Y-1, então o
    parlamentar precisa ter mandato em Y-1;
-4. todas as emendas ligadas a ele têm o mesmo "Código do Autor".
+4. todas as emendas ligadas a ele têm o mesmo "Código do Autor";
+5. a UF do parlamentar está publicada: a UF da exportação (SP) ou uma UF de
+   `RASTRO_POL_UFS_LIBERADAS` (decisão do Fabio, 17/11/2026). Uma UF coletada e ainda não
+   liberada (ex.: RS na conferência antes da liberação) não grava vínculo nenhum: as
+   emendas dos autores dela aparecem como na fonte, sem link, como já aparecem hoje. Sem
+   isso, a página de um município publicado ligaria a uma página de político que o site não
+   exporta, e a verificação antes de publicar barraria o site inteiro.
 
 Nos demais casos a emenda aparece com o autor exatamente como está na fonte, sem link.
 
@@ -27,11 +33,14 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from rastro.config import get_settings
 from rastro.politicos import camara, lgpd, senado
 from rastro.politicos.comum import get_json_com_origem
 from rastro.politicos.modelos import DEPUTADO_FEDERAL, SENADOR, PolPolitico
 from rastro.politicos.transparencia import normalizar_nome
 
+# UF da exportação: os políticos dela estão sempre no site (`rastro exportar-site --uf SP`)
+UF_EXPORTACAO = "SP"
 LEGISLATURA = 57
 ANOS_LEGISLATURA = {57: (2023, 2026)}  # anos civis em que a legislatura 57 vota orçamentos
 
@@ -60,6 +69,16 @@ def universo(client: httpx.Client, legislatura: int = LEGISLATURA) -> dict[str, 
         ident = p["IdentificacaoParlamentar"]
         nomes[normalizar_nome(ident["NomeParlamentar"])].add(f"senado:{ident['CodigoParlamentar']}")
     return nomes
+
+
+def ufs_publicadas() -> set[str]:
+    """UFs cujos políticos o site publica: a da exportação e as liberadas pelo Fabio."""
+    return {UF_EXPORTACAO} | get_settings().ufs_liberadas
+
+
+def ufs_com_vinculo(ufs) -> list[str]:
+    """Regra 5: das UFs coletadas, só as publicadas gravam vínculo com o autor."""
+    return sorted({u.upper() for u in ufs} & ufs_publicadas())
 
 
 def autores_confirmaveis(
@@ -100,16 +119,25 @@ def carregar_excecoes(caminho: Path = ARQUIVO_EXCECOES) -> list[dict]:
         return tomllib.load(f).get("excecao", [])
 
 
-def excecoes_por_texto(session: Session) -> dict[str, tuple[int, str]]:
-    """Texto exato do autor na fonte -> (pol_politico.id, rótulo), para as exceções."""
-    ids = dict(
-        session.execute(
-            select(PolPolitico.id_fonte, PolPolitico.id).where(PolPolitico.fonte == "camara")
-        ).all()
-    )
+def excecoes_por_texto(
+    session: Session, ufs: set[str] | None = None
+) -> dict[str, tuple[int | None, str]]:
+    """Texto exato do autor na fonte -> (pol_politico.id, rótulo), para as exceções.
+
+    `ufs`: UFs que gravam vínculo (regra 5). A exceção de político de outra UF continua na
+    lista, com o id nulo: a linha entra no recorte do arquivo (o portão confere que ela
+    existe) e fica sem vínculo até a UF ser liberada. Sem `ufs`, todas com o id."""
+    linhas = session.execute(
+        select(PolPolitico.id_fonte, PolPolitico.id, PolPolitico.uf).where(
+            PolPolitico.fonte == "camara"
+        )
+    ).all()
+    ids = {id_fonte: (pid, uf) for id_fonte, pid, uf in linhas}
     saida = {}
     for e in carregar_excecoes():
-        pid = ids.get(str(e["camara_id"]))
-        if pid is not None:
-            saida[e["texto_fonte"]] = (pid, e["rotulo"])
+        achado = ids.get(str(e["camara_id"]))
+        if achado is None:
+            continue
+        pid, uf = achado
+        saida[e["texto_fonte"]] = (pid if ufs is None or uf in ufs else None, e["rotulo"])
     return saida

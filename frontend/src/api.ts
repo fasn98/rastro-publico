@@ -36,7 +36,7 @@ export type MunicipioDetalhe = Municipio & {
 export type Pagina<T> = { total: number; itens: T[] };
 
 import type { Representantes } from "./apiPoliticos";
-import { expandir, lerJson, normalizar, urlDados, type Compacto } from "./dados";
+import { expandir, lerJson, normalizar, obterManifesto, urlDados, type Compacto } from "./dados";
 
 /** Arquivo estático de um município: detalhe, série, nota, representantes, emendas. */
 export type ArquivoMunicipio = {
@@ -52,6 +52,23 @@ export type ArquivoMunicipio = {
   emendas: unknown;
   /** prefeitos eleitos por mandato e exercício (ADR-0018); ausente em exportações antigas */
   prefeitos?: unknown;
+  /** emendas da UF sem município de destino no arquivo do Portal; ausente em exportações antigas */
+  emendas_sem_municipio?: EmendasSemMunicipio | null;
+};
+
+/** Emendas que o arquivo do Portal da Transparência atribui à UF (coluna "UF") e quantas
+ * delas não informam o município de destino. Calculado por UF na exportação. */
+export type EmendasSemMunicipio = {
+  uf: string;
+  ano_inicial: number;
+  ano_final: number;
+  total: number;
+  sem_municipio: number;
+  url_fonte: string;
+  sha256: string | null; // recorte arquivado (auditoria)
+  recebido_em: string | null;
+  sha256_arquivo_original: string | null; // o arquivo do Portal como foi baixado
+  tamanho_arquivo_original: number | null;
 };
 
 export const arquivoMunicipio = (cod: number) =>
@@ -151,6 +168,28 @@ export async function sugerirMunicipios(texto: string, limite = 10): Promise<Ite
       a[1].nome.localeCompare(b[1].nome, "pt-BR"),
   );
   return pontuados.slice(0, limite).map(([, m]) => m);
+}
+
+/** UFs com os políticos no site: a UF da exportação e as liberadas que passaram nos dois
+ * portões (`ufs.{UF}.politicos.publicada` no manifesto, a mesma regra de `verificar`). */
+export async function ufsComPoliticos(): Promise<string[]> {
+  const m = await obterManifesto();
+  const ufs = new Set([m?.uf ?? "SP"]);
+  for (const [uf, x] of Object.entries(m?.ufs ?? {})) if (x.politicos?.publicada) ufs.add(uf);
+  return [...ufs].sort();
+}
+
+/** Municípios das UFs com políticos no site, pela busca nacional. `uf` vazio: todas. */
+export async function municipiosComPoliticos(ufs: string[], uf: string, nome: string): Promise<Municipio[]> {
+  const termo = normalizar(nome);
+  return (await listaBusca()).itens
+    .filter(
+      (m) =>
+        m.tipo === "municipio" &&
+        (uf ? m.uf === uf : ufs.includes(m.uf)) &&
+        (!termo || normalizar(m.nome).includes(termo)),
+    )
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR") || a.uf.localeCompare(b.uf));
 }
 
 export const todosMunicipios = () => listaMunicipios();
@@ -435,6 +474,7 @@ export const obterMetodologia = () => lerJson<Metodologia>("metodologia.json");
 export type ArquivoEstado = {
   ente: { cod_ibge: number; nome: string; uf: string; esfera: "E" | "D" };
   serie: { exercicio: number; pessoal: Pessoal[]; liquidez: Liquidez | null; investimento: Investimento | null }[];
+  emendas_sem_municipio?: EmendasSemMunicipio | null;
 };
 
 export const obterEstado = (uf: string) => lerJson<ArquivoEstado>(`estados/${uf}.json`, true);

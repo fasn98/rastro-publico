@@ -376,7 +376,7 @@ export default function Metodologia() {
         nascimento, título de eleitor, e-mail (por exemplo, os arquivos de candidatos do TSE e as
         listas de parlamentares da Câmara e do Senado, que trazem e-mails de gabinete). Nesses
         casos o original <strong>não</strong> é guardado. Grava-se só a versão sem esses campos
-        (no TSE, também só as linhas de SP), junto com o SHA-256 do original, o SHA-256 da versão
+        (no TSE, também só as linhas da UF coletada), junto com o SHA-256 do original, o SHA-256 da versão
         gravada e a lista de campos removidos.
       </p>
       <p>

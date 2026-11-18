@@ -18,7 +18,8 @@ Não registradas na época.
 
 ## Decisão
 
-PostgreSQL 16 (`docker-compose.yml`; serviço `postgres:16` no CI) com SQLAlchemy 2
+PostgreSQL 16 (`docker-compose.yml`; no CI, o PostgreSQL 16 pré-instalado no runner
+`ubuntu-24.04`, desde 26/10/2026) com SQLAlchemy 2
 (`backend/src/rastro/models.py`, `db.py`). Valores monetários em `NUMERIC`. Em produção,
 o banco é o de produção do Replit (Neon).
 

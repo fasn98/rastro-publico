@@ -23,6 +23,7 @@ from rastro.politicos.modelos import (
     PREFEITO,
     SENADOR,
     VEREADOR,
+    PolColetaUf,
     PolComissao,
     PolDespesaCota,
     PolEmenda,
@@ -633,6 +634,76 @@ def emendas_do_politico(politico_id: int, session: SessionDep, ano: int | None =
 def emendas_do_municipio(cod_ibge: int, session: SessionDep, ano: int | None = None):
     _municipio(session, cod_ibge)
     return _emendas(session, PolEmenda.cod_ibge_destino == cod_ibge, ano, por_parlamentar=True)
+
+
+class EmendasSemMunicipio(BaseModel):
+    """Emendas que o arquivo do Portal atribui à UF (coluna "UF") e quantas delas não
+    informam o município de destino (localidade "MÚLTIPLO" ou o estado inteiro)."""
+
+    uf: str
+    ano_inicial: int
+    ano_final: int
+    total: int
+    sem_municipio: int
+    url_fonte: str
+    resposta_id: int | None  # o recorte arquivado (auditoria)
+    recebido_em: datetime | None
+    sha256_arquivo_original: str | None  # o arquivo do Portal como foi baixado
+    tamanho_arquivo_original: int | None
+
+
+@router.get("/ufs/{uf}/emendas-sem-municipio", response_model=EmendasSemMunicipio)
+def emendas_sem_municipio(uf: str, session: SessionDep):
+    """Só com a trava das emendas ligada e com a UF na coleta de emendas mais recente, com
+    sucesso: cada coleta regrava todas as linhas, e o recorte do arquivo só traz todas as
+    linhas da UF para as UFs daquela coleta (as outras têm só emendas de autores dela)."""
+    uf = uf.upper()
+    recente = session.scalar(
+        select(func.max(PolColetaUf.coleta_id)).where(PolColetaUf.fonte == "pol-emendas")
+    )
+    da_uf = session.scalar(
+        select(PolColetaUf.status).where(
+            PolColetaUf.fonte == "pol-emendas",
+            PolColetaUf.uf == uf,
+            PolColetaUf.coleta_id == recente,
+        )
+    )
+    if not publicacao.emendas() or da_uf != "sucesso":
+        raise HTTPException(404, "Emendas da UF não publicadas")
+    filtro = (PolEmenda.fonte_dados == "arquivo", PolEmenda.uf_destino == uf)
+    total, sem, ano_min, ano_max, rid = session.execute(
+        select(
+            func.count(),
+            # sem código e com a localidade "MÚLTIPLO" ou "<UF> (UF)": as que de fato não
+            # informam o município (no arquivo de 23/10/2026, todas as sem código são assim)
+            func.count().filter(
+                PolEmenda.cod_ibge_destino.is_(None),
+                or_(
+                    PolEmenda.localidade_gasto == "MÚLTIPLO",
+                    PolEmenda.localidade_gasto.like("% (UF)"),
+                ),
+            ),
+            func.min(PolEmenda.ano),
+            func.max(PolEmenda.ano),
+            func.max(PolEmenda.resposta_id),
+        ).where(*filtro)
+    ).one()
+    if not total:  # coluna preenchida só a partir da coleta seguinte à migração 0024
+        raise HTTPException(404, "Emendas da UF sem a coluna de UF preenchida")
+    resp = session.get(RespostaBruta, rid) if rid is not None else None
+    url = session.scalar(select(PolEmenda.url_fonte).where(*filtro).limit(1))
+    return EmendasSemMunicipio(
+        uf=uf,
+        ano_inicial=ano_min,
+        ano_final=ano_max,
+        total=total,
+        sem_municipio=sem,
+        url_fonte=url,
+        resposta_id=rid,
+        recebido_em=resp.recebido_em if resp else None,
+        sha256_arquivo_original=resp.sha256_original if resp else None,
+        tamanho_arquivo_original=resp.tamanho_original if resp else None,
+    )
 
 
 SECOES = (
