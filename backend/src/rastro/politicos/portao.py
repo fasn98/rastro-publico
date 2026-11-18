@@ -13,7 +13,9 @@ Conferências, só no banco (nenhuma consulta à rede):
 3. **Exceções de emendas:** toda exceção aprovada (`excecoes_emendas.toml`) de político da
    UF casou com pelo menos uma linha do arquivo. Emenda sem vínculo por ambiguidade (nome
    repetido, mais de um "Código do Autor") NÃO reprova a UF: a regra já a mostra sem link
-   (opção (a), decidida pelo Fabio em 10/10/2026).
+   (opção (a), decidida pelo Fabio em 10/10/2026). Numa UF ainda não liberada, a linha só
+   precisa estar no arquivo: o vínculo só é gravado depois da liberação (regra 5 de
+   `vinculo`, 17/11/2026).
 4. **Prefeitos eleitos por exercício** (ADR-0018): só com `pol_publicar_gestoes` ligada, a
    última coleta de prefeitos da UF terminou com sucesso (chapa única é exigida na coleta).
 """
@@ -87,15 +89,11 @@ def _excecoes(session: Session, uf: str) -> list[str]:
         )
         if p is None or p.uf != uf:
             continue  # o político da exceção é de outra UF (ou ainda não foi coletado)
-        n = session.scalar(
-            select(func.count())
-            .select_from(PolEmenda)
-            .where(
-                PolEmenda.politico_id == p.id,
-                PolEmenda.vinculo == "excecao",
-                PolEmenda.nome_autor == e["texto_fonte"],
-            )
-        )
+        filtro = [PolEmenda.nome_autor == e["texto_fonte"]]
+        if uf in vinculo.ufs_publicadas():
+            filtro += [PolEmenda.politico_id == p.id, PolEmenda.vinculo == "excecao"]
+        # UF ainda não liberada: a linha só precisa estar no arquivo (sem vínculo, regra 5)
+        n = session.scalar(select(func.count()).select_from(PolEmenda).where(*filtro))
         if not n:
             motivos.append(f"exceção aprovada de emenda sem linha no arquivo: {e['texto_fonte']}")
     return motivos

@@ -20,7 +20,8 @@ emenda ao político errado seria um dado falso publicado na página de uma pesso
 
 `backend/src/rastro/politicos/vinculo.py` exige nome normalizado único entre os 901
 parlamentares federais da legislatura 57, parlamentar de SP, ano dentro do mandato e o
-mesmo "Código do Autor" em todas as emendas. Os casos fora da regra só entram por
+mesmo "Código do Autor" em todas as emendas. Desde 17/11/2026, "de SP" passou a ser "de UF
+publicada" (ADR-0023). Os casos fora da regra só entram por
 `politicos/excecoes_emendas.toml`, com texto exato da fonte, justificativa, aprovador e
 data; um teste falha sem esses campos.
 

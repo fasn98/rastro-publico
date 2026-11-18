@@ -209,12 +209,18 @@ def coletor_emendas_arquivo(ufs: list[str], anos: list[int]):
 
         nomes = vinculo.universo(client)
         autores = {}
-        for uf in ufs:
+        com_vinculo = vinculo.ufs_com_vinculo(ufs)  # regra 5: só UFs publicadas
+        if sem := sorted(set(ufs) - set(com_vinculo)):
+            log.info(
+                "emendas de %s coletadas sem vínculo com o autor (UF ainda não liberada)",
+                ", ".join(sem),
+            )
+        for uf in com_vinculo:
             da_uf, recusados = vinculo.autores_confirmaveis(session, uf, nomes)
             autores.update(da_uf)
             if recusados:
                 log.info("autores de %s sem vínculo confirmável: %s", uf, recusados)
-        excecoes = vinculo.excecoes_por_texto(session)
+        excecoes = vinculo.excecoes_por_texto(session, set(com_vinculo))
         r = transparencia.coletar_arquivo(session, client, ufs, min(anos), autores, excecoes)
         log.info("emendas (arquivo): %s", r)
         return r["linhas"]
@@ -226,6 +232,12 @@ def coletor_emendas(uf: str, anos: list[int]):
     """Emendas pela API (exige chave), por autor: deputados e senadores da UF já gravados."""
 
     def coletar(session: Session, client: httpx.Client) -> int:
+        from rastro.politicos import vinculo
+
+        if not vinculo.ufs_com_vinculo([uf]):
+            # regra 5: a API grava cada emenda ligada ao autor; UF não liberada fica de fora
+            log.info("emendas pela API de %s não coletadas: UF ainda não liberada", uf)
+            return 0
         transparencia.verificar_acesso(client, anos[0])  # 401 -> falha clara, nada gravado
         erros: list[str] = []
         municipios = transparencia.municipios_por_nome(session)
