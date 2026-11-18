@@ -119,13 +119,27 @@ cada UF. Na Câmara, a falha num item de um deputado conta só para a UF dele; a
 arquivo nacional e o fim do prazo contam para todas. A API de emendas fica em
 `pol-emendas-api`, separada do arquivo em lote (`pol-emendas`).
 
+**Falha na coleta de emendas** (`situacao_emendas.py`, ADR-0024, decisão do Fabio de
+17/11/2026). A gravação do arquivo é uma transação só: se a coleta falha, nada é apagado.
+Para cada UF com políticos no site:
+- o site segue com os dados anteriores e mostra, nas seções de emendas, "Dados de
+  dd/mm/aaaa; a coleta mais recente não foi concluída" (manifesto: `emendas_coleta.{UF}`);
+- mais de 7 dias sem coleta concluída, contados da primeira falha: aviso destacado de dados
+  desatualizados, sem tirar a UF do site;
+- cada falha vai para o log da coleta (`pol-emendas UF: coleta não concluída (motivo)`) e
+  para o resumo da execução (`Emendas por UF com falha: ...`), com o motivo reduzido ao
+  tipo do erro (ex.: "HTTP 504 após 4 tentativas").
+Os dados anteriores só valem se a última coleta concluída do arquivo incluiu a UF; se não
+incluiu, a UF segue a regra de sempre e o portão a reprova.
+
 **Portão de políticos por UF** (`portao.py`, aprovado em 10/10 e 15/10/2026). Roda dentro
 do `rastro portao` e vai para o manifesto em `ufs.{UF}.politicos = {aprovada, motivos}`.
 Os políticos de uma UF além da UF da exportação (SP, publicada desde 06/10/2026 e fora
 deste portão) só saem no site com este portão e o fiscal aprovados. Conferências, só no
 banco:
 1. a última coleta da UF em Câmara, Senado, TSE e emendas terminou com sucesso (fonte sem
-   coleta: "ainda não coletados");
+   coleta: "ainda não coletados"). Exceção das emendas (ADR-0024): a coleta não concluída
+   não reprova a UF quando a última coleta com sucesso do arquivo a incluiu;
 2. há eleitos do TSE da UF em 2022 e 2024 (o DF não tem eleição municipal);
 3. toda exceção aprovada de emenda de político da UF casou com uma linha do arquivo;
 4. com `pol_publicar_gestoes` ligada, a coleta de prefeitos da UF terminou com sucesso.

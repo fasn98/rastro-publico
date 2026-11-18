@@ -92,6 +92,7 @@ from rastro.models import (
     PopulacaoIbge,
     RespostaBruta,
 )
+from rastro.politicos import situacao_emendas
 
 log = logging.getLogger(__name__)
 
@@ -1014,6 +1015,13 @@ def exportar(
                 **prefeitos(cod),
             }
 
+        emendas_coleta = {
+            u: {k: v for k, v in sit.items() if k != "motivo"}
+            for u in [uf, *politicos_extra]
+            if get_settings().pol_publicar_emendas
+            and (sit := situacao_emendas.situacao(s, u)) is not None
+        }
+
         ufs = (
             _exportar_fiscal(
                 s,
@@ -1045,6 +1053,9 @@ def exportar(
         "mapeamento": {"versao": mapa.versao, "hash": mapa.hash},
         "travas": _travas(),
         "fontes": situacao_fontes,
+        # emendas das UFs com políticos no site cuja última coleta não foi concluída: o site
+        # mostra os dados anteriores com a data e, depois de 7 dias, um aviso destacado
+        "emendas_coleta": emendas_coleta,
         "cota_detalhada": list(anos_cota),
         **({"ufs": ufs} if ufs is not None else {}),
         "contagens": {

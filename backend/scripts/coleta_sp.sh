@@ -157,6 +157,9 @@ echo "Duração da coleta: ${SECONDS} s"
 if ! grep -q "^Fontes com falha: nenhuma$" <<<"$RESUMO"; then
   echo "AVISO: site publicado com fontes desatualizadas: $(grep '^Fontes com falha:' <<<"$RESUMO")"
 fi
+if ! grep -q "^Emendas por UF com falha: nenhuma$" <<<"$RESUMO"; then
+  echo "AVISO: emendas publicadas com os dados anteriores: $(grep '^Emendas por UF com falha:' <<<"$RESUMO")"
+fi
 if [ -n "$AVISO_CODIGO" ]; then
   echo "$AVISO_CODIGO"
 fi

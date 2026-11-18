@@ -30,6 +30,7 @@ aprovadas pelo Fabio.
 | [0021](0021-eleicoes-por-secao.md) | Eleições 2026 por seção: log bruto nunca armazenado; lote por UF | Proposto |
 | [0022](0022-comparacao-entre-turnos-por-secao.md) | Eleições 2026: comparação entre turnos por seção (agregadas pela principal, casos a explicar, seções sem par) | Aceito |
 | [0023](0023-vinculo-so-de-uf-publicada.md) | Vínculo de emenda só com autor de UF publicada | Aceito |
+| [0024](0024-falha-na-coleta-de-emendas.md) | Falha na coleta de emendas de UF publicada: dados anteriores, data e aviso após 7 dias | Aceito |
 
 O status fica numa linha `- **Status:** <valor>`, sem parênteses: o painel War Room lê essa
 linha, e todo status que começa com "Propos" aparece como pendente de aprovação.

@@ -9,7 +9,7 @@ import {
   ufsComPoliticos,
 } from "./api";
 import { AUDITORIA_ATIVA, obterManifesto, type SituacaoFonte, urlAuditoria } from "./dados";
-import { FONTE_DO_CARGO } from "./Fontes";
+import { AvisoColetaEmendas, FONTE_DO_CARGO } from "./Fontes";
 import {
   CARGOS,
   FONTES,
@@ -265,6 +265,7 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
                 Emendas com {rep.municipio.nome} como local do gasto, segundo o Portal da
                 Transparência. Ordem alfabética.
               </p>
+              <AvisoColetaEmendas uf={rep.municipio.uf} />
               <div className="tabela-rolagem">
                 <table>
                   <thead>
@@ -343,6 +344,7 @@ export function QuemRepresenta({ cod }: { cod: number | null }) {
           ))}
 
           <h3>Emendas recebidas</h3>
+          {emendas?.publicadas && <AvisoColetaEmendas uf={rep.municipio.uf} />}
           {semMunicipio && <NotaEmendasSemMunicipio nota={semMunicipio} />}
           {emendas && <TabelaEmendas emendas={emendas} mostrarAutor />}
           <Contestar titulo={`representantes de ${rep.municipio.nome}/${rep.municipio.uf}`} />
@@ -542,6 +544,7 @@ export function PaginaPolitico({ id, eleito }: { id: number; eleito?: string }) 
           )}
           {p.fonte === "camara" && p.cota.length > 0 && <CotaDetalhe p={p} ano={ano} />}
           <h3>Emendas parlamentares</h3>
+          <AvisoColetaEmendas uf={p.uf} />
           <EmendasDoPolitico p={p} ano={ano} />
         </>
       )}
