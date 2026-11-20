@@ -294,7 +294,6 @@ def main(argv: list[str] | None = None) -> int:
 
         from rastro import portao
         from rastro import ranking as rk
-        from rastro.coletores.base import novo_cliente
         from rastro.db import get_engine
 
         # autocommit: nenhuma transação fica aberta enquanto a fonte é consultada
