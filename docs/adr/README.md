@@ -32,6 +32,7 @@ aprovadas pelo Fabio.
 | [0023](0023-vinculo-so-de-uf-publicada.md) | Vínculo de emenda só com autor de UF publicada | Aceito |
 | [0024](0024-falha-na-coleta-de-emendas.md) | Falha na coleta de emendas de UF publicada: dados anteriores, data e aviso após 7 dias | Aceito |
 | [0025](0025-indicadores-nao-fiscais.md) | Indicadores não fiscais (segurança pública e educação) para uma metodologia v1.2.0 | Proposto |
+| [0026](0026-saidas-de-politicos-so-com-aprovacao.md) | Saídas de políticos do site só com aprovação (comparação por id_fonte) | Aceito |
 
 O status fica numa linha `- **Status:** <valor>`, sem parênteses: o painel War Room lê essa
 linha, e todo status que começa com "Propos" aparece como pendente de aprovação.
