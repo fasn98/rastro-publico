@@ -1185,8 +1185,30 @@ def _exportar_politico(pid, get, out: _Escritor, arquivados, catalogos, anos_cot
 _CPF_FORMATADO = re.compile(rb"(?<!\d)\d{3}\.\d{3}\.\d{3}-\d{2}(?!\d)")
 
 
+def dispensa_politicos(manifesto: dict, anterior: dict) -> str | None:
+    """Motivo para a queda de políticos não ser conferida nesta publicação, ou None.
+
+    Duas dispensas: as travas de publicação mudaram de propósito, ou uma fonte de
+    políticos nunca foi coletada com sucesso (a seção dela sai como "fonte indisponível
+    nesta coleta"). O resumo da execução diz quando uma delas foi usada (ADR-0026).
+    """
+    if anterior.get("travas") != manifesto.get("travas"):
+        return "travas de publicação diferentes das da versão no ar (mudança de propósito)"
+    indisponiveis = [
+        f["fonte"]
+        for f in manifesto.get("fontes", [])
+        if f["fonte"] in fontes.FONTES_POLITICOS and not f["disponivel"]
+    ]
+    if indisponiveis:
+        return "fonte(s) de políticos nunca coletada(s) com sucesso: " + ", ".join(indisponiveis)
+    return None
+
+
 def verificar(
-    saida: Path, anterior: dict | None = None, publicados: dict | None = None
+    saida: Path,
+    anterior: dict | None = None,
+    publicados: dict | None = None,
+    base: str | None = None,
 ) -> list[str]:
     """Problemas que impedem publicar (lista vazia = pode publicar).
 
@@ -1195,7 +1217,8 @@ def verificar(
     que uma trava de publicação tenha mudado de propósito.
 
     `publicados` ({(fonte, id_fonte): ...} da publicação em vigor, `remocoes`): com ele, os
-    políticos são comparados um a um (ADR-0026). Toda saída, mesmo com a contagem igual ou
+    políticos são comparados um a um (ADR-0026); `base` é a tag dessa publicação, contra
+    a qual as remoções da lista foram aprovadas. Toda saída, mesmo com a contagem igual ou
     maior, só passa se estiver em `remocoes_aprovadas.toml`. A contagem de políticos deixa
     de ser conferida quando os políticos lidos somam a contagem do manifesto publicado.
     """
@@ -1276,28 +1299,16 @@ def verificar(
         if not (saida / obrigatorio).exists():
             problemas.append(f"arquivo obrigatório ausente: {obrigatorio}")
     if anterior:
-        mesmas_travas = anterior.get("travas") == manifesto.get("travas")
-        # fonte de políticos que nunca foi coletada com sucesso (falhou nesta coleta e não
-        # tem dado anterior no banco): a seção dela sai como "fonte indisponível nesta
-        # coleta" e a queda no número de políticos é esperada, não um erro
-        indisponiveis = [
-            f["fonte"]
-            for f in manifesto.get("fontes", [])
-            if f["fonte"] in fontes.FONTES_POLITICOS and not f["disponivel"]
-        ]
+        dispensa = dispensa_politicos(manifesto, anterior)
         for chave in ("municipios", "politicos"):
-            if chave == "politicos" and not mesmas_travas:
-                continue  # ligar/desligar uma trava muda o número de políticos de propósito
-            if chave == "politicos" and indisponiveis:
-                log.warning(
-                    "Número de políticos pode cair: fonte(s) indisponível(is) nesta coleta: %s",
-                    ", ".join(indisponiveis),
-                )
+            if chave == "politicos" and dispensa:
+                # trava alterada de propósito ou fonte nunca coletada: a queda é esperada
+                log.warning("Políticos sem conferência de saídas: %s", dispensa)
                 continue
             if chave == "politicos" and publicados is not None:
                 problemas += remocoes.problemas(
                     remocoes.comparar(
-                        publicados, remocoes.politicos_do_site(saida), remocoes.carregar()
+                        publicados, remocoes.politicos_do_site(saida), remocoes.carregar(), base
                     )
                 )
                 # a comparação um a um substitui a contagem só quando os arquivos lidos do

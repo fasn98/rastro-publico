@@ -131,6 +131,20 @@ def _politicos_publicados(git: Git) -> dict | None:
         shutil.rmtree(pasta, ignore_errors=True)
 
 
+def _base_no_ar(git: Git) -> str | None:
+    """Tag `site-...` da publicação no ar (a que aponta para o commit do gh-pages)."""
+    atual = git.sha_do_ramo()
+    return next((t for t, sha in git.tags_remotas() if sha == atual), None)
+
+
+def _dispensa(dados: Path, anterior: dict) -> str | None:
+    try:
+        manifesto = json.loads((dados / "manifesto.json").read_text())
+    except (OSError, ValueError):
+        return None  # a verificação acusa o manifesto ausente ou inválido
+    return site.dispensa_politicos(manifesto, anterior)
+
+
 def publicar(
     dist: Path,
     repo: str,
@@ -151,14 +165,22 @@ def publicar(
     try:
         anterior = _manifesto_publicado(git)
         publicados = _politicos_publicados(git) if anterior else None
+        base = _base_no_ar(git) if anterior else None
         if publicados is not None:
             # resumo da execução: sempre, mesmo quando a publicação passa (ADR-0026)
             diff = remocoes.comparar(
-                publicados, remocoes.politicos_do_site(dist / "dados"), remocoes.carregar()
+                publicados, remocoes.politicos_do_site(dist / "dados"), remocoes.carregar(), base
             )
+            print(f"Publicação no ar (base da comparação): {base or 'sem tag'}", flush=True)
             for linha in remocoes.resumo(diff):
                 print(linha, flush=True)
-        problemas = site.verificar(dist / "dados", anterior, publicados)
+            dispensa = _dispensa(dist / "dados", anterior)
+            if dispensa:
+                print(
+                    f"Dispensa usada: {dispensa}; as saídas acima não barram a publicação",
+                    flush=True,
+                )
+        problemas = site.verificar(dist / "dados", anterior, publicados, base)
         if problemas:
             raise ErroPublicacao("publicação cancelada:\n- " + "\n- ".join(problemas))
         if simular:

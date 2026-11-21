@@ -33,6 +33,7 @@ UE_IBGE = {"63479": CONCHAS, "64696": GUARATINGUETA, "66079": JAU}  # código TS
 PAULO_NUNES = ("tse", "250002180907")  # prefeito, Conchas/SP
 PEDRO_SANNINI = ("tse", "250001948460")  # vereador, Guaratinguetá/SP
 JAU_SAEM = {("tse", "250002243197"), ("tse", "250001959675")}
+BASE = "site-20261108-140446"  # a publicação no ar quando as saídas foram aprovadas
 
 
 def _eleitos_de_21_11() -> dict[int, list[dict]]:
@@ -100,6 +101,7 @@ def test_lista_aprovada_tem_as_quatro_saidas_de_21_11():
     assert set(aprovadas) == {PAULO_NUNES, PEDRO_SANNINI, *JAU_SAEM}
     for chave, e in aprovadas.items():
         assert e["aprovado_por"] == "Fabio" and str(e["aprovado_em"]) == "2026-11-21"
+        assert e["base"] == BASE
         assert publicados[chave]["nome"] == e["nome"]  # é quem estava publicado
 
 
@@ -109,6 +111,7 @@ def test_conchas_na_lista_passa_e_vai_para_o_resumo(tmp_path):
         remocoes.politicos_do_site(PUBLICADO),
         remocoes.politicos_do_site(novo),
         remocoes.carregar(),
+        BASE,
     )
     assert remocoes.problemas(diff) == []
     assert remocoes.resumo(diff) == [
@@ -120,12 +123,28 @@ def test_conchas_na_lista_passa_e_vai_para_o_resumo(tmp_path):
 def test_saida_fora_da_lista_barra(tmp_path):
     novo = _versao_de_21_11(tmp_path, [CONCHAS])
     diff = remocoes.comparar(
-        remocoes.politicos_do_site(PUBLICADO), remocoes.politicos_do_site(novo), {}
+        remocoes.politicos_do_site(PUBLICADO), remocoes.politicos_do_site(novo), {}, BASE
     )
     assert remocoes.problemas(diff) == [
         "político saiu sem aprovação em remocoes_aprovadas.toml: "
         "PAULO NUNES (prefeito, Conchas/SP; tse 250002180907)"
     ]
+
+
+def test_aprovacao_so_vale_na_base_em_que_foi_dada(tmp_path):
+    """Com outra publicação no ar (ou sem tag conhecida), a mesma saída de Conchas conta
+    como sem aprovação e barra."""
+    novo = _versao_de_21_11(tmp_path, [CONCHAS])
+    antes, agora = remocoes.politicos_do_site(PUBLICADO), remocoes.politicos_do_site(novo)
+    for outra in ("site-20261201-043000", None):
+        diff = remocoes.comparar(antes, agora, remocoes.carregar(), outra)
+        assert remocoes.problemas(diff) == [
+            "político saiu sem aprovação em remocoes_aprovadas.toml: "
+            "PAULO NUNES (prefeito, Conchas/SP; tse 250002180907)"
+        ]
+        assert remocoes.resumo(diff)[1] == (
+            "  saiu (SEM APROVAÇÃO): PAULO NUNES (prefeito, Conchas/SP; tse 250002180907)"
+        )
 
 
 def test_troca_com_contagem_igual_fora_da_lista_barra(tmp_path):
@@ -135,13 +154,13 @@ def test_troca_com_contagem_igual_fora_da_lista_barra(tmp_path):
     antes, agora = remocoes.politicos_do_site(PUBLICADO), remocoes.politicos_do_site(novo)
     assert len(agora) == len(antes)
     sem_pedro = {k: v for k, v in remocoes.carregar().items() if k != PEDRO_SANNINI}
-    diff = remocoes.comparar(antes, agora, sem_pedro)
+    diff = remocoes.comparar(antes, agora, sem_pedro, BASE)
     assert remocoes.problemas(diff) == [
         "político saiu sem aprovação em remocoes_aprovadas.toml: "
         "PEDRO SANNINI (vereador, Guaratinguetá/SP; tse 250001948460)"
     ]
     # com a lista aprovada, passa; o resumo mostra quem entrou e quem saiu
-    diff = remocoes.comparar(antes, agora, remocoes.carregar())
+    diff = remocoes.comparar(antes, agora, remocoes.carregar(), BASE)
     assert remocoes.problemas(diff) == []
     assert remocoes.resumo(diff) == [
         "Políticos: 1 entraram, 1 saíram",
@@ -156,6 +175,7 @@ def test_versao_de_21_11_inteira_passa_com_a_lista(tmp_path):
         remocoes.politicos_do_site(PUBLICADO),
         remocoes.politicos_do_site(novo),
         remocoes.carregar(),
+        BASE,
     )
     assert remocoes.problemas(diff) == []
     assert len(diff["entraram"]) == 3 and len(diff["sairam"]) == 4
@@ -172,24 +192,47 @@ def test_verificar_compara_um_a_um_e_nao_pela_contagem(exportado, monkeypatch):
         **manifesto,
         "contagens": {**manifesto["contagens"], "politicos": len(publicados)},
     }
-    assert site.verificar(dados, anterior, publicados) == []
+    assert site.verificar(dados, anterior, publicados, BASE) == []
     queda = f"politicos: {len(agora)} na nova versão, {len(publicados)} na publicada"
     # sem a comparação um a um (sem os políticos publicados), vale a contagem, como antes
     assert queda in site.verificar(dados, anterior)
     # se os políticos lidos do site publicado não somam a contagem do manifesto dele, a
     # contagem também vale
     maior = {**anterior, "contagens": {**anterior["contagens"], "politicos": len(publicados) + 1}}
-    assert site.verificar(dados, maior, publicados) == [
+    assert site.verificar(dados, maior, publicados, BASE) == [
         f"politicos: {len(agora)} na nova versão, {len(publicados) + 1} na publicada"
     ]
     # fora da lista, barra
     vazia = dist.parent / "vazia.toml"
     vazia.write_text("")
     monkeypatch.setattr(remocoes, "ARQUIVO", vazia)
-    assert site.verificar(dados, anterior, publicados) == [
+    assert site.verificar(dados, anterior, publicados, BASE) == [
         "político saiu sem aprovação em remocoes_aprovadas.toml: "
         "PAULO NUNES (prefeito, Conchas/SP; tse 250002180907)"
     ]
+
+
+def test_dispensas_continuam_e_sao_nomeadas(exportado):
+    """Trava alterada de propósito: a saída não barra, e o motivo fica disponível para o
+    resumo da execução."""
+    dist, manifesto = exportado
+    dados = dist / "dados"
+    agora = remocoes.politicos_do_site(dados)
+    publicados = {**agora, PAULO_NUNES: remocoes.politicos_do_site(PUBLICADO)[PAULO_NUNES]}
+    travas = {**manifesto["travas"]}
+    chave = next(iter(travas))
+    travas[chave] = not travas[chave]
+    anterior = {
+        **manifesto,
+        "travas": travas,
+        "contagens": {**manifesto["contagens"], "politicos": len(publicados)},
+    }
+    assert site.dispensa_politicos(manifesto, anterior) == (
+        "travas de publicação diferentes das da versão no ar (mudança de propósito)"
+    )
+    assert site.verificar(dados, anterior, publicados, None) == []
+    # sem a dispensa, a mesma saída sem base conhecida barra
+    assert site.verificar(dados, {**anterior, "travas": manifesto["travas"]}, publicados, None)
 
 
 def test_le_os_politicos_do_gh_pages(remoto, tmp_path):
@@ -203,17 +246,20 @@ def test_le_os_politicos_do_gh_pages(remoto, tmp_path):
         ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "0"],
         ["add", "-A"],
         ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "site"],
-        ["push", "-q", remoto, "gh-pages"],
+        ["tag", BASE],
+        ["push", "-q", remoto, "gh-pages", BASE],
     ):
         subprocess.run(["git", *args], cwd=trabalho, check=True)
     git = publicacao.Git(remoto, None)
     try:
         git("fetch", "-q", "--depth=1", "origin", "gh-pages")
         lidos = publicacao._politicos_publicados(git)
+        base = publicacao._base_no_ar(git)
     finally:
         git.fechar()
     assert lidos == remocoes.politicos_do_site(PUBLICADO)
     assert lidos[PAULO_NUNES]["local"] == "Conchas/SP"
+    assert base == BASE
 
 
 def test_publicacao_mostra_o_resumo_mesmo_quando_passa(exportado, remoto, capsys):
@@ -221,4 +267,17 @@ def test_publicacao_mostra_o_resumo_mesmo_quando_passa(exportado, remoto, capsys
     publicacao.publicar(dist, remoto, agora=datetime(2026, 11, 1, tzinfo=UTC))
     capsys.readouterr()
     publicacao.publicar(dist, remoto, agora=datetime(2026, 11, 2, tzinfo=UTC), simular=True)
-    assert "Políticos: 0 entraram, 0 saíram" in capsys.readouterr().out
+    saida = capsys.readouterr().out
+    assert "Publicação no ar (base da comparação): site-20261101-000000" in saida
+    assert "Políticos: 0 entraram, 0 saíram" in saida
+    assert "Dispensa usada" not in saida
+    # trava alterada de propósito: o resumo diz numa linha que a dispensa foi usada
+    m = json.loads((dist / "dados" / "manifesto.json").read_text())
+    chave = next(iter(m["travas"]))
+    m["travas"][chave] = not m["travas"][chave]
+    (dist / "dados" / "manifesto.json").write_text(json.dumps(m))
+    publicacao.publicar(dist, remoto, agora=datetime(2026, 11, 3, tzinfo=UTC), simular=True)
+    assert (
+        "Dispensa usada: travas de publicação diferentes das da versão no ar (mudança de "
+        "propósito); as saídas acima não barram a publicação"
+    ) in capsys.readouterr().out

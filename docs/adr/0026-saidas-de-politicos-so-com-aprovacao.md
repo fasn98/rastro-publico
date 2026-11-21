@@ -39,13 +39,16 @@ nenhum aviso.
    - nome, cargo e município;
    - o que o arquivo da fonte diz;
    - a versão do arquivo;
+   - a **base**: a publicação no ar contra a qual a saída foi aprovada (tag `site-...`);
    - a data e "aprovado por Fabio".
 
-   Qualquer saída fora da lista barra a publicação. Depois da publicação, a entrada fica
-   só como registro, porque a base de comparação passa a ser a nova versão.
-3. **Resumo sempre.** A publicação, ou a simulação, imprime quem entrou e quem saiu, com o
-   município, mesmo quando passa.
-4. **Entradas iniciais (21/11/2026):** Paulo Nunes (Conchas), Dani Rodrigueiro e Marcos
+   Qualquer saída fora da lista barra a publicação. A entrada só libera a saída quando a
+   publicação no ar é a base dela; com outra base, a saída aparece como "SEM APROVAÇÃO" e
+   barra. Depois da publicação, a entrada fica só como registro.
+3. **Resumo sempre.** A publicação, ou a simulação, imprime a publicação no ar (a base) e
+   quem entrou e quem saiu, com o município, mesmo quando passa. Quando uma das duas
+   dispensas abaixo é usada, o resumo diz numa linha qual e por quê.
+4. **Entradas iniciais (21/11/2026), base `site-20261108-140446`:** Paulo Nunes (Conchas), Dani Rodrigueiro e Marcos
    Brasil Despachante (Jaú) e Pedro Sannini (Guaratinguetá).
 
 **O que fica como era:**
@@ -53,9 +56,10 @@ nenhum aviso.
 - A contagem de políticos continua valendo quando não há comparação um a um (sem site
   publicado com arquivos de políticos) e também quando os políticos lidos do site
   publicado não somam a contagem do manifesto dele.
-- As duas dispensas já existentes continuam valendo:
-  - travas de publicação diferentes das da versão publicada;
-  - fonte de políticos indisponível nesta coleta.
+- As duas dispensas já existentes continuam valendo (decisão do Fabio, 21/11/2026), e o
+  resumo passa a dizer quando foram usadas:
+  - travas de publicação diferentes das da versão no ar (mudança de propósito);
+  - fonte de políticos nunca coletada com sucesso.
 
 ## Consequências
 

@@ -26,6 +26,7 @@ CAMPOS = (
     "municipio",
     "situacao_no_arquivo",
     "arquivo_fonte",
+    "base",
     "aprovado_em",
     "aprovado_por",
 )
@@ -105,18 +106,28 @@ def politicos_do_site(dados: Path) -> dict[Chave, dict]:
     return saida
 
 
-def comparar(antes: dict[Chave, dict], agora: dict[Chave, dict], aprovadas: dict) -> dict:
-    """Quem entrou, quem saiu e quem saiu sem aprovação, em ordem de local e nome."""
+def comparar(
+    antes: dict[Chave, dict], agora: dict[Chave, dict], aprovadas: dict, base: str | None
+) -> dict:
+    """Quem entrou, quem saiu e quem saiu sem aprovação, em ordem de fonte e id_fonte.
+
+    `base` é a publicação no ar (tag `site-...`). Uma entrada da lista só libera a saída
+    quando foi aprovada contra essa mesma base (campo `base`): com outra base no ar, ou
+    sem base conhecida, a saída conta como sem aprovação.
+    """
 
     def ordenar(chaves):
         return sorted(chaves, key=lambda k: (k[0], k[1]))
+
+    def aprovada(k: Chave) -> bool:
+        return base is not None and k in aprovadas and aprovadas[k]["base"] == base
 
     entraram = ordenar(set(agora) - set(antes))
     sairam = ordenar(set(antes) - set(agora))
     return {
         "entraram": [(k, agora[k]) for k in entraram],
         "sairam": [(k, antes[k]) for k in sairam],
-        "sem_aprovacao": [(k, antes[k]) for k in sairam if k not in aprovadas],
+        "sem_aprovacao": [(k, antes[k]) for k in sairam if not aprovada(k)],
     }
 
 

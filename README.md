@@ -260,8 +260,9 @@ Replit "rastro-coleta" (Scheduled, semanal)            GitHub Pages (grátis)
     nenhum município faltando, nenhuma lista cortada, e a contagem de municípios não pode
     cair em relação ao que está no ar;
   - compara os políticos um a um com o que está no ar, pelo par (fonte, `id_fonte`): toda
-    saída só passa se estiver em `backend/src/rastro/remocoes_aprovadas.toml` (ADR-0026),
-    e o resumo lista sempre quem entrou e quem saiu;
+    saída só passa se estiver em `backend/src/rastro/remocoes_aprovadas.toml`, aprovada
+    contra a publicação que está no ar (ADR-0026), e o resumo lista sempre quem entrou e
+    quem saiu;
   - se a verificação falhar, nada é enviado (tudo ou nada);
   - publica um commit sem histórico no `gh-pages` e cria uma tag `site-AAAAMMDD-HHMMSS`;
   - guarda as 5 últimas publicações.
