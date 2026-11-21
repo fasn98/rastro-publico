@@ -79,7 +79,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from rastro import fontes
+from rastro import fontes, remocoes
 from rastro import mapeamento as mp
 from rastro import ranking as rk
 from rastro.coletores.siconfi import UF_POR_CODIGO
@@ -1185,12 +1185,19 @@ def _exportar_politico(pid, get, out: _Escritor, arquivados, catalogos, anos_cot
 _CPF_FORMATADO = re.compile(rb"(?<!\d)\d{3}\.\d{3}\.\d{3}-\d{2}(?!\d)")
 
 
-def verificar(saida: Path, anterior: dict | None = None) -> list[str]:
+def verificar(
+    saida: Path, anterior: dict | None = None, publicados: dict | None = None
+) -> list[str]:
     """Problemas que impedem publicar (lista vazia = pode publicar).
 
     `anterior` é o manifesto da publicação em vigor: o número de municípios e de
     políticos não pode cair (uma coleta incompleta não pode apagar dados do site), a menos
     que uma trava de publicação tenha mudado de propósito.
+
+    `publicados` ({(fonte, id_fonte): ...} da publicação em vigor, `remocoes`): com ele, os
+    políticos são comparados um a um (ADR-0026). Toda saída, mesmo com a contagem igual ou
+    maior, só passa se estiver em `remocoes_aprovadas.toml`; a contagem de políticos deixa
+    de ser conferida, porque a comparação um a um já cobre a queda.
     """
     problemas = []
     try:
@@ -1285,6 +1292,13 @@ def verificar(saida: Path, anterior: dict | None = None) -> list[str]:
                 log.warning(
                     "Número de políticos pode cair: fonte(s) indisponível(is) nesta coleta: %s",
                     ", ".join(indisponiveis),
+                )
+                continue
+            if chave == "politicos" and publicados is not None:
+                problemas += remocoes.problemas(
+                    remocoes.comparar(
+                        publicados, remocoes.politicos_do_site(saida), remocoes.carregar()
+                    )
                 )
                 continue
             antes = anterior.get("contagens", {}).get(chave, 0)

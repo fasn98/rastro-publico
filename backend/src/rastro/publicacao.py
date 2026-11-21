@@ -10,6 +10,7 @@ Autenticação: token do GitHub (fine-grained, só este repositório, "Contents:
 write") na variável RASTRO_GITHUB_TOKEN. O token nunca aparece em logs ou mensagens.
 """
 
+import io
 import json
 import logging
 import os
@@ -20,7 +21,7 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from rastro import site
+from rastro import remocoes, site
 
 log = logging.getLogger(__name__)
 
@@ -90,6 +91,46 @@ def _manifesto_publicado(git: Git) -> dict | None:
         return None
 
 
+# arquivos de onde saem os políticos de uma versão do site (`remocoes.politicos_do_site`)
+_ARQUIVOS_POLITICOS = (
+    "dados/eleitos",
+    ":(glob)dados/politicos/*.json",
+    "dados/busca.json",
+    "dados/municipios.json",
+)
+
+
+def _politicos_publicados(git: Git) -> dict | None:
+    """Políticos da publicação em vigor, já buscada em FETCH_HEAD por `_manifesto_publicado`.
+
+    Lê só os arquivos de políticos (páginas e eleitos) e as listas de municípios, por
+    `git archive`, numa pasta temporária apagada em seguida.
+    """
+    presentes = [
+        c
+        for c in _ARQUIVOS_POLITICOS
+        if git("ls-tree", "--name-only", "FETCH_HEAD", "--", c, verificar=False).strip()
+    ]
+    if not presentes:
+        return None
+    r = subprocess.run(
+        ["git", "archive", "--format=tar", "FETCH_HEAD", "--", *presentes],
+        cwd=git.dir,
+        capture_output=True,
+    )
+    if r.returncode != 0:
+        raise ErroPublicacao(
+            git._limpar(f"git archive falhou: {r.stderr.decode(errors='replace')}")
+        )
+    pasta = Path(tempfile.mkdtemp(prefix="rastro-publicado-"))
+    try:
+        with tarfile.open(fileobj=io.BytesIO(r.stdout)) as tar:
+            tar.extractall(pasta, filter="data")
+        return remocoes.politicos_do_site(pasta / "dados")
+    finally:
+        shutil.rmtree(pasta, ignore_errors=True)
+
+
 def publicar(
     dist: Path,
     repo: str,
@@ -109,7 +150,15 @@ def publicar(
     git = Git(repo, token)
     try:
         anterior = _manifesto_publicado(git)
-        problemas = site.verificar(dist / "dados", anterior)
+        publicados = _politicos_publicados(git) if anterior else None
+        if publicados is not None:
+            # resumo da execução: sempre, mesmo quando a publicação passa (ADR-0026)
+            diff = remocoes.comparar(
+                publicados, remocoes.politicos_do_site(dist / "dados"), remocoes.carregar()
+            )
+            for linha in remocoes.resumo(diff):
+                print(linha, flush=True)
+        problemas = site.verificar(dist / "dados", anterior, publicados)
         if problemas:
             raise ErroPublicacao("publicação cancelada:\n- " + "\n- ".join(problemas))
         if simular:
