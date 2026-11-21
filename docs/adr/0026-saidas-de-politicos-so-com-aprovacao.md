@@ -50,8 +50,9 @@ nenhum aviso.
 
 **O que fica como era:**
 - A contagem de **municípios** continua conferida.
-- A contagem de políticos só vale sem a comparação um a um, isto é, sem site publicado
-  com arquivos de políticos.
+- A contagem de políticos continua valendo quando não há comparação um a um (sem site
+  publicado com arquivos de políticos) e também quando os políticos lidos do site
+  publicado não somam a contagem do manifesto dele.
 - As duas dispensas já existentes continuam valendo:
   - travas de publicação diferentes das da versão publicada;
   - fonte de políticos indisponível nesta coleta.

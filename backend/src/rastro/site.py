@@ -1196,8 +1196,8 @@ def verificar(
 
     `publicados` ({(fonte, id_fonte): ...} da publicação em vigor, `remocoes`): com ele, os
     políticos são comparados um a um (ADR-0026). Toda saída, mesmo com a contagem igual ou
-    maior, só passa se estiver em `remocoes_aprovadas.toml`; a contagem de políticos deixa
-    de ser conferida, porque a comparação um a um já cobre a queda.
+    maior, só passa se estiver em `remocoes_aprovadas.toml`. A contagem de políticos deixa
+    de ser conferida quando os políticos lidos somam a contagem do manifesto publicado.
     """
     problemas = []
     try:
@@ -1300,7 +1300,11 @@ def verificar(
                         publicados, remocoes.politicos_do_site(saida), remocoes.carregar()
                     )
                 )
-                continue
+                # a comparação um a um substitui a contagem só quando os arquivos lidos do
+                # site publicado cobrem todos os políticos do manifesto dele; senão, a
+                # contagem continua valendo também
+                if len(publicados) == anterior.get("contagens", {}).get(chave):
+                    continue
             antes = anterior.get("contagens", {}).get(chave, 0)
             agora = manifesto["contagens"].get(chave, 0)
             if agora < antes:
