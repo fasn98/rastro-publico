@@ -91,13 +91,18 @@ def _manifesto_publicado(git: Git) -> dict | None:
         return None
 
 
-# arquivos de onde saem os políticos de uma versão do site (`remocoes.politicos_do_site`)
-_ARQUIVOS_POLITICOS = (
-    "dados/eleitos",
-    ":(glob)dados/politicos/*.json",
-    "dados/busca.json",
-    "dados/municipios.json",
-)
+# arquivos de onde saem os políticos de uma versão do site (`remocoes.politicos_do_site`);
+# as páginas `dados/politicos/{id}.json` são listadas à parte (sem as subpastas por político)
+_ARQUIVOS_POLITICOS = ("dados/eleitos", "dados/busca.json", "dados/municipios.json")
+
+
+def _paginas_publicadas(git: Git) -> list[str]:
+    """`dados/politicos/{id}.json` do FETCH_HEAD: só os arquivos do primeiro nível.
+
+    O `git ls-tree` não aceita pathspec com glob (`:(glob)...`): lista-se a pasta e
+    filtram-se os .json, para não puxar as subpastas de emendas, cota etc."""
+    saida = git("ls-tree", "--name-only", "FETCH_HEAD", "dados/politicos/", verificar=False)
+    return [c for c in saida.splitlines() if c.endswith(".json")]
 
 
 def _politicos_publicados(git: Git) -> dict | None:
@@ -110,7 +115,7 @@ def _politicos_publicados(git: Git) -> dict | None:
         c
         for c in _ARQUIVOS_POLITICOS
         if git("ls-tree", "--name-only", "FETCH_HEAD", "--", c, verificar=False).strip()
-    ]
+    ] + _paginas_publicadas(git)
     if not presentes:
         return None
     r = subprocess.run(

@@ -9,6 +9,8 @@ públicos do site (nomes de urna, partido e situação de eleitos, sem dado pess
 | `eleitos/m-3512308.json` (Conchas/SP) | `dados/eleitos/m-3512308.json`, sem alteração | `c854aef3c082871bd9c1e8e840fbf210f2eadc0645d4e4ed50c63d85c294afe2` |
 | `eleitos/m-3518404.json` (Guaratinguetá/SP) | `dados/eleitos/m-3518404.json`, sem alteração | `dfa5ff97d8a49b3579ad81c3e9c6059bea6ccc22b8dbc4bfc7a449696f2ef0c3` |
 | `eleitos/m-3525300.json` (Jaú/SP) | `dados/eleitos/m-3525300.json`, sem alteração | `3196270254c238808570ce4662ee91e3a431255ac03b2a8d44c1473baf697422` |
+| `politicos/15991.json` (Sônia Guajajara, deputada federal/SP, Câmara 220643) | `dados/politicos/15991.json`, sem alteração | `c3c83030881b49cda0906230ffc6a8073dd3e037f1017ac08d3f71550c027b6e` |
+| `politicos/15991/cota/2026.json` | `dados/politicos/15991/cota/2026.json`, sem alteração (subpasta da página: não é político) | `c62ded8bdb658aac635a86d35f2098baf42633ecf3e5ca9de1e1f32def0ebe38` |
 | `municipios.json` | as 3 entradas destes municípios em `dados/municipios.json` (SHA-256 do arquivo inteiro: `6066f22a9ce229f0b7c7007a131a00c6ca49b14b6d4cf328286091d428c37c21`) | — |
 
 ## Arquivo do TSE de 21/11/2026 (recorte)

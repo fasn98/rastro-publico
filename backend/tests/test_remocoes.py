@@ -32,6 +32,7 @@ CONCHAS, GUARATINGUETA, JAU = 3512308, 3518404, 3525300
 UE_IBGE = {"63479": CONCHAS, "64696": GUARATINGUETA, "66079": JAU}  # código TSE -> IBGE
 PAULO_NUNES = ("tse", "250002180907")  # prefeito, Conchas/SP
 PEDRO_SANNINI = ("tse", "250001948460")  # vereador, Guaratinguetá/SP
+SONIA_GUAJAJARA = ("camara", "220643")  # página politicos/15991.json
 JAU_SAEM = {("tse", "250002243197"), ("tse", "250001959675")}
 BASE = "site-20261108-140446"  # a publicação no ar quando as saídas foram aprovadas
 
@@ -78,7 +79,12 @@ def test_le_os_politicos_do_site_publicado():
     itens = sum(
         len(json.loads(a.read_text())["itens"]) for a in (PUBLICADO / "eleitos").glob("*.json")
     )
-    assert len(pol) == itens
+    assert len(pol) == itens + 1  # os eleitos e a página da deputada (a subpasta não conta)
+    assert pol[SONIA_GUAJAJARA] == {
+        "nome": "Sônia Guajajara",
+        "cargo": "deputado_federal",
+        "local": "SP",
+    }
     assert pol[PAULO_NUNES] == {"nome": "PAULO NUNES", "cargo": "prefeito", "local": "Conchas/SP"}
     assert pol[PEDRO_SANNINI]["local"] == "Guaratinguetá/SP"
 
@@ -259,6 +265,9 @@ def test_le_os_politicos_do_gh_pages(remoto, tmp_path):
         git.fechar()
     assert lidos == remocoes.politicos_do_site(PUBLICADO)
     assert lidos[PAULO_NUNES]["local"] == "Conchas/SP"
+    # as páginas de deputados e senadores também (em 22/11 elas ficavam de fora: o
+    # `git ls-tree` não aceita pathspec com glob)
+    assert SONIA_GUAJAJARA in lidos
     assert base == BASE
 
 
