@@ -109,8 +109,10 @@ def test_lista_aprovada_tem_as_quatro_saidas_de_21_11():
     publicados = remocoes.politicos_do_site(PUBLICADO)
     assert set(aprovadas) == {PAULO_NUNES, PEDRO_SANNINI, *JAU_SAEM}
     for chave, e in aprovadas.items():
-        assert e["aprovado_por"] == "Fabio" and str(e["aprovado_em"]) == "2026-11-21"
-        assert e["base"] == (BASE_PEDRO if chave == PEDRO_SANNINI else BASE)
+        pedro = chave == PEDRO_SANNINI  # base e aprovação atualizadas em 22/11
+        assert e["aprovado_por"] == "Fabio"
+        assert str(e["aprovado_em"]) == ("2026-11-22" if pedro else "2026-11-21")
+        assert e["base"] == (BASE_PEDRO if pedro else BASE)
         assert publicados[chave]["nome"] == e["nome"]  # é quem estava publicado
 
 

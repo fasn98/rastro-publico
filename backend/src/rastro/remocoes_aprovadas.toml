@@ -60,7 +60,7 @@ situacao_no_arquivo = "Na eleição de 06/10/2024, a situação passou a ser \"N
 arquivo_fonte = "https://cdn.tse.jus.br/estatistica/sead/odsele/consulta_cand/consulta_cand_2024.zip (DT_GERACAO 21/11/2026; Last-Modified Sat, 21 Nov 2026 05:27:55 GMT)"
 # a coleta de 22/11/2026 reaproveitou o arquivo do TSE baixado em 17/11, que ainda o trazia
 # como eleito: a saída não entrou na publicação site-20261122-191517. Base atualizada para
-# ela, com a aprovação do Fabio (22/11/2026); a saída aprovada é a mesma de 21/11.
+# ela, com a aprovação do Fabio em 22/11/2026; a saída aprovada é a mesma de 21/11/2026.
 base = "site-20261122-191517"
-aprovado_em = 2026-11-21
+aprovado_em = 2026-11-22
 aprovado_por = "Fabio"
