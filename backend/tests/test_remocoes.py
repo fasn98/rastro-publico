@@ -35,6 +35,9 @@ PEDRO_SANNINI = ("tse", "250001948460")  # vereador, Guaratinguetá/SP
 SONIA_GUAJAJARA = ("camara", "220643")  # página politicos/15991.json
 JAU_SAEM = {("tse", "250002243197"), ("tse", "250001959675")}
 BASE = "site-20261108-140446"  # a publicação no ar quando as saídas foram aprovadas
+# Pedro Sannini não saiu em site-20261122-191517 (a coleta reaproveitou o arquivo do TSE de
+# 17/11): a base da entrada dele passou a ser essa publicação (Fabio, 22/11/2026)
+BASE_PEDRO = "site-20261122-191517"
 
 
 def _eleitos_de_21_11() -> dict[int, list[dict]]:
@@ -107,7 +110,7 @@ def test_lista_aprovada_tem_as_quatro_saidas_de_21_11():
     assert set(aprovadas) == {PAULO_NUNES, PEDRO_SANNINI, *JAU_SAEM}
     for chave, e in aprovadas.items():
         assert e["aprovado_por"] == "Fabio" and str(e["aprovado_em"]) == "2026-11-21"
-        assert e["base"] == BASE
+        assert e["base"] == (BASE_PEDRO if chave == PEDRO_SANNINI else BASE)
         assert publicados[chave]["nome"] == e["nome"]  # é quem estava publicado
 
 
@@ -165,8 +168,9 @@ def test_troca_com_contagem_igual_fora_da_lista_barra(tmp_path):
         "político saiu sem aprovação em remocoes_aprovadas.toml: "
         "PEDRO SANNINI (vereador, Guaratinguetá/SP; tse 250001948460)"
     ]
-    # com a lista aprovada, passa; o resumo mostra quem entrou e quem saiu
-    diff = remocoes.comparar(antes, agora, remocoes.carregar(), BASE)
+    # com a lista aprovada e a publicação da base dele no ar, passa; o resumo mostra quem
+    # entrou e quem saiu
+    diff = remocoes.comparar(antes, agora, remocoes.carregar(), BASE_PEDRO)
     assert remocoes.problemas(diff) == []
     assert remocoes.resumo(diff) == [
         "Políticos: 1 entraram, 1 saíram",
@@ -175,7 +179,9 @@ def test_troca_com_contagem_igual_fora_da_lista_barra(tmp_path):
     ]
 
 
-def test_versao_de_21_11_inteira_passa_com_a_lista(tmp_path):
+def test_versao_de_21_11_inteira_contra_a_base_de_08_11(tmp_path):
+    """Com site-20261108-140446 no ar, passam Conchas e Jaú; a saída de Pedro Sannini foi
+    reaprovada contra site-20261122-191517 e, com a base de 08/11, barra."""
     novo = _versao_de_21_11(tmp_path)
     diff = remocoes.comparar(
         remocoes.politicos_do_site(PUBLICADO),
@@ -183,7 +189,10 @@ def test_versao_de_21_11_inteira_passa_com_a_lista(tmp_path):
         remocoes.carregar(),
         BASE,
     )
-    assert remocoes.problemas(diff) == []
+    assert remocoes.problemas(diff) == [
+        "político saiu sem aprovação em remocoes_aprovadas.toml: "
+        "PEDRO SANNINI (vereador, Guaratinguetá/SP; tse 250001948460)"
+    ]
     assert len(diff["entraram"]) == 3 and len(diff["sairam"]) == 4
 
 

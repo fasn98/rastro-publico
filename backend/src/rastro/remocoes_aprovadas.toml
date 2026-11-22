@@ -58,6 +58,9 @@ municipio = "Guaratinguetá/SP"
 cod_ibge = 3518404
 situacao_no_arquivo = "Na eleição de 06/10/2024, a situação passou a ser \"NÃO ELEITO\"."
 arquivo_fonte = "https://cdn.tse.jus.br/estatistica/sead/odsele/consulta_cand/consulta_cand_2024.zip (DT_GERACAO 21/11/2026; Last-Modified Sat, 21 Nov 2026 05:27:55 GMT)"
-base = "site-20261108-140446"
+# a coleta de 22/11/2026 reaproveitou o arquivo do TSE baixado em 17/11, que ainda o trazia
+# como eleito: a saída não entrou na publicação site-20261122-191517. Base atualizada para
+# ela, com a aprovação do Fabio (22/11/2026); a saída aprovada é a mesma de 21/11.
+base = "site-20261122-191517"
 aprovado_em = 2026-11-21
 aprovado_por = "Fabio"
