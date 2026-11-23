@@ -39,16 +39,26 @@ nenhum aviso.
    - nome, cargo e município;
    - o que o arquivo da fonte diz;
    - a versão do arquivo;
-   - a **base**: a publicação no ar contra a qual a saída foi aprovada (tag `site-...`);
+   - a **base**: a publicação no ar quando a saída foi aprovada (tag `site-...`);
+   - o prazo (**`valida_ate`**);
    - a data e "aprovado por Fabio".
 
    Qualquer saída fora da lista barra a publicação. A entrada só libera a saída quando a
-   publicação no ar é a base dela; com outra base, a saída aparece como "SEM APROVAÇÃO" e
-   barra. Depois da publicação, a entrada fica só como registro.
+   publicação no ar é a base dela ou uma posterior (as tags têm data e hora) e o prazo
+   não passou. Fora disso, ou sem publicação no ar conhecida, a saída aparece como "SEM
+   APROVAÇÃO" e barra. Depois do prazo, a entrada fica só como registro.
+
+   **Ajuste de 23/11/2026 (Fabio).** Na primeira versão, a entrada só valia com a própria
+   base no ar. A saída de Pedro Sannini mostrou o problema: o arquivo do TSE é
+   reaproveitado por até 7 dias, e o site pode ser publicado várias vezes antes de a saída
+   aparecer. A cada publicação a base mudava, e a entrada teria de ser atualizada por PR
+   antes de cada coleta. Com "base ou posterior, até o prazo", a aprovação acompanha as
+   publicações seguintes e continua sem valer para sempre.
 3. **Resumo sempre.** A publicação, ou a simulação, imprime a publicação no ar (a base) e
    quem entrou e quem saiu, com o município, mesmo quando passa. Quando uma das duas
    dispensas abaixo é usada, o resumo diz numa linha qual e por quê.
-4. **Entradas iniciais (21/11/2026), base `site-20261108-140446`:** Paulo Nunes (Conchas), Dani Rodrigueiro e Marcos
+4. **Entradas iniciais (21/11/2026), base `site-20261108-140446` e prazo 06/12/2026; a de
+   Pedro Sannini com base `site-20261122-191517`, aprovada em 22/11:** Paulo Nunes (Conchas), Dani Rodrigueiro e Marcos
    Brasil Despachante (Jaú) e Pedro Sannini (Guaratinguetá).
 
 **O que fica como era:**
