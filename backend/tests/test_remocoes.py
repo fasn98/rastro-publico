@@ -14,7 +14,7 @@ import json
 import shutil
 import subprocess
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from test_site import banco as _banco
 from test_site import exportado as _exportado
@@ -35,6 +35,10 @@ PEDRO_SANNINI = ("tse", "250001948460")  # vereador, Guaratinguetá/SP
 SONIA_GUAJAJARA = ("camara", "220643")  # página politicos/15991.json
 JAU_SAEM = {("tse", "250002243197"), ("tse", "250001959675")}
 BASE = "site-20261108-140446"  # a publicação no ar quando as saídas foram aprovadas
+# Pedro Sannini não saiu em site-20261122-191517 (a coleta reaproveitou o arquivo do TSE de
+# 17/11): a base da entrada dele passou a ser essa publicação (Fabio, 22/11/2026)
+BASE_PEDRO = "site-20261122-191517"
+HOJE = date(2026, 11, 23)  # as entradas valem até 06/12/2026
 
 
 def _eleitos_de_21_11() -> dict[int, list[dict]]:
@@ -106,8 +110,11 @@ def test_lista_aprovada_tem_as_quatro_saidas_de_21_11():
     publicados = remocoes.politicos_do_site(PUBLICADO)
     assert set(aprovadas) == {PAULO_NUNES, PEDRO_SANNINI, *JAU_SAEM}
     for chave, e in aprovadas.items():
-        assert e["aprovado_por"] == "Fabio" and str(e["aprovado_em"]) == "2026-11-21"
-        assert e["base"] == BASE
+        pedro = chave == PEDRO_SANNINI  # base e aprovação atualizadas em 22/11
+        assert e["aprovado_por"] == "Fabio"
+        assert str(e["aprovado_em"]) == ("2026-11-22" if pedro else "2026-11-21")
+        assert e["base"] == (BASE_PEDRO if pedro else BASE)
+        assert e["valida_ate"] == date(2026, 12, 6)
         assert publicados[chave]["nome"] == e["nome"]  # é quem estava publicado
 
 
@@ -118,6 +125,7 @@ def test_conchas_na_lista_passa_e_vai_para_o_resumo(tmp_path):
         remocoes.politicos_do_site(novo),
         remocoes.carregar(),
         BASE,
+        HOJE,
     )
     assert remocoes.problemas(diff) == []
     assert remocoes.resumo(diff) == [
@@ -129,7 +137,7 @@ def test_conchas_na_lista_passa_e_vai_para_o_resumo(tmp_path):
 def test_saida_fora_da_lista_barra(tmp_path):
     novo = _versao_de_21_11(tmp_path, [CONCHAS])
     diff = remocoes.comparar(
-        remocoes.politicos_do_site(PUBLICADO), remocoes.politicos_do_site(novo), {}, BASE
+        remocoes.politicos_do_site(PUBLICADO), remocoes.politicos_do_site(novo), {}, BASE, HOJE
     )
     assert remocoes.problemas(diff) == [
         "político saiu sem aprovação em remocoes_aprovadas.toml: "
@@ -137,13 +145,25 @@ def test_saida_fora_da_lista_barra(tmp_path):
     ]
 
 
-def test_aprovacao_so_vale_na_base_em_que_foi_dada(tmp_path):
-    """Com outra publicação no ar (ou sem tag conhecida), a mesma saída de Conchas conta
-    como sem aprovação e barra."""
+def test_aprovacao_vale_da_base_em_diante_ate_o_prazo(tmp_path):
+    """A entrada de Paulo Nunes (base site-20261108-140446, valida_ate 06/12/2026) libera a
+    saída na base e em publicações posteriores, até o prazo. Publicação anterior à base,
+    prazo vencido ou publicação no ar sem tag: a saída barra."""
     novo = _versao_de_21_11(tmp_path, [CONCHAS])
     antes, agora = remocoes.politicos_do_site(PUBLICADO), remocoes.politicos_do_site(novo)
-    for outra in ("site-20261201-043000", None):
-        diff = remocoes.comparar(antes, agora, remocoes.carregar(), outra)
+    for no_ar, hoje in (
+        (BASE, HOJE),
+        ("site-20261123-011626", HOJE),  # publicação posterior (no ar em 23/11)
+        ("site-20261123-011626", date(2026, 12, 6)),  # último dia do prazo
+    ):
+        diff = remocoes.comparar(antes, agora, remocoes.carregar(), no_ar, hoje)
+        assert remocoes.problemas(diff) == []
+    for no_ar, hoje in (
+        ("site-20261107-142838", HOJE),  # publicação anterior à base
+        ("site-20261123-011626", date(2026, 12, 7)),  # prazo vencido
+        (None, HOJE),  # publicação no ar sem tag
+    ):
+        diff = remocoes.comparar(antes, agora, remocoes.carregar(), no_ar, hoje)
         assert remocoes.problemas(diff) == [
             "político saiu sem aprovação em remocoes_aprovadas.toml: "
             "PAULO NUNES (prefeito, Conchas/SP; tse 250002180907)"
@@ -160,13 +180,14 @@ def test_troca_com_contagem_igual_fora_da_lista_barra(tmp_path):
     antes, agora = remocoes.politicos_do_site(PUBLICADO), remocoes.politicos_do_site(novo)
     assert len(agora) == len(antes)
     sem_pedro = {k: v for k, v in remocoes.carregar().items() if k != PEDRO_SANNINI}
-    diff = remocoes.comparar(antes, agora, sem_pedro, BASE)
+    diff = remocoes.comparar(antes, agora, sem_pedro, BASE_PEDRO, HOJE)
     assert remocoes.problemas(diff) == [
         "político saiu sem aprovação em remocoes_aprovadas.toml: "
         "PEDRO SANNINI (vereador, Guaratinguetá/SP; tse 250001948460)"
     ]
-    # com a lista aprovada, passa; o resumo mostra quem entrou e quem saiu
-    diff = remocoes.comparar(antes, agora, remocoes.carregar(), BASE)
+    # com a lista aprovada e a publicação da base dele no ar, passa; o resumo mostra quem
+    # entrou e quem saiu
+    diff = remocoes.comparar(antes, agora, remocoes.carregar(), BASE_PEDRO, HOJE)
     assert remocoes.problemas(diff) == []
     assert remocoes.resumo(diff) == [
         "Políticos: 1 entraram, 1 saíram",
@@ -175,15 +196,21 @@ def test_troca_com_contagem_igual_fora_da_lista_barra(tmp_path):
     ]
 
 
-def test_versao_de_21_11_inteira_passa_com_a_lista(tmp_path):
+def test_versao_de_21_11_inteira_contra_a_base_de_08_11(tmp_path):
+    """Com site-20261108-140446 no ar, passam Conchas e Jaú; a saída de Pedro Sannini foi
+    reaprovada contra site-20261122-191517 e, com a base de 08/11, barra."""
     novo = _versao_de_21_11(tmp_path)
     diff = remocoes.comparar(
         remocoes.politicos_do_site(PUBLICADO),
         remocoes.politicos_do_site(novo),
         remocoes.carregar(),
         BASE,
+        HOJE,
     )
-    assert remocoes.problemas(diff) == []
+    assert remocoes.problemas(diff) == [
+        "político saiu sem aprovação em remocoes_aprovadas.toml: "
+        "PEDRO SANNINI (vereador, Guaratinguetá/SP; tse 250001948460)"
+    ]
     assert len(diff["entraram"]) == 3 and len(diff["sairam"]) == 4
 
 
@@ -198,21 +225,21 @@ def test_verificar_compara_um_a_um_e_nao_pela_contagem(exportado, monkeypatch):
         **manifesto,
         "contagens": {**manifesto["contagens"], "politicos": len(publicados)},
     }
-    assert site.verificar(dados, anterior, publicados, BASE) == []
+    assert site.verificar(dados, anterior, publicados, BASE, HOJE) == []
     queda = f"politicos: {len(agora)} na nova versão, {len(publicados)} na publicada"
     # sem a comparação um a um (sem os políticos publicados), vale a contagem, como antes
     assert queda in site.verificar(dados, anterior)
     # se os políticos lidos do site publicado não somam a contagem do manifesto dele, a
     # contagem também vale
     maior = {**anterior, "contagens": {**anterior["contagens"], "politicos": len(publicados) + 1}}
-    assert site.verificar(dados, maior, publicados, BASE) == [
+    assert site.verificar(dados, maior, publicados, BASE, HOJE) == [
         f"politicos: {len(agora)} na nova versão, {len(publicados) + 1} na publicada"
     ]
     # fora da lista, barra
     vazia = dist.parent / "vazia.toml"
     vazia.write_text("")
     monkeypatch.setattr(remocoes, "ARQUIVO", vazia)
-    assert site.verificar(dados, anterior, publicados, BASE) == [
+    assert site.verificar(dados, anterior, publicados, BASE, HOJE) == [
         "político saiu sem aprovação em remocoes_aprovadas.toml: "
         "PAULO NUNES (prefeito, Conchas/SP; tse 250002180907)"
     ]
@@ -236,9 +263,11 @@ def test_dispensas_continuam_e_sao_nomeadas(exportado):
     assert site.dispensa_politicos(manifesto, anterior) == (
         "travas de publicação diferentes das da versão no ar (mudança de propósito)"
     )
-    assert site.verificar(dados, anterior, publicados, None) == []
+    assert site.verificar(dados, anterior, publicados, None, HOJE) == []
     # sem a dispensa, a mesma saída sem base conhecida barra
-    assert site.verificar(dados, {**anterior, "travas": manifesto["travas"]}, publicados, None)
+    assert site.verificar(
+        dados, {**anterior, "travas": manifesto["travas"]}, publicados, None, HOJE
+    )
 
 
 def test_le_os_politicos_do_gh_pages(remoto, tmp_path):

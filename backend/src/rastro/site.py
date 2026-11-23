@@ -1209,6 +1209,7 @@ def verificar(
     anterior: dict | None = None,
     publicados: dict | None = None,
     base: str | None = None,
+    hoje: date | None = None,
 ) -> list[str]:
     """Problemas que impedem publicar (lista vazia = pode publicar).
 
@@ -1308,7 +1309,11 @@ def verificar(
             if chave == "politicos" and publicados is not None:
                 problemas += remocoes.problemas(
                     remocoes.comparar(
-                        publicados, remocoes.politicos_do_site(saida), remocoes.carregar(), base
+                        publicados,
+                        remocoes.politicos_do_site(saida),
+                        remocoes.carregar(),
+                        base,
+                        hoje,
                     )
                 )
                 # a comparação um a um substitui a contagem só quando os arquivos lidos do
