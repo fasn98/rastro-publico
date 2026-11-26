@@ -33,7 +33,7 @@ aprovadas pelo Fabio.
 | [0024](0024-falha-na-coleta-de-emendas.md) | Falha na coleta de emendas de UF publicada: dados anteriores, data e aviso após 7 dias | Aceito |
 | [0025](0025-indicadores-nao-fiscais.md) | Indicadores não fiscais (segurança pública e educação) para uma metodologia v1.2.0 | Proposto |
 | [0026](0026-saidas-de-politicos-so-com-aprovacao.md) | Saídas de políticos do site só com aprovação (comparação por id_fonte) | Aceito |
-| [0027](0027-emendas-na-indicacao-ao-ploa.md) | Emendas na fase de indicação ao PLOA (apresentada → aprovada → empenhada → paga) | Proposto |
+| [0027](0027-emendas-na-indicacao-ao-ploa.md) | Emendas na fase de indicação ao PLOA (apresentada → aprovada → empenhada → paga) | Aceito |
 
 O status fica numa linha `- **Status:** <valor>`, sem parênteses: o painel War Room lê essa
 linha, e todo status que começa com "Propos" aparece como pendente de aprovação.
