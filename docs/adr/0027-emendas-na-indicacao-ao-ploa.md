@@ -1,7 +1,7 @@
 # ADR-0027: Emendas na fase de indicação ao PLOA (apresentada → aprovada → empenhada → paga)
 
-- **Status:** Proposto
-- **Data:** 2026-11-26
+- **Status:** Aceito em 26/11/2026, por Fabio
+- **Data:** 2026-11-26 (proposto e aceito no mesmo dia)
 - **Autor:** sessão principal
 - **Decisor:** Fabio
 
@@ -135,11 +135,14 @@ Proposta, para aprovação:
 5. **Vínculo com o parlamentar:** pelas mesmas regras das emendas do Portal (ADR-0023,
    `politicos/vinculo.py`), sem regra nova. Só é gravado para UF publicada.
 6. **Município de destino:** o localizador da CMO não tem código do IBGE.
-   - Proposta: casar o texto "No Município de X - UF" com a lista de municípios do IBGE, por
-     nome normalizado e UF, só quando o resultado for exato e único. Qualquer outro caso fica
-     "sem município".
-   - Isso é um mapeamento e precisa de aprovação própria antes do código. Na fase
-     "aprovada/executada", vale o código do IBGE do Portal.
+   - Decisão do Fabio (26/11/2026): o texto "No Município de X - UF" só é ligado ao
+     município do IBGE quando nome e UF batem exatamente e há um único resultado.
+   - Em qualquer outro caso, o destino fica só em texto, sem link para o município, e entra
+     numa lista de revisão.
+   - A lista de revisão é só para destinos na forma "No Município de X - UF" que não
+     ligaram. Destino que não é município ("No Estado de …", "Nacional") fica em texto, sem
+     link, e não entra na lista, porque não há município a procurar.
+   - Na fase "aprovada/executada", vale o código do IBGE do Portal.
 7. **Escopo inicial:** só emendas individuais (RP 6) de parlamentares de UF publicada.
    Bancada, comissão e relator ficam para outro ADR.
 
@@ -156,20 +159,38 @@ Proposta, para aprovação:
     ("Exibindo resultados de X a Y de N encontrados").
   - O total anunciado conta linhas, não emendas distintas. O portão compara linhas lidas com
     linhas anunciadas, por autor, e barra o autor e a fase se não bater.
-- Cada resposta vai para o arquivo bruto (`/api/bruto/{sha256}`), como as outras fontes, com
-  limite de taxa.
+- Cada resposta vai para o arquivo bruto (`/api/bruto/{sha256}`), como as outras fontes.
+- **Leitura educada** (decisão do Fabio, 26/11/2026):
+  - pausa entre requisições;
+  - identificação genérica do cliente (User-Agent do projeto), sem e-mail nem dado pessoal
+    de ninguém.
 - O ponto fraco é que as listas JSON e o HTML do resultado não têm documentação e podem mudar
   de formato. O portão também barra a fase se não conseguir ler o total anunciado.
-- Antes do código, perguntar à CMO e à Câmara se existe um arquivo oficial com todas as
-  emendas (CSV ou planilha). Se existir, ele substitui a leitura por autor.
+- **Nenhum código de coleta antes da resposta da CMO** (decisão do Fabio, 26/11/2026). O
+  Fabio pergunta à CMO, pelo canal oficial de contato:
+  - se existe arquivo de dados abertos com todas as emendas ao PLOA;
+  - qual é a licença de reuso.
 
-## Decisão (proposta)
+  A resposta volta ao Fabio, e a coleta só começa com a licença de reuso confirmada por ele.
+  Se existir esse arquivo, ele substitui a leitura por autor.
 
-- Aprovar a CMO (pesquisa de emendas da Câmara) como fonte das fases "apresentada" e
-  "aprovada", com a chave ano + autor + número para ligar ao Portal da Transparência e os
-  rótulos de "sem correspondência" acima.
-- Ficam para aprovações separadas: o mapeamento localizador → município (item 6), a
-  confirmação da licença e a publicação.
+## Decisão
+
+Aceita pelo Fabio em 26/11/2026:
+
+1. **Fonte:** a CMO (pesquisa de emendas da Câmara) é a fonte das fases "apresentada" e
+   "aprovada".
+2. **Ligação:** pela chave ano + autor + número com o Portal da Transparência, com os
+   rótulos de "sem correspondência" acima.
+3. **IBGE:** o destino só é ligado ao município com nome e UF exatos e um único resultado.
+   Senão, fica em texto, sem link, e entra numa lista de revisão (item 6).
+4. **Arquivo completo e licença:** perguntados à CMO pelo canal oficial. Nenhum código de
+   coleta antes da resposta. A resposta volta ao Fabio, e a coleta só começa com a licença
+   de reuso confirmada por ele.
+5. **Coleta, quando houver:** leitura educada, com pausa entre requisições e identificação
+   genérica do cliente, sem e-mail.
+
+A publicação continua dependendo de aprovação própria.
 
 ## Fora do escopo
 
