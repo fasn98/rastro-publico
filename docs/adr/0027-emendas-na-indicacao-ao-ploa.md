@@ -139,6 +139,9 @@ Proposta, para aprovação:
      município do IBGE quando nome e UF batem exatamente e há um único resultado.
    - Em qualquer outro caso, o destino fica só em texto, sem link para o município, e entra
      numa lista de revisão.
+   - A lista de revisão é só para destinos na forma "No Município de X - UF" que não
+     ligaram. Destino que não é município ("No Estado de …", "Nacional") fica em texto, sem
+     link, e não entra na lista, porque não há município a procurar.
    - Na fase "aprovada/executada", vale o código do IBGE do Portal.
 7. **Escopo inicial:** só emendas individuais (RP 6) de parlamentares de UF publicada.
    Bancada, comissão e relator ficam para outro ADR.
@@ -168,6 +171,7 @@ Proposta, para aprovação:
   - se existe arquivo de dados abertos com todas as emendas ao PLOA;
   - qual é a licença de reuso.
 
+  A resposta volta ao Fabio, e a coleta só começa com a licença de reuso confirmada por ele.
   Se existir esse arquivo, ele substitui a leitura por autor.
 
 ## Decisão
@@ -181,7 +185,8 @@ Aceita pelo Fabio em 26/11/2026:
 3. **IBGE:** o destino só é ligado ao município com nome e UF exatos e um único resultado.
    Senão, fica em texto, sem link, e entra numa lista de revisão (item 6).
 4. **Arquivo completo e licença:** perguntados à CMO pelo canal oficial. Nenhum código de
-   coleta antes da resposta.
+   coleta antes da resposta. A resposta volta ao Fabio, e a coleta só começa com a licença
+   de reuso confirmada por ele.
 5. **Coleta, quando houver:** leitura educada, com pausa entre requisições e identificação
    genérica do cliente, sem e-mail.
 
