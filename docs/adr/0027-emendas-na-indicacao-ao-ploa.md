@@ -77,13 +77,19 @@ Nacional.
 ## Teste de leitura (Flávio Bolsonaro, PLOA 2027)
 
 - Pesquisa da Câmara, PLOA 2027 (`codPL=203`), fase 10 (Emendas Apresentadas), autor 9219
-  (lista `autores`: "Flávio Bolsonaro"). Lida em 26/11/2026, só em memória.
-  - A primeira consulta gravou a página no scratchpad e eu a apaguei.
-  - A contagem final foi feita na resposta em memória (65.826 bytes, SHA-256 começando por
-    `8863077779e7f784`).
+  (lista `autores`: "Flávio Bolsonaro").
+- Leitura de 26/11/2026 18:09:21 UTC, só em memória: a resposta foi lida direto da rede,
+  sem passar por arquivo. Ela tinha 65.826 bytes, com SHA-256
+  `8863077779e7f784fb2ab33f1746d1e6415b08ce998e9d5425ab1983e88f30f9`.
+  - Numa consulta anterior, no mesmo dia, a página foi gravada no scratchpad e apagada em
+    seguida. Ela tinha o mesmo SHA-256, mas não entra na contagem.
 - Resultado: **15 linhas, 14 emendas distintas e R$ 79.382.048,00**.
 - Isso confere com o número noticiado: 14 emendas e R$ 79,382 milhões.
-- Nada foi gravado no banco nem no arquivo bruto.
+- Nada foi gravado no banco nem no arquivo bruto, porque o teste foi só de leitura. Para
+  refazer, basta consultar a mesma URL e conferir o SHA-256. A página pode mudar nas
+  próximas fases.
+- Este número **não é exibido** no site. Quando o dado for coletado, cada número vai para o
+  arquivo bruto com o SHA-256 da resposta, como as outras fontes.
 
 ## Ligação indicação → empenho → pagamento
 
@@ -109,8 +115,11 @@ Proposta, para aprovação:
    O valor apresentado e o aprovado podem ser diferentes. Os dois aparecem, cada um com a
    sua fonte, sem cálculo de "corte".
 2. **A ligação é só pela chave completa** (ano + autor + número). Nunca por nome, valor ou
-   destino. Uma emenda com várias linhas por GND é somada por chave para a comparação, e as
-   linhas continuam guardadas.
+   destino. O número da emenda recomeça em 0001 para cada autor, então ano + número sozinho
+   não identifica a emenda.
+   - Nas duas fontes, as linhas são somadas por chave para comparar e exibir: na CMO, uma
+     linha por GND; no Portal, uma linha por localidade ou ação.
+   - As linhas de origem continuam guardadas.
 3. **Sem correspondência**, a página diz a situação em rótulo neutro e com a data de cada
    fonte, sem atribuir causa:
    - "Apresentada; não consta no autógrafo" (só depois que o autógrafo existir);
@@ -118,9 +127,11 @@ Proposta, para aprovação:
    - "Consta no Portal da Transparência; não encontrada na pesquisa da CMO". É o caso de
      emendas de relator, comissão ou bancada com outra numeração, que não entram por
      enquanto.
-4. **Mesma chave com autor diferente** nas duas fontes (nome ou código): a ligação não é
-   feita, a emenda vai para a lista de divergências do portão e o caso volta ao Fabio. Não há
-   correção automática.
+4. **Mesma chave com nome de autor diferente** nas duas fontes: como o código do autor faz
+   parte da chave, só o nome pode divergir.
+   - A ligação não é feita, a emenda vai para a lista de divergências do portão e o caso
+     volta ao Fabio.
+   - Não há correção automática.
 5. **Vínculo com o parlamentar:** pelas mesmas regras das emendas do Portal (ADR-0023,
    `politicos/vinculo.py`), sem regra nova. Só é gravado para UF publicada.
 6. **Município de destino:** o localizador da CMO não tem código do IBGE.
@@ -136,11 +147,19 @@ Proposta, para aprovação:
 
 - Uma leitura por fase (10, 20, 30, 60), quando a fase aparecer em `momentos`. Não há
   agendamento diário.
-- 664 autores, um por requisição, com limite de taxa. A resposta bruta vai para o arquivo
-  (`/api/bruto/{sha256}`), como as outras fontes.
+- **Só autores de UF publicada** (SP e as UFs de `RASTRO_POL_UFS_LIBERADAS`), como na
+  coleta pela API (ADR-0023, item 3). Autor de UF não liberada não é consultado nem vai para
+  o arquivo bruto.
+- **Paginação:** são 20 linhas por página. Em 2024, o autor 4102 tem 29 linhas, em duas
+  páginas.
+  - A leitura segue `pagina=1, 2, …` até cobrir o total de linhas que a página anuncia
+    ("Exibindo resultados de X a Y de N encontrados").
+  - O total anunciado conta linhas, não emendas distintas. O portão compara linhas lidas com
+    linhas anunciadas, por autor, e barra o autor e a fase se não bater.
+- Cada resposta vai para o arquivo bruto (`/api/bruto/{sha256}`), como as outras fontes, com
+  limite de taxa.
 - O ponto fraco é que as listas JSON e o HTML do resultado não têm documentação e podem mudar
-  de formato. O portão barra a fase se a soma das emendas lidas por autor não bater com o
-  total da fase.
+  de formato. O portão também barra a fase se não conseguir ler o total anunciado.
 - Antes do código, perguntar à CMO e à Câmara se existe um arquivo oficial com todas as
   emendas (CSV ou planilha). Se existir, ele substitui a leitura por autor.
 
